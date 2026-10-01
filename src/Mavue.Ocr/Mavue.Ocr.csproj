@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- OCR abstraction. Default: Windows.Media.Ocr; alternatives: Tesseract, Windows AI TextRecognizer. See docs/DEPENDENCIES.md section 5. -->
+  <PropertyGroup>
+    <TargetFramework>$(MavueWindowsTfm)</TargetFramework>
+    <TargetPlatformMinVersion>$(MavueMinWindows)</TargetPlatformMinVersion>
+    <RootNamespace>Mavue.Ocr</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Mavue.Core\Mavue.Core.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Metadata (EXIF/XMP/IPTC/GPS/ICC) read/write abstraction. Treats GPS and personal data as sensitive. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Mavue.Metadata</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Mavue.Core\Mavue.Core.csproj" />
+  </ItemGroup>
+</Project>

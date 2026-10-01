@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Printing: own preview + Direct2D/XPS print path, and the standard Windows print UI. See docs/WINDOWS-INTEGRATION.md section 9. -->
+  <PropertyGroup>
+    <TargetFramework>$(MavueWindowsTfm)</TargetFramework>
+    <TargetPlatformMinVersion>$(MavueMinWindows)</TargetPlatformMinVersion>
+    <RootNamespace>Mavue.Print</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Mavue.Core\Mavue.Core.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,15 @@
+<Window
+    x:Class="Mavue.App.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Window.SystemBackdrop>
+    <MicaBackdrop />
+  </Window.SystemBackdrop>
+
+  <Grid x:Name="RootGrid">
+    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+      <TextBlock x:Name="WelcomeText" x:Uid="MainWindow_Welcome" Style="{StaticResource TitleTextBlockStyle}" HorizontalAlignment="Center" />
+      <TextBlock x:Uid="MainWindow_DropHint" Style="{StaticResource BodyTextBlockStyle}" HorizontalAlignment="Center" Opacity="0.7" />
+    </StackPanel>
+  </Grid>
+</Window>

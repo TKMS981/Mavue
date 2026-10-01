@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="QuickView_WindowTitle" xml:space="preserve">
+    <value>{0} – Mavue Quick View</value>
+  </data>
+  <data name="QuickView_Loading" xml:space="preserve">
+    <value>Loading preview…</value>
+  </data>
+  <data name="QuickView_InfoBasic" xml:space="preserve">
+    <value>{0} · {1}</value>
+  </data>
+  <data name="QuickView_InfoImage" xml:space="preserve">
+    <value>{0} · {1} × {2} px · {3}</value>
+  </data>
+  <data name="QuickView_InfoPdf" xml:space="preserve">
+    <value>PDF · {0} pages · {1}</value>
+  </data>
+  <data name="QuickView_Error_NotFile" xml:space="preserve">
+    <value>This item is not a file that can be previewed.</value>
+  </data>
+  <data name="QuickView_Error_CloudPlaceholder" xml:space="preserve">
+    <value>This file is stored online only. Open it to download it before previewing.</value>
+  </data>
+  <data name="QuickView_Error_Unsupported" xml:space="preserve">
+    <value>No decoder for this format is installed on this PC.</value>
+  </data>
+  <data name="QuickView_Error_TooLarge" xml:space="preserve">
+    <value>This image is too large to preview.</value>
+  </data>
+  <data name="QuickView_Error_PdfPassword" xml:space="preserve">
+    <value>This PDF is password-protected.</value>
+  </data>
+  <data name="QuickView_Error_Failed" xml:space="preserve">
+    <value>This file could not be previewed. It may be damaged or in an unsupported format.</value>
+  </data>
+</root>

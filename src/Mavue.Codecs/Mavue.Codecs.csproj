@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Image codec registry: WIC first, permissively licensed fallbacks second. See docs/DEPENDENCIES.md section 4. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Mavue.Codecs</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Mavue.Core\Mavue.Core.csproj" />
+  </ItemGroup>
+</Project>

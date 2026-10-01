@@ -1,0 +1,25 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Mavue.App/Mavue.App.csproj" />
+    <Project Path="src/Mavue.Codecs/Mavue.Codecs.csproj" />
+    <Project Path="src/Mavue.Core/Mavue.Core.csproj" />
+    <Project Path="src/Mavue.Image/Mavue.Image.csproj" />
+    <Project Path="src/Mavue.Markup/Mavue.Markup.csproj" />
+    <Project Path="src/Mavue.Metadata/Mavue.Metadata.csproj" />
+    <Project Path="src/Mavue.Ocr/Mavue.Ocr.csproj" />
+    <Project Path="src/Mavue.Pdf/Mavue.Pdf.csproj" />
+    <Project Path="src/Mavue.Print/Mavue.Print.csproj" />
+    <Project Path="src/Mavue.QuickView.Host/Mavue.QuickView.Host.csproj" />
+    <Project Path="src/Mavue.QuickView/Mavue.QuickView.csproj" />
+    <Project Path="src/Mavue.Scan/Mavue.Scan.csproj" />
+    <Project Path="src/Mavue.Shell/Mavue.Shell.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Mavue.Core.Tests/Mavue.Core.Tests.csproj" />
+    <Project Path="tests/Mavue.QuickView.Tests/Mavue.QuickView.Tests.csproj" />
+    <Project Path="tests/Mavue.Repository.Tests/Mavue.Repository.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Mavue.QuickView.Harness/Mavue.QuickView.Harness.csproj" />
+  </Folder>
+</Solution>

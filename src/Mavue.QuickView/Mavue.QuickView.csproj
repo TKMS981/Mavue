@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Quick View logic: Space trigger (classifier, typing tracker, low-level hook), Explorer selection (Shell COM, STA),
+       cached shell thumbnails, preview sizing/safety policy and latency timeline. The resident UI is Mavue.QuickView.Host. -->
+  <PropertyGroup>
+    <TargetFramework>$(MavueWindowsTfm)</TargetFramework>
+    <TargetPlatformMinVersion>$(MavueMinWindows)</TargetPlatformMinVersion>
+    <RootNamespace>Mavue.QuickView</RootNamespace>
+    <!-- Required by LibraryImport / GeneratedComInterface source generators. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Mavue.Core\Mavue.Core.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Managed side of Explorer integration (association registration helpers, shell selection). In-process shell extensions are native C++ (native/). -->
+  <PropertyGroup>
+    <TargetFramework>$(MavueWindowsTfm)</TargetFramework>
+    <TargetPlatformMinVersion>$(MavueMinWindows)</TargetPlatformMinVersion>
+    <RootNamespace>Mavue.Shell</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Mavue.Core\Mavue.Core.csproj" />
+  </ItemGroup>
+</Project>

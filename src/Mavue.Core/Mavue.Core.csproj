@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Platform-neutral core: BCL only. No Windows-specific APIs here (docs/ARCHITECTURE.md §3.1). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Mavue.Core</RootNamespace>
+  </PropertyGroup>
+</Project>

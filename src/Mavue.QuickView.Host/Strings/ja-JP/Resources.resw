@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="QuickView_WindowTitle" xml:space="preserve">
+    <value>{0} – Mavue クイックビュー</value>
+  </data>
+  <data name="QuickView_Loading" xml:space="preserve">
+    <value>プレビューを読み込んでいます…</value>
+  </data>
+  <data name="QuickView_InfoBasic" xml:space="preserve">
+    <value>{0} · {1}</value>
+  </data>
+  <data name="QuickView_InfoImage" xml:space="preserve">
+    <value>{0} · {1} × {2} ピクセル · {3}</value>
+  </data>
+  <data name="QuickView_InfoPdf" xml:space="preserve">
+    <value>PDF · {0} ページ · {1}</value>
+  </data>
+  <data name="QuickView_Error_NotFile" xml:space="preserve">
+    <value>この項目はプレビューできるファイルではありません。</value>
+  </data>
+  <data name="QuickView_Error_CloudPlaceholder" xml:space="preserve">
+    <value>このファイルはオンラインにのみ保存されています。プレビューするには開いてダウンロードしてください。</value>
+  </data>
+  <data name="QuickView_Error_Unsupported" xml:space="preserve">
+    <value>この形式のデコーダーがこの PC にインストールされていません。</value>
+  </data>
+  <data name="QuickView_Error_TooLarge" xml:space="preserve">
+    <value>この画像は大きすぎるためプレビューできません。</value>
+  </data>
+  <data name="QuickView_Error_PdfPassword" xml:space="preserve">
+    <value>この PDF はパスワードで保護されています。</value>
+  </data>
+  <data name="QuickView_Error_Failed" xml:space="preserve">
+    <value>このファイルをプレビューできませんでした。破損しているか、対応していない形式の可能性があります。</value>
+  </data>
+</root>

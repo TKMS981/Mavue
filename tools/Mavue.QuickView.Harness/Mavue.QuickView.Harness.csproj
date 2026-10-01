@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Real-Windows end-to-end harness for Quick View (docs/QUICKVIEW-POC.md). Drives File Explorer with
+       synthetic input, so it must only be run deliberately on an interactive, unlocked desktop. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>$(MavueWindowsTfm)</TargetFramework>
+    <TargetPlatformMinVersion>$(MavueMinWindows)</TargetPlatformMinVersion>
+    <RootNamespace>Mavue.QuickView.Harness</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsAotCompatible>false</IsAotCompatible>
+    <!-- Console tool: plain-English diagnostics are intentional and not user-facing UI. -->
+    <NoWarn>$(NoWarn);CA1303;CA1305;CA1307;CA1309;CA1310;CA1311;CA1515;CA1822;CA1849;CA2007;CA1806;CA1861;CA1869</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Mavue.QuickView\Mavue.QuickView.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\tests\assets\quickview\*.*" Link="assets\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

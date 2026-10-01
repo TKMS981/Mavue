@@ -1,0 +1,23 @@
+# Build output
+bin/
+obj/
+out/
+artifacts/
+*.user
+*.suo
+.vs/
+*.binlog
+TestResults/
+AppPackages/
+BundleArtifacts/
+
+# Native
+build/
+*.pdb
+*.ilk
+*.obj
+
+# Unrelated tooling in repo root (not part of Mavue)
+node_modules/
+package.json
+package-lock.json

@@ -1,0 +1,149 @@
+# Mavue テスト戦略
+
+> `CLAUDE.md` §16 / SPEC §31（Definition of Done）に対応。
+
+最終更新: 2026-10-02（Quick View PoC の E2E と計測を追加）
+
+---
+
+## 1. テスト階層
+
+| 層 | プロジェクト | 内容 | 実行環境 |
+|---|---|---|---|
+| 単体 | `tests/Mavue.*.Tests` | 純粋ロジック（形式判定、安全保存、Undo/Redo、レイアウト計算、IPC シリアライズ等） | CI / ローカル |
+| ファイル形式 | `tests/Mavue.Codecs.Tests`, `Mavue.Pdf.Tests` | 各形式のデコード/エンコード、破損ファイル、巨大寸法、境界値 | CI / ローカル |
+| 統合 | `tests/Mavue.Integration.Tests` | 複数モジュール連携（PDF 編集→保存→再読込、変換パイプライン、OCR→埋め込み→検索） | ローカル / CI（Windows ランナー） |
+| シェル統合 | `tests/Mavue.Shell.Tests`（+ 手動チェックリスト） | COM 登録、`IThumbnailProvider`/`IPreviewHandler` を自前ホストで呼び出し、Explorer 実機操作 | **実機必須** |
+| Quick View | `tests/Mavue.QuickView.Tests` + UI 自動化 | トリガー判定ロジック（クラス名・フォーカス状態の表駆動テスト）、ナビゲーション、実機エンドツーエンド | 単体: CI / E2E: 実機 |
+| 回帰 | 各プロジェクト内 `Regression/` | 不具合ごとに再現ファイル/手順をテスト化 | CI |
+| 性能 | `tests/Mavue.Perf` | BenchmarkDotNet + 起動遅延ハーネス | 実機（本機を基準機） |
+
+テストフレームワーク: xUnit v3（`xunit.v3` 4.0.1）。`dotnet test` で実行。
+
+## 2. 実行コマンド
+
+`global.json` で Microsoft.Testing.Platform (MTP) ランナーを選択している（.NET 10 SDK の `dotnet test` は VSTest 方式を xUnit v3 で使えないため）。
+
+```powershell
+# すべてのテスト（ビルド含む）
+dotnet test --solution Mavue.slnx -c Debug
+
+# 実機専用テストを除外（CI 用）
+dotnet test --solution Mavue.slnx --filter-not-trait "Category=RealWindows"
+
+# カテゴリ指定
+dotnet test --solution Mavue.slnx --filter-trait "Category=QuickView"
+
+# WinUI 3 アプリ起動スモークテスト（対話デスクトップが必要）
+powershell -ExecutionPolicy Bypass -File tools/smoke-test.ps1 -Configuration Debug
+```
+
+### 現在のテスト（2026-10-02）
+
+| プロジェクト | 内容 | 件数 |
+|---|---|---|
+| `Mavue.Core.Tests` | 形式判定（シグネチャ・拡張子フォールバック・Unicode パス・巨大ストリーム）、安全保存（失敗/検証失敗/キャンセル時に元ファイル不変、属性維持、バックアップ、日本語ファイル名） | 45 |
+| `Mavue.QuickView.Tests` | Space トリガー判定（既存 18 件・無変更）、入力追跡（タイプアヘッド・IME 推定・ショートカット除外）、縮小デコードサイズ、ファイル安全ポリシー（属性・寸法・UNC・デバイスパス）、計測タイムライン（JSON Lines） | 73 |
+| `Mavue.Repository.Tests` | ja-JP/en-US リソースのキー一致（App と Quick View Host）、**SPEC の全機能が FEATURES.md に存在すること**、SPEC §29 以外を Excluded にしていないこと、状態語彙 | 6 |
+| **合計** | | **125（124 成功、1 スキップ: シンボリックリンク作成に開発者モードが必要）** |
+
+`Mavue.Core.Tests` は 46 件（シンボリックリンク経由の保存テストを追加）。
+| `tools/smoke-test.ps1` | Mavue.exe 起動 → 最初のフレーム描画 → リソース解決確認 → 終了コード 0 | — |
+
+`Mavue.Repository.Tests` は、FEATURES.md から行を削除する・SPEC 非除外項目を Excluded にする変更で失敗することを確認済み（ミューテーション確認）。
+
+### 2.1 Quick View 実機 E2E ハーネス（`tools/Mavue.QuickView.Harness`）
+
+**実際のデスクトップを操作する**（Explorer を開き、SendInput で Space/Esc/Alt+Tab を送り、前面ウィンドウと画面ピクセルを検査する）。
+ロックされていない対話デスクトップで、操作していない時に実行すること。キーは「送信直前に想定ウィンドウが前面であること」を確認してから送る。
+
+```powershell
+$h = ".\tools\Mavue.QuickView.Harness\bin\Debug\net10.0-windows10.0.26100.0\Mavue.QuickView.Harness.exe"
+& $h                                   # 既定: panel、7 形式 × 3 回 + UX シナリオ 4 件
+& $h --huge                            # 192 MP JPEG / 100 MP PNG を追加（初回生成に時間がかかる）
+& $h --activation hookgrant --cases small-jpeg --iterations 5 --no-scenarios   # 表示方式の比較
+& $h --attach-host <timing.jsonl>      # 独立に起動済みのホストに接続して計測
+& $h --list-explorer                   # 診断: Shell COM が見ている Explorer ビューと選択数
+& $h --thumb <file>                    # 診断: サムネイルキャッシュ取得（MTA/STA 比較）
+```
+
+- 結果は表形式で表示し、`%TEMP%\Mavue.QuickView.E2E\report-*.json` に保存する。テスト画像は同フォルダに生成（日本語フォルダ名）。
+- 計測項目: hook / selection / shown / first-frame / thumbnail-visible / full-visible（QPC）、画面ピクセル検出時刻、Quick View が前面か、
+  Explorer がフォーカスを保持したか、Quick View が Explorer より上か、デコード時間・サイズ、ホストのピーク WS、Esc で Explorer に戻ったか、
+  計測中の**実ユーザー入力の有無**（ハーネス自身の LL フックで注入でない入力を数える）。
+- ホストは既定で **WMI 経由で独立に起動**する（ハーネスの子プロセスにすると前面化の結果が有利に歪むことを実測したため）。
+- **注意（実測）**: 注入入力での成功は実ユーザー入力での成功を保証しない（`docs/QUICKVIEW-POC.md` §3.2）。表示方式に関わる変更は、
+  必ずユーザーの実操作（物理キーボード / リモート操作）で確認し、ホストの計測ログ（`--timing-log`）で裏付ける。
+
+テストの Trait 規約:
+- `Category=Unit` / `Integration` / `FileFormat` / `Pdf` / `Image` / `Ocr` / `Shell` / `QuickView` / `Perf`
+- `Category=RealWindows` — 実機 Explorer・プリンタ・スキャナ・ペン等が必要。CI では除外。
+- `Requires=WicHeif` 等 — OS 拡張が必要なテストは、拡張未導入時に**スキップ（理由付き）**し、失敗扱いにしない。
+
+## 3. テストアセット
+
+- 原則として**テスト内で生成**する（WIC で画像生成、最小 PDF をバイト列で生成）。著作権・個人情報の混入を防ぐ。
+- 外部コーパス（PDF 互換性: pdf.js テストスイート、PDFium テストファイル等）を使う場合は、ライセンスを
+  `tests/assets/LICENSES.md` に記録し、取得スクリプト経由で取得（リポジトリに大容量バイナリをコミットしない）。
+- EXIF/GPS テスト用画像は合成データのみ。実在の位置情報を含めない。
+- 悪意あるファイル（ファジング由来の破損 PDF・画像）は隔離ディレクトリで扱い、クラッシュしないこと・タイムアウトすることを検証。
+
+## 4. 機能別テスト観点（抜粋）
+
+| 領域 | 必須観点 |
+|---|---|
+| 安全保存 | 書き込み途中の例外で元ファイルが不変、置換後の属性維持、読み取り専用/ロック中ファイル、ディスクフル、別ボリューム |
+| PDF 墨消し | **墨消し後に PDFium・QPDF・外部ツールでテキスト抽出し、対象文字列が存在しないこと**。画像 XObject の画素が消去されていること。注釈・メタデータ・しおり・フォーム値に残存しないこと。増分更新の旧リビジョンが残らないこと（完全書き換え） |
+| PDF 暗号化 | 暗号化→QPDF/PDFium で開けること、権限フラグの確認、誤パスワード |
+| OCR | 日本語（横/縦）、英語、混在、回転、低解像度、10000px 超の分割、テキスト層の埋め込み→検索 |
+| 画像変換 | 各形式往復、JPEG 品質、PNG 圧縮、メタデータ保持/削除（GPS 除去を明示検証）、ICC 保持 |
+| Unicode | 日本語・サロゲートペア・結合文字・長いパス（>260）を含むファイル名で開く/保存/Quick View |
+| 大容量 | 1 億画素超画像、1000 ページ超 PDF でメモリ上限内・UI 非ブロック（UI スレッド応答時間を計測） |
+| Undo/Redo | 全編集コマンドで Apply→Revert→Apply がビット一致 |
+| 多言語 | ハードコード文字列検出テスト（XAML / C# の UI 文字列が resw 参照であること） |
+
+## 5. 実機 Windows 検証（手動 + 半自動チェックリスト）
+
+各リリース前に本機（Windows 11 25H2）で実施し、結果を `docs/test-reports/YYYY-MM-DD.md` に記録する。
+
+| 項目 | 現在の可否（本機） |
+|---|---|
+| Explorer Space Quick View（単一/複数/タブ/デスクトップ/ファイルダイアログ/名前変更中・検索中に誤動作しない） | 可能。単一選択・panel 表示は E2E 27/27 + ユーザー実操作（リモート）で確認済み。複数選択・デスクトップ・ダイアログ・IME は未確認 |
+| QuickLook (PaddyXu) 共存時の挙動 | 可能（本機に導入済み）。**未確認**（計測時は QuickLook が起動していなかった） |
+| 上段コンテキストメニュー（MSIX 登録後） | 可能（開発者モード or 署名が必要） |
+| Preview Pane / Thumbnail / プロパティ / Windows Search | 可能（登録後） |
+| 高 DPI（100/125/150/200%）、マルチモニタ間移動 | 要確認（接続モニタ構成次第。仮想ディスプレイで代替可） |
+| 印刷 | Microsoft Print to PDF のみ可能。**物理プリンタ: Blocked** |
+| スキャン（WIA/TWAIN, ADF, 両面） | **Blocked（スキャナ未接続）** |
+| Windows Ink（筆圧・消しゴム） | **Blocked（ペンデバイスなし）** |
+| GPU なし / WARP フォールバック | 可能（`D3D_DRIVER_TYPE_WARP` 強制フラグで検証） |
+
+## 6. 性能計測
+
+- **Quick View エンドツーエンド**: テストハーネスが Explorer ウィンドウを開き対象ファイルを選択 → `SendInput` で Space →
+  Quick View プロセスが ETW (`EventSource "Mavue-QuickView"`) で各段階のタイムスタンプを出力 → 集計。
+  指標: p50 / p95 / 最大、コールド（常駐なし）/ ウォーム。ARCHITECTURE.md §4.4 の目標と比較。
+- **起動遅延**: プロセス作成 → 最初のフレーム提示。
+- **大容量**: ページ送り遅延、ズーム応答、ピークメモリ（`PROCESS_MEMORY_COUNTERS_EX`）。
+- 計測値は `docs/perf/` に日付付きで記録し、回帰を検出する（閾値超過で失敗する Perf テストは基準機でのみ有効）。
+
+### 既存の実測値
+
+| 日付 | 項目 | 値 | 条件 |
+|---|---|---|---|
+| 2026-10-02 | 空の WinUI 3 アプリ起動→OnLaunched→終了 | 約 730 ms | Debug, JIT, フレームワーク依存, 本機 |
+| 2026-10-02 | Mavue.App 起動→最初のフレーム描画→終了（smoke-test） | 595 ms（初回）/ 381 ms（2 回目） | Debug, JIT, WinAppSDK 自己完結, 本機 |
+| 2026-10-02 | 同上 | 563 ms（初回）/ 386 ms（2 回目） | Release, JIT（ReadyToRun/NativeAOT なし） |
+| 2026-10-02 | Quick View: Space → 小さい JPEG のフル品質表示（panel, 常駐・warm） | 中央値 20.7 ms（アプリ内）/ 画面ピクセル検出 51.9 ms | Debug, 注入入力, 本機 |
+| 2026-10-02 | Quick View: Space → 表示呼び出し完了（全形式） | 7〜12 ms | 同上 |
+| 2026-10-02 | Quick View: 192 MP JPEG / 100 MP PNG のフル品質表示 | 451 ms / 755 ms（その前に 18〜22 ms でサムネイル表示） | 同上 |
+| 2026-10-02 | Quick View 常駐ホスト: 起動 → 準備完了 | 約 160〜170 ms（プリウォーム込み） | Debug |
+| 2026-10-02 | Quick View 常駐ホストのワーキングセット | 約 140 MB（小画像表示後）、192 MP JPEG で 176 MB | Debug, 画像ごとの新規プロセス |
+
+詳細と条件は `docs/QUICKVIEW-POC.md`。
+
+## 7. CI（予定）
+
+- GitHub Actions `windows-latest`（または自己ホスト Windows 11）で `dotnet build` + `dotnet test --filter Category!=RealWindows`。
+- ネイティブ（C++）ビルドは VS Build Tools を持つランナーで。
+- リポジトリは現時点で Git 未初期化（BUILD.md 参照）。
