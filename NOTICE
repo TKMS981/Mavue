@@ -1,0 +1,13 @@
+Mavue
+Copyright 2026 TKMS981
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+The Apache License applies only to Mavue's own source code. Third-party
+components (NuGet packages, native libraries, operating system components)
+remain under their own licenses; see THIRD-PARTY-NOTICES.md.
+
+macOS, Finder and Quick Look are trademarks of Apple Inc., registered in the
+U.S. and other countries. Windows is a trademark of the Microsoft group of
+companies. Mavue is an independent project and is not affiliated with,
+endorsed by, or sponsored by Apple Inc. or Microsoft Corporation.

@@ -383,7 +383,7 @@ Windows 11 で以下を実現するには**パッケージ ID**が必要:
 | ADR-2 | Quick View は常駐の独立プロセス | 実測コールド起動 ~730ms（Debug）では即時表示にならない | 採用（プロトタイプで再計測） |
 | ADR-3 | Space 検出は WH_KEYBOARD_LL + フォーカス判定 | 公式拡張ポイントが存在しない。代替手段なし | 採用（リスク: §4.2） |
 | ADR-4 | シェル拡張は C++、CLR を持ち込まない | §2.1 | 採用 |
-| ADR-5 | PDF は PDFium + QPDF + 独自墨消し | MuPDF は AGPL（クローズド配布不可）。PDFium 単体では暗号化書き込み・線形化不可 | 採用（ライセンス最終確認: DEPENDENCIES.md） |
+| ADR-5 | PDF は PDFium + QPDF + 独自墨消し | MuPDF は AGPL（組み込むと Mavue 全体が AGPL の条件に縛られ Apache-2.0 で提供できない）。PDFium 単体では暗号化書き込み・線形化不可 | 採用（ライセンス最終確認: DEPENDENCIES.md） |
 | ADR-6 | 画像は WIC 優先 + 許容ライセンスのフォールバック | OS 拡張の有無が環境依存のため | 採用 |
 | ADR-7 | HEIC のフォールバックデコーダー同梱は保留 | HEVC 特許ライセンスの法的確認が必要 | Investigating（機能自体は削除しない: OS 拡張経由で対応） |
 | ADR-8 | 配布は MSIX、開発は非パッケージ実行 | Windows 11 上段コンテキストメニュー等にパッケージ ID が必要 | 採用 |

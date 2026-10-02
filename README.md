@@ -1,6 +1,7 @@
 # Mavue
 
-Windows 11 向けに macOS の **プレビュー + Finder クイックルック** に相当する体験を提供する、ネイティブ Windows デスクトップアプリケーション。
+macOS のプレビューと Finder のクイックルックに着想を得た、Windows 11 向けのネイティブデスクトップアプリケーション。
+（A native Windows 11 app inspired by macOS Preview and Finder Quick Look.）
 画像・PDF の高速プレビュー（Explorer で Space）、閲覧・編集・注釈・署名・フォーム・OCR・スキャン・印刷・変換・メタデータ管理、
 Explorer との深い統合を目標とする。
 
@@ -39,3 +40,18 @@ powershell -ExecutionPolicy Bypass -File tools/smoke-test.ps1
 
 C# / .NET 10 / WinUI 3 (Windows App SDK 2.5)。Explorer にロードされるシェル拡張は C++ / COM。
 PDF は PDFium + QPDF、画像は WIC を中心に構成（詳細と理由は ARCHITECTURE / DEPENDENCIES）。
+
+## ライセンス
+
+Mavue 自身のソースコードは [Apache License 2.0](LICENSE) で提供する（[NOTICE](NOTICE)）。
+依存ライブラリ・Windows App SDK などの第三者コンポーネントは、それぞれのライセンスに従う
+（Apache-2.0 には含まれない）。一覧は [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
+
+## 商標
+
+macOS、Finder、Quick Look（クイックルック）は、米国およびその他の国で登録された Apple Inc. の商標です。
+Windows は Microsoft グループの商標です。Mavue は独立したプロジェクトであり、Apple Inc. および Microsoft Corporation とは
+提携・承認・後援の関係にありません。Mavue は Apple のコード・画像・アイコン・フォントを使用していません。
+
+macOS, Finder and Quick Look are trademarks of Apple Inc., registered in the U.S. and other countries. Mavue is not
+affiliated with, endorsed by, or sponsored by Apple Inc.

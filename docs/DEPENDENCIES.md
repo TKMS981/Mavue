@@ -4,7 +4,20 @@
 > 商用利用制限・ネイティブバイナリ再配布要件を確認し、ここに記録する。
 > **本書は法的助言ではない。** 「要法務確認」の項目は製品配布前に専門家の確認を必須とする。
 
-最終更新: 2026-10-02（Quick View 第 3 工程時点。製品コードに追加した外部依存はなし — WIC 直接デコード・設定ファイル（System.Text.Json）は OS / .NET 標準機能のみ。PDFium の配布物を実物で確認）
+最終更新: 2026-10-02（Mavue 本体を Apache-2.0 とし、ライセンス関連ファイルを追加。Quick View 第 3 工程時点。製品コードに追加した外部依存はなし — WIC 直接デコード・設定ファイル（System.Text.Json）は OS / .NET 標準機能のみ。PDFium の配布物を実物で確認）
+
+## 0. Mavue 本体のライセンス（2026-10-02 決定）
+
+- Mavue 自作のソースコードは **Apache License 2.0**（リポジトリ直下の `LICENSE`、`NOTICE`）。
+- 第三者コンポーネントは各自のライセンスのまま扱い、Apache-2.0 で上書きしない。一覧は `THIRD-PARTY-NOTICES.md`。
+- 互換性の注意: Apache-2.0 のコードに **GPL-2.0 のみ**のコードは組み込めない。GPL-3.0 / AGPL-3.0 のコードを取り込むと
+  配布物全体がその条件に縛られる。LGPL は動的リンクなら併用可（§9）。これらのコードは今後も流用しない。
+- Windows App SDK の再配布条件（`license.txt` §3）: バイナリを配布する際は、配布先の利用者に Microsoft とその
+  コードを本契約と同等以上に保護する条項へ同意させること、Microsoft の商標を推奨・提携と誤認させる形で使わないこと等が
+  求められる。Apache-2.0 はソースの開示を強制しないため §3(c)(ii) には抵触しない。**バイナリ配布の開始前に、
+  利用条件（EULA 相当）の文面を用意する**。
+- 現在のビルド出力には、使っていない Windows ML（`DirectML.dll`、`Microsoft.ML.OnnxRuntime.dll`）と WebView2 の DLL が
+  `Microsoft.WindowsAppSDK` メタパッケージ経由で含まれる。配布前に必要なサブパッケージだけを参照する構成を検討する。
 
 状態の凡例: **Adopted**（採用・プロジェクトに追加済み）/ **Selected**（採用決定・未追加）/ **Candidate**（評価中）/ **Rejected**（不採用）/ **Legal review**（法務確認待ち）
 
@@ -32,8 +45,8 @@
 | Microsoft.Graphics.Win2D | 1.4.0 | MIT | GPU 2D 描画・エフェクト | Selected | ネイティブ DLL 同梱 |
 | CommunityToolkit.Mvvm | 8.4.2 | MIT | MVVM（ソース生成） | Selected | |
 | xunit.v3 | 4.0.1 | Apache-2.0 | テスト | Adopted | 開発時のみ |
-| xunit.runner.visualstudio | 4.0.0 | Apache-2.0 | テストランナー | Adopted | 開発時のみ |
-| Microsoft.NET.Test.Sdk | 18.10.1 | MIT | テスト | Adopted | 開発時のみ |
+| Microsoft.Testing.Platform（xunit.v3 の推移的依存。Telemetry 拡張・ApplicationInsights を含む） | 2.4.0 | MIT | テスト実行 | Adopted | 開発時のみ。テスト実行時のテレメトリは `TESTINGPLATFORM_TELEMETRY_OPTOUT=1` で無効化できる |
+| xunit.runner.visualstudio / Microsoft.NET.Test.Sdk | — | Apache-2.0 / MIT | — | 未使用 | 以前の記録で Adopted としていたが、xunit.v3 4.x は Microsoft Testing Platform で動くため実際には参照していない（2026-10-02 に `dotnet list package` で確認） |
 | BenchmarkDotNet | （追加時に記録） | MIT | 性能テスト | Candidate | 開発時のみ |
 | MetadataExtractor | 2.9.3 | Apache-2.0 | メタデータ読み取り補助 | Candidate | WIC で足りない形式用 |
 | Microsoft.ML.OnnxRuntime | 1.30.0 | MIT | 背景除去 / OCR モデル推論 | Candidate | Windows ML (WinAppSDK) との比較後に決定 |
@@ -47,7 +60,7 @@
 |---|---|---|---|---|---|---|---|---|---|
 | **PDFium**（bblanchon/pdfium-binaries 156.0.8076、NuGet `bblanchon.PDFium.Win32`） | BSD-3-Clause（本体）。同梱: FreeType (FTL, BSD 系として選択), libjpeg-turbo (IJG/BSD-3/zlib), OpenJPEG (BSD-2), LittleCMS (MIT), zlib, libpng, AGG 2.3 (改変 BSD 系), Abseil (Apache-2.0), ICU (Unicode-3.0)。ビルドスクリプトは MIT | ◎ | ◎ | ◎（AcroForm。XFA はビルド依存） | ○（FPDFAnnot API） | ◎（FPDF_ImportPages, Move, Delete） | ✕ | ✕ | **Selected** |
 | **QPDF** v12.4.2 | Apache-2.0。依存: zlib, libjpeg(-turbo)。暗号は内蔵 "native" プロバイダで OpenSSL 不要 | ✕ | ✕ | — | — | ◎ | ◎（AES-256 R6, 権限） | ◎ | **Selected**（PDFium の補完） |
-| MuPDF | **AGPL-3.0** または Artifex 商用ライセンス | ◎ | ◎ | ○ | ◎ | ◎ | ◎ | — | **Rejected**: AGPL はクローズド配布と両立しない。商用ライセンス購入時のみ再検討 |
+| MuPDF | **AGPL-3.0** または Artifex 商用ライセンス | ◎ | ◎ | ○ | ◎ | ◎ | ◎ | — | **Rejected**: 組み込むと Mavue 全体が AGPL の条件に縛られ、Apache-2.0 で提供できなくなる。商用ライセンス購入時のみ再検討 |
 | iText 9 | **AGPL-3.0** / 商用 | ✕ | ○ | ◎ | ◎ | ◎ | ◎ | — | Rejected（同上） |
 | Windows.Data.Pdf (WinRT) | OS 内蔵 | ○ | ✕ | ✕ | ✕ | ✕ | ✕ | ✕ | Selected（描画専用フォールバック） |
 | pdf.js (WebView2) | Apache-2.0 | ○ | ○ | ○ | △ | ✕ | ✕ | ✕ | Rejected: ネイティブ方針に反する、Quick View 起動が重い |
@@ -68,7 +81,8 @@
 | 特許 | Apache-2.0 成分は特許許諾を含む。JPEG 2000（OpenJPEG）に関する特許の主張は把握している範囲でなし（要法務確認事項としては低） |
 
 **Mavue での扱い（決定）**:
-- バイナリの入手は NuGet でもよいが、**ライセンス文は同じバージョンの .tgz の `LICENSE` と `licenses/*` から取得**し、`THIRD-PARTY-NOTICES.txt` に全文を同梱する（ビルド時にバージョン一致を検証するスクリプトを用意する）。
+- バイナリの入手は NuGet でもよいが、**ライセンス文は同じバージョンの .tgz の `LICENSE` と `licenses/*` から取得**し、配布物の `THIRD-PARTY-NOTICES.txt` に全文を同梱する（ビルド時にバージョン一致を検証するスクリプトを用意する）。リポジトリの `THIRD-PARTY-NOTICES.md` にも追加時に記載する。
+- PDFium と同梱コンポーネントはそれぞれのライセンス（BSD-3-Clause、FTL など）のまま扱い、Mavue の Apache-2.0 には含めない。
 - Windows での配布: `pdfium.dll` をアプリと同じフォルダ（MSIX 内）に配置。システムフォルダには入れない。
 - 更新方法: chromium の PDFium は頻繁にセキュリティ修正が入るため、**最低でも月 1 回**リリースを確認し、`Directory.Packages.props` のバージョンを更新して PDF 回帰テスト（`docs/TESTING.md`）を通してから取り込む。ビルド番号・コミット（nuspec の `repository commit`）を記録する。
 - 自前ビルドへの切り替え基準: 修正の取り込みが遅い、または独自パッチ（墨消し用の API 拡張など）が必要になった場合。その場合は Build Tools と depot_tools が必要。
@@ -166,7 +180,8 @@ WebP Image Extension 1.2.31, Raw Image Extension 2.5.35, VP9 1.2.20, MPEG-2 1.2.
 
 ## 9. 配布物に同梱する通知
 
-- `THIRD-PARTY-NOTICES.txt`（全ネイティブ/マネージド依存のライセンス全文）を MSIX に同梱し、アプリの「バージョン情報」から閲覧可能にする。
+- リポジトリ: `LICENSE`（Apache-2.0 全文、apache.org の公式テキストをそのまま使用）、`NOTICE`、`THIRD-PARTY-NOTICES.md`（依存の一覧とライセンス）。
+- 配布物: `LICENSE`、`NOTICE` と `THIRD-PARTY-NOTICES.txt`（全ネイティブ/マネージド依存のライセンス全文）を MSIX に同梱し、アプリの「バージョン情報」から閲覧可能にする。
 - LGPL コンポーネント（採用時）: 動的リンク、DLL 差し替えを妨げない（MSIX でもユーザーが差し替え可能な手段の提供方法を法務確認）、ソース入手方法を記載。
 
 ## 10. 未解決事項
