@@ -5,7 +5,9 @@ the third-party components listed here.** Each component is used under its own l
 `LICENSE` or `NOTICE` changes or replaces those terms.
 
 Last reviewed: 2026-10-02. Licenses were read from the `.nuspec` and license files of the exact package versions
-restored on the development machine. Details and decisions: [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
+restored on the development machine; the package lists come from each project's resolved dependencies
+(`project.assets.json`) and the files actually present in the Release output. Details and decisions:
+[docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
 
 ## 1. Third-party code in this repository
 
@@ -15,44 +17,73 @@ None. The repository contains no copied or vendored third-party source code, bin
   `tools/assets/generate_quickview_assets.py` (Pillow/NumPy were used only as tools; they are not distributed).
 - Other test images and the test PDF are generated at test time by Mavue's own code.
 
-## 2. NuGet packages (downloaded at build time, not stored in this repository)
+## 2. Components in the Quick View host's Release output
 
-### 2.1 Used by the application
+`Mavue.QuickView.Host` is the only Mavue program that is used today. Its Release build (framework-dependent .NET 10;
+the .NET runtime is not included) contains these third-party files:
 
-| Package | Version | License |
-|---|---|---|
-| Microsoft.WindowsAppSDK and its sub-packages (Base, Foundation, WinUI, DWrite, InteractiveExperiences, Runtime, AI, ML, Search, Widgets) | 2.5.1 (sub-packages 2.0.4–2.5.5) | Microsoft Software License Terms — Microsoft Windows App SDK (`license.txt` in each package); third-party notices in the packages' `NOTICE.txt` |
-| Microsoft.Windows.AI.MachineLearning (transitive) | 2.1.74 | Microsoft Software License Terms — Microsoft Windows ML Runtime; notices in `ThirdPartyNotices.txt` |
-| Microsoft.Web.WebView2 (transitive) | 1.0.3719.77 | BSD-3-Clause-style license, © Microsoft Corporation (`LICENSE.txt`, `NOTICE.txt`) |
-| System.Numerics.Tensors, Microsoft.Win32.Registry, System.Security.AccessControl, Microsoft.Bcl.AsyncInterfaces (transitive) | 9.0.0 / 5.0.0 / 6.0.1 / 6.0.0 | MIT (© .NET Foundation and Contributors) |
+| Component | Version | License | Notes |
+|---|---|---|---|
+| Windows App SDK component packages: Microsoft.WindowsAppSDK.WinUI, .Foundation, .InteractiveExperiences, .Base | 2.3.9 / 2.3.12 / 2.1.9 / 2.0.4 | Microsoft Software License Terms — Microsoft Windows App SDK (the same `license.txt` in each package) | Copied into the output for self-contained Windows App SDK deployment. Third-party notices: `NOTICE.txt` in the WinUI and Base packages |
+| Microsoft.Web.WebView2 | 1.0.3719.77 | BSD-3-Clause-style license, © Microsoft Corporation (`LICENSE.txt`); notices in `NOTICE.txt` | A dependency of the WinUI package. In the output (`Microsoft.Web.WebView2.Core.dll`, `WebView2Loader.dll`) but not loaded by Quick View (measured) |
+| Windows SDK C# projection (`Microsoft.Windows.SDK.NET.dll`, from Microsoft.Windows.SDK.NET.Ref) | 10.0.26100.57 | Microsoft Software License Terms — Windows SDK | Added by the .NET SDK for the `net10.0-windows` target |
+| C#/WinRT runtime (`WinRT.Runtime.dll`) | (with the projection above) | MIT | |
 
-### 2.2 Build-time only (not redistributed)
+## 3. Other projects in the repository
+
+`Mavue.App` (the editor; not released yet) still references the `Microsoft.WindowsAppSDK` 2.5.1 metapackage. In
+addition to the components above, its output contains Windows App SDK AI, ML, Search, Widgets, DWrite and Runtime
+components (same Microsoft license), Microsoft.Windows.AI.MachineLearning 2.1.74 (Microsoft Software License Terms —
+Microsoft Windows ML Runtime, which includes ONNX Runtime and DirectML; notices in its `ThirdPartyNotices.txt`) and
+System.Numerics.Tensors 9.0.0 (MIT). Only the components the editor really uses will be kept before it is released.
+
+### 3.1 Build-time only (not redistributed)
 
 | Package | Version | License |
 |---|---|---|
 | Microsoft.Windows.SDK.BuildTools, Microsoft.Windows.SDK.BuildTools.MSIX | 10.0.28000.2705 / 1.7.251221100 | Microsoft Software License Terms — Windows SDK |
 | Microsoft.NET.ILLink.Tasks | 10.0.12 | MIT |
 
-### 2.3 Tests only (not redistributed)
+### 3.2 Tests only (not redistributed)
 
 | Package | Version | License |
 |---|---|---|
 | xunit.v3 and its sub-packages, xunit.analyzers | 4.0.1 / 2.1.0 | Apache-2.0 |
-| Microsoft.Testing.Platform, Microsoft.Testing.Platform.MSBuild, Microsoft.Testing.Extensions.Telemetry, Microsoft.Testing.Extensions.TrxReport.Abstractions, Microsoft.ApplicationInsights | 2.4.0 / 2.23.0 | MIT |
+| Microsoft.Testing.Platform, .MSBuild, Microsoft.Testing.Extensions.Telemetry, .TrxReport.Abstractions, Microsoft.ApplicationInsights | 2.4.0 / 2.23.0 | MIT |
+| Microsoft.Win32.Registry, System.Security.AccessControl, Microsoft.Bcl.AsyncInterfaces (dependencies of the test platform) | 5.0.0 / 6.0.1 / 6.0.0 | MIT |
 
-## 3. Operating system components
+## 4. Operating system components
 
-Windows Imaging Component (WIC), Windows.Data.Pdf, Windows Shell COM interfaces and other Windows APIs are part of
-Windows and are used through their public APIs. They are not redistributed with Mavue.
+Windows Imaging Component (WIC, including the HEIF/WebP/AV1 extensions installed by the user), Windows.Data.Pdf,
+DirectWrite, Windows Shell COM interfaces and other Windows APIs are part of Windows and are used through their
+public APIs. They are not redistributed with Mavue.
 
-## 4. Planned components
+## 5. Obligations when binary releases start
+
+No binary release exists yet. Before one is published (see docs/DEPENDENCIES.md §0):
+
+- Ship Mavue's `LICENSE` and `NOTICE` (Apache-2.0 §4) and this file with full license texts.
+- Windows App SDK (`license.txt` §3): files the NuGet packages place in the output are distributable, for both
+  framework-dependent and self-contained deployment. Mavue must add significant primary functionality, require
+  distributors and end users to agree to terms that protect the code and Microsoft at least as much as Microsoft's
+  terms, indemnify Microsoft as described there, and not use Microsoft trademarks in a way that suggests Microsoft
+  endorsement. The Windows App SDK and WebView2 `NOTICE.txt` files are included.
+- WebView2: binary redistribution must reproduce its copyright notice, conditions and disclaimer.
+- Windows SDK projection (`Microsoft.Windows.SDK.NET.dll`): governed by the Windows SDK terms, under which the
+  distributable code is the code on Microsoft's REDIST list. That this file is on the list has not been confirmed
+  yet (open item, docs/DEPENDENCIES.md §10). `WinRT.Runtime.dll` is MIT.
+
+## 6. Planned components
 
 Components such as PDFium (BSD-3-Clause, with bundled FreeType under the FreeType License, libjpeg-turbo,
 OpenJPEG, LittleCMS, zlib, libpng, AGG 2.3, Abseil, ICU and others) and QPDF (Apache-2.0) are **not yet part of
 Mavue**. When one is added, its copyright notices and full license texts will be added here and shipped with
 binary releases, under the component's own license. See docs/DEPENDENCIES.md §3 and §9.
 
-## 5. Trademarks
+Not used, and not to be added: MuPDF (AGPL-3.0), QuickLook (GPL-3.0), NAPS2 (GPL-2.0), and non-commercial
+models such as BRIA RMBG. Mavue does not take GPL or AGPL code.
+
+## 7. Trademarks
 
 macOS, Finder and Quick Look are trademarks of Apple Inc., registered in the U.S. and other countries. Windows is a
 trademark of the Microsoft group of companies. Mavue is an independent project and is not affiliated with,

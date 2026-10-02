@@ -175,6 +175,7 @@ internal sealed partial class Runner(HarnessOptions options, Action<string> log)
                 RunNavigationScenarios(assets);
                 RunTabScenario(assets);
                 RunDisplayScenarios(assets);
+                RunContextMenuScenarios(assets);
             }
 
             TestAsset? small = assets.FirstOrDefault(a => a.Case == "small-jpeg");

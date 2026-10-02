@@ -4,6 +4,8 @@
     <TargetFramework>$(MavueWindowsTfm)</TargetFramework>
     <TargetPlatformMinVersion>$(MavueMinWindows)</TargetPlatformMinVersion>
     <RootNamespace>Mavue.Shell</RootNamespace>
+    <!-- Required by the LibraryImport source generator. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Mavue.Core\Mavue.Core.csproj" />

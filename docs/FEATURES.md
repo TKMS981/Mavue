@@ -396,7 +396,7 @@
 |---|---|---|---|
 | F22.01 | Space-key Quick View | In Progress | F03.01 と同一（PoC 実装済み） |
 | F22.02 | Right-click “Open in Mavue” | Planned | Win11 上段はパッケージ ID 必須（MSIX） |
-| F22.03 | Right-click “Mavue Quick View” | Planned | 同上 |
+| F22.03 | Right-click “Mavue Quick View” | In Progress | 従来メニュー（Win11 は「その他のオプションを確認」内）: HKCU の SystemFileAssociations に登録（`--register`）、名前付きパイプで常駐プロセスへ転送し、Explorer の選択（複数選択を含む）を表示・追従。E2E と実際の Explorer メニュー経路（合成入力。1 ファイル・3 ファイル・常駐なしからの起動・↑↓・選択追従・前面表示）で確認。上段メニューはパッケージ ID とネイティブ `IExplorerCommand` が必要で Blocked（Build Tools 導入の判断待ち） |
 | F22.04 | File associations | Planned |  |
 | F22.05 | PDF association | Planned |  |
 | F22.06 | Image associations | Planned |  |

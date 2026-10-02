@@ -25,7 +25,10 @@ Explorer 統合（タブ、上段コンテキストメニュー）は Windows 11
 | 共有ターゲット | `uap:ShareTarget` | 不可（ID 必須） |
 
 **結論**: MSIX パッケージで配布し、Windows Search IFilter のみ追加の（任意・管理者）コンポーネントとして扱う案を第一とする。
-開発中は非パッケージ実行 + `HKCU` 登録スクリプト（`tools/dev-register.ps1`、追加予定）で検証する。
+開発中は非パッケージ実行 + `HKCU` 登録で検証する。**実装済み（第 4 工程）**: `Mavue.QuickView.Host.exe --register [--no-startup]` /
+`--unregister` / `--registration-status`（`Mavue.Shell.QuickViewShellRegistration`。従来メニューの「Mavue Quick View」とサインイン時の起動。
+作成・削除するのは `Mavue.QuickView` という名前のキーと値のみ）。当初予定の `tools/dev-register.ps1` は、拡張子の一覧をコードと
+二重管理しないためにホストのコマンドに置き換えた。
 
 ---
 
@@ -59,9 +62,12 @@ Explorer 統合（タブ、上段コンテキストメニュー）は Windows 11
 | 権利のない z 順引き上げ | `HWND_TOP` では Explorer の後ろに出ることがある（リモート操作で実測） | 表示中のみ Topmost 帯。他アプリ前面化で即クローズ + Topmost 解除 |
 | 自動化ハーネスの結果と実環境の乖離 | 注入入力・子プロセス起動では前面化が成功しやすい（実測） | ハーネスは WMI で独立起動したホストに対して実行。最終判断は必ずユーザー実操作で確認 |
 
-代替トリガー（すべて実装対象）: 右クリック「Mavue Quick View」、設定可能なホットキー（例: Ctrl+Space）、`mavue.exe --quickview <path>`。
+代替トリガー（すべて実装対象）: 右クリック「Mavue Quick View」（**従来メニュー版を実装済み**、QUICKVIEW-POC §11）、設定可能なホットキー（例: Ctrl+Space）、
+`Mavue.QuickView.Host.exe --quickview <path>`（**実装済み**。将来の `mavue.exe` 実行エイリアスからも同じ経路）。
 右クリック経由は Explorer 内で動く `IExplorerCommand::Invoke` から `AllowSetForegroundWindow(Mavue の PID)` を呼べる
 （Explorer は前面プロセスなので権利を持つ）ため、こちらの経路ではアクティブ化も正規に可能（未実装・要検証）。
+従来メニュー版では、Explorer が起動した `--quickview` プロセスが同じ権利を持つので、そこから常駐プロセスに譲る（実装済み。E2E では
+アクティブ化に成功、ユーザー物理操作での確認待ち）。
 
 ---
 

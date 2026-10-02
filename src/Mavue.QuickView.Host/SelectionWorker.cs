@@ -65,6 +65,71 @@ internal sealed class SelectionWorker : IDisposable
     }
 
     /// <summary>
+    /// A context-menu request (<c>--quickview</c>): if an open Explorer view has the first file selected
+    /// (normally the window the command came from), Quick View shows and follows that view's selection,
+    /// exactly as for Space. Otherwise the given files are shown as a list.
+    /// </summary>
+    public void ResolveExternal(IReadOnlyList<string> paths, nint foreground)
+    {
+        long id = NextRequestId();
+        _timeline.Mark(id, "external", QuickViewTimeline.Now, new Dictionary<string, object?> { ["count"] = paths.Count });
+        _thread.Post(() => ResolveExternalCore(id, paths, foreground));
+    }
+
+    private void ResolveExternalCore(long id, IReadOnlyList<string> paths, nint foreground)
+    {
+        ViewSelection? selection = null;
+        nint owner = 0;
+        nint view = 0;
+        string? error = null;
+        try
+        {
+            CloseSessionCore();
+            ExplorerSelection? match = null;
+            foreach (ExplorerSelection candidate in _provider.EnumerateWindows())
+            {
+                if (candidate.Paths.Contains(paths[0], StringComparer.OrdinalIgnoreCase) &&
+                    (match is null || candidate.TopLevelWindow == foreground))
+                {
+                    match = candidate; // prefer the window the command was invoked from
+                }
+            }
+
+            if (match is not null)
+            {
+                owner = match.TopLevelWindow;
+                view = match.ShellViewWindow;
+                _session = _provider.OpenSession(owner, view, OnViewEvent);
+                selection = _session?.ReadSelection() ?? new ViewSelection(match.Paths, paths[0], match.NonFileSystemItemCount);
+            }
+        }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidCastException or InvalidOperationException)
+        {
+            error = ex.GetType().Name;
+        }
+
+        if (selection is null || selection.Paths.Count == 0)
+        {
+            // Desktop, a closed window or a view Mavue cannot read: show the files that were passed.
+            owner = 0;
+            view = 0;
+            selection = new ViewSelection(paths, paths[0], 0);
+        }
+
+        _timeline.Mark(id, "selection", QuickViewTimeline.Now, new Dictionary<string, object?>
+        {
+            ["found"] = true,
+            ["count"] = selection.Paths.Count,
+            ["source"] = owner != 0 ? "explorer-view" : "given-paths",
+            ["following"] = _session?.IsListening ?? false,
+            ["error"] = error,
+        });
+
+        ViewSelection resolved = selection;
+        _dispatcher.TryEnqueue(DispatcherQueuePriority.High, () => _controller.OnExternalRequest(id, owner, view, foreground, resolved));
+    }
+
+    /// <summary>
     /// Follows another view of the same Explorer window (e.g. the user switched tabs): re-subscribes and
     /// reports that view's current selection as a selection change.
     /// </summary>

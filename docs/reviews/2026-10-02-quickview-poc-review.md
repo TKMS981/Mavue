@@ -79,5 +79,30 @@
 | Low | P33（新） | Quick View 設定画面がない（現状は settings.json を直接編集） | 次の課題（F23.03） |
 | High | P34（新） | PDF が 1.5 倍の大きさで作られ、拡大しないモードではページの下側が切れる（原寸モードは 150 % ではなく 225 %） | **修正済み**。`Windows.Data.Pdf` が指定サイズにシステムの DPI 倍率を掛けて出力していた（実測）。倍率で割って指定し、最初の描画で実際の倍率を確認する。E2E `monitor-open-each` に PDF を追加（3 モニター・両モード合格）。以前の記録「表示倍率 225 %」は誤りだった |
 
+## 第 4 工程（右クリックメニュー・IPC・サインイン時の起動）
+
+| 重大度 | # | 内容 | 状態 |
+|---|---|---|---|
+| High | P35（新） | Windows 11 の上段メニューに出ない（従来メニュー＝「その他のオプションを確認」内のみ） | **Blocked**: パッケージ ID とネイティブ `IExplorerCommand` が必要。Build Tools（管理者インストール）と開発者モード／テスト証明書の判断待ち |
+| High | P36（新） | 右クリックからのアクティブ表示は E2E（Shell オートメーションで Explorer に実行させる）でのみ確認 | **確認済み（実際のメニュー経路）**: Explorer の項目を右クリック → 従来メニューの「Mavue Quick View」をクリック（合成入力）で、1・3 ファイル・常駐なしの各場合に前面表示（QUICKVIEW-POC §11.3）。人の手による操作での確認は引き続き推奨 |
+| Medium | P37（新） | Explorer はコマンドライン型の動詞をファイルごとに別プロセスで起動する（最大 100）。各 約 110 ms ですぐ終了するが、100 項目時の負荷は未計測 | 記録。上段メニュー（1 回の呼び出しで全項目）で解消予定 |
+| Medium | P38（新） | 動詞の登録直後の初回は Explorer 側で 約 750 ms かかる（2 回目以降 約 290 ms） | Mavue 側では制御不可。記録 |
+| Low | P39（新） | サインイン時の起動はビルド出力の exe を HKCU\Run に登録する開発用方式。ビルド中は exe が使用中でコピーに失敗する | MSIX の StartupTask で置き換え予定。開発中は `--shutdown` してからビルド |
+| Low | P40（新） | 依頼に含まれるファイルを選択中の Explorer ビューがない場合（デスクトップ等）は、渡されたファイルの一覧として表示し、選択には追従しない | 記録。デスクトップの選択読み取り（Space では対応済み）への合流は今後 |
+
+## 公開前の依存・ライセンス整理（2026-10-02）
+
+| 重大度 | # | 内容 | 状態 |
+|---|---|---|---|
+| Medium | P41（新） | Quick View ホストの Release 出力に、使っていない Windows ML（ONNX Runtime・DirectML）・Windows AI・Search・Widgets・DWriteCore が含まれていた（155 MB 中 約 60 MB） | **修正済み**: 参照をメタパッケージから WinUI / Foundation / InteractiveExperiences の部品パッケージに変更（95 MB）。7 形式表示後の読み込みモジュールを実測して判断（DEPENDENCIES §0.1） |
+| Medium | P42（新） | THIRD-PARTY-NOTICES.md がテスト専用の依存（Microsoft.Win32.Registry 等）を「アプリで使用」に分類し、出力に含まれる Windows SDK 投影・C#/WinRT を記載していなかった | **修正済み** |
+| Medium | P43（新） | `Microsoft.Windows.SDK.NET.dll` の再配布可否（Windows SDK ライセンスの REDIST 一覧に含まれるか）が一次情報で未確認 | バイナリ配布前に確認（DEPENDENCIES §10-6） |
+| Medium | P44（新） | バイナリ配布時は Windows App SDK の条件（エンドユーザーの同意する利用条件、補償）を満たす文面が必要 | バイナリ配布前に作成（DEPENDENCIES §10-7）。ソースのみ公開の現状は対象外 |
+| Low | P45（新） | `Mavue.App` はメタパッケージのまま（Windows ML 等が出力に入る） | エディタの機能が決まった時点で整理 |
+| Low | P46（新） | WebView2 は WinUI の依存として出力に残る（読み込まれない、約 2 MB） | 記録。BSD-3 型ライセンスの表示義務あり |
+
+- 依存関係（第 4 工程）: 追加なし（名前付きパイプの ACL は .NET 標準の `System.IO.Pipes.AccessControl`）。
+- セキュリティ: パイプは現在のユーザーのみ・リモート拒否・サーバー所有者の確認・長さ制限・パス検証。パスはログに残さない。
+
 - 依存関係: 追加なし（WIC・WinRT は OS 機能）。`Mavue.QuickView.Host` から `Mavue.Image` への参照を追加（ARCHITECTURE §3.1, ADR-15）。
 - 利用者データ: 設定ファイルは表示サイズのみ（パス・内容は記録しない）。Quick View からの書き込みはなくなり、読み取りのみ。E2E は専用の設定ファイルを使い、利用者の設定を変更しない。

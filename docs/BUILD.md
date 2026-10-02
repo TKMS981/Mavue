@@ -110,7 +110,19 @@ $qv = ".\src\Mavue.QuickView.Host\bin\Debug\net10.0-windows10.0.26100.0\win-x64\
 `--no-wic`（JPEG の WIC 直接デコードを無効化）、`--no-idle-trim`（非表示後の GC を無効化）、
 `--settings <path>`（設定ファイル。既定 `%LOCALAPPDATA%\Mavue\QuickView\settings.json`。`{"version": 1, "imageScale": "FitNoUpscale"}` または
 `"ActualSize"`。Quick View を開くたびに読み直すので、書き換えはホストの再起動なしで次の Space から反映。設定画面は未実装）、
-`--other-quicklook yield`（QuickLook 等の動作中は Space に反応しない）。
+`--other-quicklook yield`（QuickLook 等の動作中は Space に反応しない）、
+`--quickview <file>...`（指定ファイルを表示。常駐プロセスがあれば名前付きパイプで渡してすぐ終了、なければ自分が常駐になって表示。以降の引数はすべてパス）。
+
+Explorer 統合（現在のユーザーのみ、管理者権限不要。登録されるのは実行した exe のパス）:
+
+```powershell
+& $qv --register                # 右クリック「Mavue Quick View」（従来メニュー）+ サインイン時の起動
+& $qv --register --no-startup   # 右クリックのみ
+& $qv --registration-status     # 登録状態の表示
+& $qv --unregister              # 登録した項目をすべて削除
+```
+
+`--verb <name>` は E2E 用（利用者の登録と別名で登録・解除する）。
 
 ReadyToRun（起動直後の最初の表示が速くなる。実測は `docs/QUICKVIEW-POC.md` §10.4）:
 

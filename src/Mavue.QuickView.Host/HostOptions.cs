@@ -66,6 +66,14 @@ internal enum OtherQuickLookPolicy
     Yield,
 }
 
+internal enum RegistrationCommand
+{
+    None,
+    Register,
+    Unregister,
+    Status,
+}
+
 /// <summary>Command-line options. Unknown arguments are ignored.</summary>
 internal sealed record HostOptions
 {
@@ -101,6 +109,22 @@ internal sealed record HostOptions
 
     /// <summary>Ask a running instance to exit, then exit.</summary>
     public bool Shutdown { get; init; }
+
+    /// <summary>
+    /// <c>--quickview path...</c>: preview these files (Explorer's "Mavue Quick View" command). All arguments
+    /// after the switch are paths. Forwarded to the resident process if one runs; otherwise this process
+    /// becomes the resident process and shows them.
+    /// </summary>
+    public IReadOnlyList<string> QuickViewPaths { get; init; } = [];
+
+    /// <summary>Per-user registration command (<c>--register</c>, <c>--unregister</c>, <c>--registration-status</c>).</summary>
+    public RegistrationCommand Registration { get; init; }
+
+    /// <summary>With <c>--register</c>: do not start the resident process at sign-in.</summary>
+    public bool NoStartAtSignIn { get; init; }
+
+    /// <summary>Context-menu key name (tests use their own so the user's registration is untouched).</summary>
+    public string? VerbName { get; init; }
 
     public static HostOptions Parse(IReadOnlyList<string> args)
     {
@@ -163,6 +187,26 @@ internal sealed record HostOptions
                     break;
                 case "--shutdown":
                     options = options with { Shutdown = true };
+                    break;
+                case "--quickview":
+                    options = options with { QuickViewPaths = args.Skip(i + 1).ToArray() };
+                    i = args.Count; // the rest are paths
+                    break;
+                case "--register":
+                    options = options with { Registration = RegistrationCommand.Register };
+                    break;
+                case "--unregister":
+                    options = options with { Registration = RegistrationCommand.Unregister };
+                    break;
+                case "--registration-status":
+                    options = options with { Registration = RegistrationCommand.Status };
+                    break;
+                case "--no-startup":
+                    options = options with { NoStartAtSignIn = true };
+                    break;
+                case "--verb" when next is not null:
+                    options = options with { VerbName = next };
+                    i++;
                     break;
             }
         }

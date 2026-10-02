@@ -20,10 +20,19 @@
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <DefaultLanguage>en-US</DefaultLanguage>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Program.cs handles quickview forwarding and registration before WinUI starts. -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" />
+    <!-- Only the Windows App SDK components the host uses (WinUI; Foundation for MRT Core resources and the
+         runtime; InteractiveExperiences for windowing/composition; Base comes with them). The Microsoft.WindowsAppSDK metapackage also
+         pulled in Windows ML (ONNX Runtime, DirectML), Windows AI, Search and Widgets: about 56 MB of the output,
+         never loaded (measured, docs/DEPENDENCIES.md §0.1). -->
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" />
+    <!-- Pinned to the metapackage's version: WinUI 2.3.9 asks for >= 2.1.8, which is not published (NU1603). -->
+    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
   </ItemGroup>
 
@@ -31,5 +40,6 @@
     <ProjectReference Include="..\Mavue.Core\Mavue.Core.csproj" />
     <ProjectReference Include="..\Mavue.QuickView\Mavue.QuickView.csproj" />
     <ProjectReference Include="..\Mavue.Image\Mavue.Image.csproj" />
+    <ProjectReference Include="..\Mavue.Shell\Mavue.Shell.csproj" />
   </ItemGroup>
 </Project>

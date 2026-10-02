@@ -1,6 +1,6 @@
 # Quick View 最小 PoC 検証報告
 
-最終更新: 2026-10-02（第 2 工程: 物理キー検証・QuickLook 共存・選択追従 §7〜§9。第 3 工程: タブ追従・先読み・WIC・ReadyToRun・メモリ・表示サイズ・複数モニター §10）
+最終更新: 2026-10-02（第 2 工程: 物理キー検証・QuickLook 共存・選択追従 §7〜§9。第 3 工程: タブ追従・先読み・WIC・ReadyToRun・メモリ・表示サイズ・複数モニター §10。第 4 工程: 右クリックメニュー・IPC・サインイン時の起動 §11）
 対象: `src/Mavue.QuickView`（ライブラリ）、`src/Mavue.QuickView.Host`（常駐 WinUI 3 プロセス）、`tools/Mavue.QuickView.Harness`（実機 E2E ハーネス）
 
 > 本書では **「実測」**（本機 Windows 11 で実際に観測した値・挙動）と **「推測」**（観測から導いた解釈・未検証の見込み）を明確に区別する。
@@ -354,6 +354,77 @@ Windows は**後から設置された低レベルフックを先に呼ぶ**た�
 - 対策: 出力倍率をシステム DPI で見積もり、指定サイズをその倍率で割って渡す。出力が予定と 2 px を超えてずれたら、実際の倍率を覚えてもう一度描画する（プロセス中 1 回だけ）。
 - 修正後（E2E `monitor-open-each` に PDF を追加して確認）: 拡大しないモード 150 %: 987×1397、100 %: 486×690（どちらも領域の高さちょうど）。原寸モード 150 %: 1190×1683、100 %: 792×1122（100 %）。
 
+## 11. 第 4 工程: 右クリックメニュー「Mavue Quick View」・IPC・サインイン時の起動
+
+管理者権限と C++ ツールチェーンを使わずにできる Explorer 統合を実装した（Windows 11 の上段メニューは §11.5）。
+
+### 11.1 構成
+
+```
+Explorer の右クリック → 「その他のオプションを確認」→「Mavue Quick View」
+  └─ Explorer がファイルごとに  Mavue.QuickView.Host.exe --quickview "<file>"  を起動
+       ├─ 常駐プロセスあり: 名前付きパイプで依頼を送り、AllowSetForegroundWindow(常駐プロセス) してすぐ終了
+       │                    （WinUI を起動しない独自 Main。1 回 約 110 ms）
+       └─ 常駐プロセスなし: そのプロセスが常駐プロセスとして起動し、そのまま表示
+常駐プロセス: 依頼のファイルを選択中の Explorer ビューを探す
+  ├─ 見つかった: Space と同じく、そのビューの選択（複数選択を含む）を表示し、選択変更に追従
+  └─ 見つからない（デスクトップ等）: 渡されたファイルを一覧として表示（続いて届く同じ操作のファイルは一覧に追加）
+```
+
+- 登録: `Mavue.QuickView.Host.exe --register [--no-startup]`（HKCU のみ、管理者不要）。解除は `--unregister`、確認は `--registration-status`。
+  - メニュー: `HKCU\Software\Classes\SystemFileAssociations\<拡張子>\shell\Mavue.QuickView`（18 拡張子: PDF、JPEG、PNG、GIF、BMP、TIFF、WebP、ICO、HEIF、AVIF、JPEG XL）。
+    SystemFileAssociations を使うので、既定のアプリや関連付けは変更しない。JPEG 2000・SVG はデコーダーがないため対象外。
+  - サインイン時の起動: `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` の値 `Mavue.QuickView`（`--no-startup` で登録しない）。
+  - 作成・削除するのは `Mavue.QuickView` という名前のキーと値だけ（他のアプリの項目は消さないことを単体テストで確認）。
+- `MultiSelectModel=Player`: 最大 100 項目まで表示される（`Document` は 15 項目まで。Microsoft Learn「How to Employ the Verb Selection Model」）。
+  ただしコマンドライン型の動詞なので、Explorer は**ファイルごとにプロセスを起動する**（実測: 3 ファイルで 3 プロセス）。
+- 前面表示: 右クリックから起動されたプロセスは前面化の権利を持つので、常駐プロセスに `AllowSetForegroundWindow` で譲る。
+  Space（パネル表示、§3.2）と違い、Quick View が通常どおりアクティブになる。権利が無効だった場合はパネル表示に切り替える。
+
+### 11.2 IPC（名前付きパイプ）
+
+- 名前: `Mavue.QuickView.<セッション ID>.<ユーザー SID の SHA-256 先頭 8 バイト>`（SID はそのまま出さない）。
+- DACL: 現在のユーザーのみ許可、NETWORK（リモートログオン）は拒否。クライアントは `PipeOptions.CurrentUserOnly` で、パイプの所有者が自分であることを確認する（他ユーザーによるなりすまし対策）。
+- 形式: 4 バイト長 + UTF-8 JSON（`Mavue.Core.Ipc`、ソース生成 System.Text.Json）。1 MiB を超える長さは確保前に拒否。バージョン・パス（完全修飾・NUL なし・長さ・件数）を検証。パスはログに残さない。
+- 単体・結合テスト: 枠組み 16 件（`IpcFramingTests`）、パイプ 6 件（同時 20 クライアント、不正な長さの後も動き続ける、無効な依頼はハンドラーを呼ばない など）。
+
+### 11.3 実測（Release、E2E `cli-quickview` / `context-menu-verb`）
+
+| 操作 | 結果 |
+|---|---|
+| `--quickview <file>`（常駐あり、Explorer が前面） | クライアントプロセス 約 107〜112 ms で終了、フル品質表示まで **151〜157 ms**。表示はアクティブ（`Granted`）、↓ で Explorer の選択に追従 |
+| Explorer から動詞を実行（1 ファイル、登録直後の初回） | 依頼の到着 747 ms、表示 850 ms（Explorer 側が新しい動詞を初めて解決するコスト） |
+| 同（2 回目以降） | 依頼の到着 290 ms、表示 **331 ms** |
+| 同（3 ファイル選択） | 3 プロセスの依頼が 354〜361 ms に到着、最初の 1 件で 3 項目の複数選択を表示（416 ms）、残り 2 件は「表示済み」として無視 |
+| 常駐なしで `--quickview`（そのプロセスが常駐になる） | 起動 → 表示 296 ms |
+
+- 第 4 工程の最終版での E2E（Release）: 拡大しない（巨大画像を含む 9 形式 × 3 回）27/27・シナリオ **15/15**、原寸（7 形式 × 2 回）14/14・シナリオ **13/13** 合格。
+  動詞の登録直後の初回は 747〜1,036 ms（3 回の計測）、2 回目以降は依頼の到着 276〜290 ms・表示 313〜331 ms。テスト用の動詞は終了後に削除されることを確認。
+- **実際の Explorer メニュー経路での確認**（Release、`--register --no-startup` で登録、操作は合成マウス・キー入力）:
+  この PC では右クリックで従来メニューが直接開く設定（Windows 11 の新しいメニューと「その他のオプションを確認」は出ない）で、
+  「Mavue Quick View」は従来メニューの 5 番目に表示された（アイコンなし）。
+
+| 操作 | 結果 |
+|---|---|
+| 1 ファイルを右クリック →「Mavue Quick View」 | クリックから 319 ms で前面表示（アクティブ）。↓ で次のファイルへ（Explorer の選択も移動）、Explorer 側の選択変更にも追従、Esc で閉じて Explorer に戻る |
+| 3 ファイル選択 → 同 | 305 ms で前面表示、「1 / 3」表示、→ で 2 番目へ。Esc で Explorer に戻る |
+| 常駐プロセスなしで右クリック（HEIC） | 654 ms で前面表示（そのプロセスが常駐になる）。↓・選択追従・Esc も同様 |
+| その後の Space | 87 ms で表示（パネル、Explorer が前面のまま）、Esc で閉じる |
+
+- 最初の実装は、ファイルごとの依頼を 120 ms 待ってまとめていた（表示 283 ms / 461 ms）。Explorer の選択を読めば 1 件目で全体が分かるため、待たずに表示する方式に変更した（151 ms / 416 ms）。
+- 計測時の動詞の実行は Shell オートメーション（`SelectedItems().InvokeVerbEx`）で、Explorer のプロセス内で実行される。実際のメニュー操作での前面化・表示は**ユーザーの物理操作での確認が必要**（§3.2 の教訓）。
+
+### 11.4 制約・未確認
+
+- Windows 11 では「その他のオプションを確認」（Shift+F10）の中に表示される。上段メニューは §11.5。
+- サインイン時の起動は、レジストリにビルド出力フォルダーの exe を登録する開発用の方式。MSIX 配布では `desktop:StartupTask` に置き換える（WINDOWS-INTEGRATION §14.2）。
+- 100 項目を選んだ場合、Explorer は 100 プロセスを起動する（各 約 110 ms、それぞれすぐ終了）。負荷は未計測。将来、上段メニュー用の `IExplorerCommand`（1 回の呼び出しで全項目を受け取る）に置き換える。
+
+### 11.5 Windows 11 上段メニュー（Blocked）
+
+`IExplorerCommand` を実装したネイティブ DLL と、パッケージ ID（MSIX またはスパースパッケージ）が必要（WINDOWS-INTEGRATION §14.1）。
+Visual Studio Build Tools（C++ ワークロード、管理者権限でのインストール）と、開発者モードの有効化またはテスト証明書が前提のため、**ユーザーの判断待ち**。
+
 ## 6. 今後の課題（Quick View 関連）
 
 1. ~~物理キーボード・QuickLook 共存の確認~~（第 2 工程で完了。§8, §9）。物理キーでの他アプリ切替は再確認が必要。
@@ -365,4 +436,5 @@ Windows は**後から設置された低レベルフックを先に呼ぶ**た�
 8. Quick View の設定画面（表示サイズの切替。ユーザー要望で、その場の切替ではなく設定メニューで行う。F23.03）。現状は settings.json を直接編集。
 9. ICC プロファイル付き JPEG（スマートフォン写真に多い）の高速化。WIC の色変換を使った直接デコードを検討（現状 24 MP で約 260 ms）。
 10. 拡大率の異なるモニター間の移動・リサイズのユーザー物理操作での再確認（自動 E2E では合格、§10.8）。
+11. 右クリックメニュー「Mavue Quick View」のユーザー物理操作での確認（§11.3）。Windows 11 上段メニュー（§11.5、Build Tools とパッケージ ID が必要）。
 5. コンテキストメニュー「Mavue Quick View」経由の表示（Explorer 内の `IExplorerCommand` が `AllowSetForegroundWindow` を呼べるため、こちらはアクティブ化も可能）。

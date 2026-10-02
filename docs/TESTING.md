@@ -60,6 +60,18 @@ powershell -ExecutionPolicy Bypass -File tools/smoke-test.ps1 -Configuration Deb
 | **全体** | Core 46 + Image 28 + QuickView 125 + Repository 6 | **205（204 成功、1 スキップ: 開発者モードが必要）** |
 | `tools/smoke-test.ps1` | Mavue.exe 起動 → 最初のフレーム描画 → リソース解決確認 → 終了コード 0 | — |
 
+第 4 工程（2026-10-02）の追加:
+
+| プロジェクト | 追加内容 | 件数（計） |
+|---|---|---|
+| `Mavue.Core.Tests` | IPC の枠組み（`IpcFraming`・`QuickViewRequest`）: 往復、不正な長さ（確保前に拒否）、壊れた JSON、途中で切れたフレーム、パスの検証 | 62 |
+| `Mavue.QuickView.Tests` | 名前付きパイプ（`QuickViewPipe`）: 名前の分離、送受信、同時 20 クライアント、無効な依頼、不正データの後も継続、サーバーなし | 131 |
+| `Mavue.Shell.Tests`（新規） | 右クリック・サインイン登録（`QuickViewShellRegistration`）: 専用の HKCU サブキーで実行。全拡張子への登録、他アプリの項目を消さない、空キーの片付け、再登録、別名の動詞、不正なパス・名前の拒否 | 12 |
+| **全体** | Core 62 + Image 28 + QuickView 131 + Repository 6 + Shell 12 | **239（238 成功、1 スキップ: 開発者モードが必要）** |
+
+E2E シナリオの追加: `cli-quickview`（`--quickview` の転送・アクティブ表示・選択追従）、`context-menu-verb`（テスト用の名前で動詞を登録し、
+Explorer に 1 ファイル・3 ファイルで実行させる。終了後に登録を削除）。
+
 `Mavue.Repository.Tests` は、FEATURES.md から行を削除する・SPEC 非除外項目を Excluded にする変更で失敗することを確認済み（ミューテーション確認）。
 
 ### 2.1 Quick View 実機 E2E ハーネス（`tools/Mavue.QuickView.Harness`）
@@ -69,7 +81,7 @@ powershell -ExecutionPolicy Bypass -File tools/smoke-test.ps1 -Configuration Deb
 
 ```powershell
 $h = ".\tools\Mavue.QuickView.Harness\bin\Debug\net10.0-windows10.0.26100.0\Mavue.QuickView.Harness.exe"
-& $h                                   # 既定: panel、7 形式 × 3 回 + シナリオ 13 件（fit。actual は 11 件）
+& $h                                   # 既定: panel、7 形式 × 3 回 + シナリオ 15 件（fit。actual は 13 件）
 & $h --huge                            # 192 MP JPEG / 100 MP PNG を追加（初回生成に時間がかかる）
 & $h --activation hookgrant --cases small-jpeg --iterations 5 --no-scenarios   # 表示方式の比較
 & $h --attach-host <timing.jsonl>      # 独立に起動済みのホストに接続して計測

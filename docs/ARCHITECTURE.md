@@ -326,7 +326,11 @@ Windows 11 で以下を実現するには**パッケージ ID**が必要:
   契約は `Mavue.Core.Ipc` に定義し、バージョンフィールドを持つ。
 - 大きなビットマップの受け渡し（例: Quick View → App のマークアップハンドオフ時のデコード済み画像）は
   名前付き共有メモリ（`CreateFileMapping`、同 DACL）を使用（Investigating: 再デコードとの比較を計測して決定）。
-- 単一インスタンス: Windows App SDK `AppInstance.FindOrRegisterForKey` + `RedirectActivationToAsync`。
+- 単一インスタンス: Windows App SDK `AppInstance.FindOrRegisterForKey` + `RedirectActivationToAsync`（`Mavue.App`。予定）。
+- **実装済み（Quick View、第 4 工程）**: `Mavue.QuickView.Host.exe --quickview <file>` → パイプ `Mavue.QuickView.<SessionId>.<SID ハッシュ>`。
+  DACL は現在のユーザーのみ・NETWORK 拒否、クライアントは `PipeOptions.CurrentUserOnly` でサーバーの所有者を確認。契約は `Mavue.Core.Ipc.QuickViewRequest`
+  （バージョン、完全修飾パス、依頼時の前面ウィンドウ）。常駐プロセスの単一インスタンスは `Local\` ミューテックス。
+  クライアントは送信前に `AllowSetForegroundWindow` で前面化の権利を常駐プロセスに譲る（QUICKVIEW-POC §11）。
 
 ---
 
@@ -396,4 +400,5 @@ Windows 11 で以下を実現するには**パッケージ ID**が必要:
 | ADR-16 | Quick View は画像を拡大しない（既定）。表示領域の物理ピクセルでデコードし 1:1 表示。原寸表示は設定で選択 | 拡大表示で画質が悪いとのユーザー報告。デコードを画面ピクセルに合わせると縮小以外の再サンプリングが発生しない | 採用（ユーザー要望） |
 | ADR-17 | 表示する画像は常に専用の複製（キャッシュの画像を XAML に直接渡さない） | XAML の画像ソース破棄でキャッシュ側の画像まで閉じられ、再表示で失敗（実測、ユーザー報告の不具合） | 採用 |
 | ADR-18 | Quick View の画像領域は XAML のレイアウトではなく `AppWindow.ClientSize` と `GetDpiForWindow` から計算。表示サイズの設定は開くたびに設定ファイルを読み直す（その場の切替 UI は置かない） | 拡大率の違うモニターへ移るとき、配置後に Windows が DPI 変更でウィンドウを再リサイズし、レイアウトが古いままの値でデコードしていた（3 モニターで実測）。切替 UI はユーザー要望で設定画面に移す | 採用 |
+| ADR-19 | 右クリック「Mavue Quick View」は、まず HKCU の従来メニュー（SystemFileAssociations の動詞 → `--quickview` → 名前付きパイプ）で提供。常駐プロセスはそのファイルを選択中の Explorer ビューを読み、Space と同じ表示・追従に合流する | 上段メニューはパッケージ ID とネイティブ DLL が必要で、Build Tools（管理者インストール）待ち。動詞は 1 ファイル 1 プロセスで起動されるが、選択を読めば最初の 1 件で全体を表示できる（実測） | 採用（上段メニューは後続） |
 | ADR-14 | 他の Space プレビューツールとの共存: 既定は Mavue 優先（フック再設置で先頭を維持）、設定で譲る | QuickLook は Space を流すため、後から起動した側が先に呼ばれ二重表示（実測 3/3） | 採用（既定値はユーザー確認事項） |

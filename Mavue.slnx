@@ -19,6 +19,7 @@
     <Project Path="tests/Mavue.Image.Tests/Mavue.Image.Tests.csproj" />
     <Project Path="tests/Mavue.QuickView.Tests/Mavue.QuickView.Tests.csproj" />
     <Project Path="tests/Mavue.Repository.Tests/Mavue.Repository.Tests.csproj" />
+    <Project Path="tests/Mavue.Shell.Tests/Mavue.Shell.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/Mavue.QuickView.Harness/Mavue.QuickView.Harness.csproj" />

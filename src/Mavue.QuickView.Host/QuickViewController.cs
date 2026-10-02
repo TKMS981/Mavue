@@ -97,6 +97,13 @@ internal sealed class QuickViewController : IDisposable
     private DispatcherQueueTimer? _areaTimer;
     private nint _ownerForHook;
 
+    // Context-menu requests: the --quickview process allowed us to take the foreground, so the next show
+    // activates normally instead of the passive panel. Without an owner, the window is placed near this.
+    private bool _grantedActivation;
+    private nint _placeNear;
+    private long _lastExternalShowQpc = long.MinValue / 2;
+    private static readonly long ExternalMergeWindowTicks = System.Diagnostics.Stopwatch.Frequency * 2;
+
     public QuickViewController(QuickViewWindow window, QuickViewTimeline timeline, HostOptions options)
     {
         _window = window;
@@ -189,6 +196,65 @@ internal sealed class QuickViewController : IDisposable
         Show(requestId, path);
         UpdateNavigationKeys();
         WatchOwnerFocus();
+    }
+
+    /// <summary>
+    /// Handles a context-menu request (<c>--quickview</c>) once its selection is known. Unlike Space it never
+    /// toggles: if Quick View already shows this view's selection (another file of the same multi-selection
+    /// arriving late), nothing changes; otherwise it shows the new selection.
+    /// </summary>
+    /// <param name="owner">Explorer window whose selection is followed, or 0 when showing the given files.</param>
+    /// <param name="view">That window's SHELLDLL_DefView.</param>
+    /// <param name="foreground">Foreground window when the command was invoked (placement when there is no owner).</param>
+    public void OnExternalRequest(long requestId, nint owner, nint view, nint foreground, ViewSelection selection)
+    {
+        _timeline.Mark(requestId, "dispatched", QuickViewTimeline.Now);
+        if (selection.Paths.Count == 0)
+        {
+            _timeline.Mark(requestId, "no-selection", QuickViewTimeline.Now);
+            return;
+        }
+
+        if (_visible)
+        {
+            if (owner != 0 && owner == _owner && selection.Paths.All(p => _navigator.Items.Contains(p, StringComparer.OrdinalIgnoreCase)))
+            {
+                // Another file of the multi-selection already being shown (Explorer starts one process per file).
+                _timeline.Mark(requestId, "external-already-shown", QuickViewTimeline.Now);
+                return;
+            }
+
+            if (owner == 0 && _owner == 0 && _currentPath is { } current &&
+                QuickViewTimeline.Now - _lastExternalShowQpc < ExternalMergeWindowTicks)
+            {
+                // No Explorer view to read: the files of one command arrive one by one; add them to the list.
+                List<string> merged = [.. _navigator.Items];
+                merged.AddRange(selection.Paths.Where(p => !merged.Contains(p, StringComparer.OrdinalIgnoreCase)));
+                _navigator.Start(merged, current);
+                _timeline.Mark(requestId, "external-merged", QuickViewTimeline.Now, new Dictionary<string, object?> { ["count"] = merged.Count });
+                ShowNext(requestId, current, sameItem: true); // refreshes "i / N"
+                return;
+            }
+
+            // The worker already subscribed to the new view; keep that session.
+            Hide(requestId, "external-replace", restoreOwner: false, closeSession: false);
+        }
+
+        NavigationResult start = _navigator.Start(selection.Paths, selection.FocusedPath);
+        _owner = owner;
+        Volatile.Write(ref _ownerForHook, owner);
+        _lastHookProbe = null;
+        _followedView = view;
+        _placeNear = owner != 0 ? owner : foreground;
+        _grantedActivation = true;
+        _lastExternalShowQpc = QuickViewTimeline.Now;
+        MarkNavigation(requestId, "context-menu");
+        Show(requestId, start.Path!);
+        UpdateNavigationKeys();
+        if (owner != 0)
+        {
+            WatchOwnerFocus();
+        }
     }
 
     /// <summary>
@@ -566,7 +632,7 @@ internal sealed class QuickViewController : IDisposable
         _window.Title = string.Format(CultureInfo.CurrentCulture, Strings.GetString("QuickView_WindowTitle"), fileName);
         if (!_visible)
         {
-            PlaceWindow(_owner);
+            PlaceWindow(_owner != 0 ? _owner : _placeNear);
         }
 
         _timeline.Mark(requestId, "show-call", QuickViewTimeline.Now);
@@ -590,85 +656,111 @@ internal sealed class QuickViewController : IDisposable
         bool attached = false;
 
         bool fellBack = false;
-        switch (_options.Activation)
+        string mode = _options.Activation.ToString();
+        if (_grantedActivation)
         {
-            case ActivationMode.Auto:
-                if (_lastHookProbe == true)
-                {
-                    // The hook callback reserved foreground rights while the Space event was processed.
+            // Context menu: the requesting process (started by Explorer from the user's click) called
+            // AllowSetForegroundWindow for us, so a normal activation is legitimate here.
+            _grantedActivation = false;
+            mode = "Granted";
+            AppWindow.Show(true);
+            if (NativeMethods.GetForegroundWindow() != hwnd)
+            {
+                setForegroundResult = NativeMethods.SetForegroundWindow(hwnd);
+                lastError = Marshal.GetLastPInvokeError();
+            }
+
+            if (NativeMethods.GetForegroundWindow() != hwnd)
+            {
+                // The right was not honored: fall back to the passive panel so the window is at least visible on top.
+                NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0, NoActivateFlags | NativeMethods.SWP_SHOWWINDOW);
+                _topmost = true;
+                _visibleWithoutActivation = true;
+                fellBack = true;
+            }
+        }
+        else
+        {
+            switch (_options.Activation)
+            {
+                case ActivationMode.Auto:
+                    if (_lastHookProbe == true)
+                    {
+                        // The hook callback reserved foreground rights while the Space event was processed.
+                        AppWindow.Show(true);
+                        if (NativeMethods.GetForegroundWindow() != hwnd)
+                        {
+                            setForegroundResult = NativeMethods.SetForegroundWindow(hwnd);
+                            lastError = Marshal.GetLastPInvokeError();
+                        }
+                    }
+
+                    if (NativeMethods.GetForegroundWindow() != hwnd)
+                    {
+                        // No rights: show passively. Attempting activation here would only flash the taskbar.
+                        NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_TOP, 0, 0, 0, 0, NoActivateFlags | NativeMethods.SWP_SHOWWINDOW);
+                        _visibleWithoutActivation = true;
+                        fellBack = true;
+                    }
+
+                    break;
+
+                case ActivationMode.AppWindowShow:
+                    AppWindow.Show(true);
+                    break;
+
+                case ActivationMode.SetForeground:
+                case ActivationMode.HookGrant:
                     AppWindow.Show(true);
                     if (NativeMethods.GetForegroundWindow() != hwnd)
                     {
                         setForegroundResult = NativeMethods.SetForegroundWindow(hwnd);
                         lastError = Marshal.GetLastPInvokeError();
                     }
-                }
 
-                if (NativeMethods.GetForegroundWindow() != hwnd)
-                {
-                    // No rights: show passively. Attempting activation here would only flash the taskbar.
-                    NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_TOP, 0, 0, 0, 0, NoActivateFlags | NativeMethods.SWP_SHOWWINDOW);
-                    _visibleWithoutActivation = true;
-                    fellBack = true;
-                }
+                    break;
 
-                break;
-
-            case ActivationMode.AppWindowShow:
-                AppWindow.Show(true);
-                break;
-
-            case ActivationMode.SetForeground:
-            case ActivationMode.HookGrant:
-                AppWindow.Show(true);
-                if (NativeMethods.GetForegroundWindow() != hwnd)
-                {
-                    setForegroundResult = NativeMethods.SetForegroundWindow(hwnd);
-                    lastError = Marshal.GetLastPInvokeError();
-                }
-
-                break;
-
-            case ActivationMode.AttachThreadInput:
-                AppWindow.Show(true);
-                if (NativeMethods.GetForegroundWindow() != hwnd)
-                {
-                    uint foregroundThread = NativeMethods.GetWindowThreadProcessId(NativeMethods.GetForegroundWindow(), out _);
-                    uint thisThread = NativeMethods.GetCurrentThreadId();
-                    attached = foregroundThread != thisThread && NativeMethods.AttachThreadInput(thisThread, foregroundThread, true);
-                    setForegroundResult = NativeMethods.SetForegroundWindow(hwnd);
-                    lastError = Marshal.GetLastPInvokeError();
-                    if (attached)
+                case ActivationMode.AttachThreadInput:
+                    AppWindow.Show(true);
+                    if (NativeMethods.GetForegroundWindow() != hwnd)
                     {
-                        NativeMethods.AttachThreadInput(thisThread, foregroundThread, false);
+                        uint foregroundThread = NativeMethods.GetWindowThreadProcessId(NativeMethods.GetForegroundWindow(), out _);
+                        uint thisThread = NativeMethods.GetCurrentThreadId();
+                        attached = foregroundThread != thisThread && NativeMethods.AttachThreadInput(thisThread, foregroundThread, true);
+                        setForegroundResult = NativeMethods.SetForegroundWindow(hwnd);
+                        lastError = Marshal.GetLastPInvokeError();
+                        if (attached)
+                        {
+                            NativeMethods.AttachThreadInput(thisThread, foregroundThread, false);
+                        }
                     }
-                }
 
-                break;
+                    break;
 
-            case ActivationMode.NoActivate:
-                // Shown and raised to the top of the (non-topmost) z-order without activation.
-                setForegroundResult = NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_TOP, 0, 0, 0, 0, NoActivateFlags | NativeMethods.SWP_SHOWWINDOW);
-                _visibleWithoutActivation = true;
-                break;
+                case ActivationMode.NoActivate:
+                    // Shown and raised to the top of the (non-topmost) z-order without activation.
+                    setForegroundResult = NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_TOP, 0, 0, 0, 0, NoActivateFlags | NativeMethods.SWP_SHOWWINDOW);
+                    _visibleWithoutActivation = true;
+                    break;
 
-            case ActivationMode.Panel:
-                setForegroundResult = NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0, NoActivateFlags | NativeMethods.SWP_SHOWWINDOW);
-                _topmost = true;
-                _visibleWithoutActivation = true;
-                break;
+                case ActivationMode.Panel:
+                    setForegroundResult = NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0, NoActivateFlags | NativeMethods.SWP_SHOWWINDOW);
+                    _topmost = true;
+                    _visibleWithoutActivation = true;
+                    break;
 
-            case ActivationMode.NoActivateTopmost:
-                // Comparison: momentary topmost, then back to the normal band (still above Explorer).
-                NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0, NoActivateFlags | NativeMethods.SWP_SHOWWINDOW);
-                setForegroundResult = NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_NOTOPMOST, 0, 0, 0, 0, NoActivateFlags);
-                _visibleWithoutActivation = true;
-                break;
+                case ActivationMode.NoActivateTopmost:
+                    // Comparison: momentary topmost, then back to the normal band (still above Explorer).
+                    NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0, NoActivateFlags | NativeMethods.SWP_SHOWWINDOW);
+                    setForegroundResult = NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_NOTOPMOST, 0, 0, 0, 0, NoActivateFlags);
+                    _visibleWithoutActivation = true;
+                    break;
+            }
         }
 
         _timeline.Mark(requestId, "shown", QuickViewTimeline.Now, new Dictionary<string, object?>
         {
-            ["mode"] = _options.Activation.ToString(),
+            ["mode"] = mode,
             ["aboveOwner"] = IsAbove(hwnd, _owner),
             ["isForeground"] = NativeMethods.GetForegroundWindow() == hwnd,
             ["setForegroundResult"] = setForegroundResult,
@@ -678,7 +770,8 @@ internal sealed class QuickViewController : IDisposable
         });
     }
 
-    private void Hide(long requestId, string reason, bool restoreOwner)
+    /// <param name="closeSession">False when a new Explorer subscription was already opened for the next show.</param>
+    private void Hide(long requestId, string reason, bool restoreOwner, bool closeSession = true)
     {
         if (!_visible)
         {
@@ -712,7 +805,12 @@ internal sealed class QuickViewController : IDisposable
         _displayedBitmap = null;
         _contentRequest = 0;
         _navigator.Reset();
-        _worker?.CloseSession();
+        if (closeSession)
+        {
+            _worker?.CloseSession();
+        }
+
+        _placeNear = 0;
         _focusWatcher.Stop();
         _followedView = 0;
         _prefetch?.Cancel();

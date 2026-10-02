@@ -71,6 +71,10 @@ public static class FileFormatDetector
         return byContent != FileFormat.Unknown ? byContent : FromExtension(extensionHint);
     }
 
+    /// <summary>Extensions (lower case, with the leading dot) recognized for <paramref name="format"/>.</summary>
+    public static IReadOnlyList<string> ExtensionsOf(FileFormat format) =>
+        ExtensionMap.Where(p => p.Value == format).Select(p => p.Key).Order(StringComparer.Ordinal).ToArray();
+
     /// <summary>Maps a file extension (with or without the leading dot) to a format.</summary>
     public static FileFormat FromExtension(string? extension)
     {

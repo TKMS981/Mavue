@@ -4,7 +4,7 @@
 > 商用利用制限・ネイティブバイナリ再配布要件を確認し、ここに記録する。
 > **本書は法的助言ではない。** 「要法務確認」の項目は製品配布前に専門家の確認を必須とする。
 
-最終更新: 2026-10-02（Mavue 本体を Apache-2.0 とし、ライセンス関連ファイルを追加。Quick View 第 3 工程時点。製品コードに追加した外部依存はなし — WIC 直接デコード・設定ファイル（System.Text.Json）は OS / .NET 標準機能のみ。PDFium の配布物を実物で確認）
+最終更新: 2026-10-02（Quick View ホストの Windows App SDK 参照を必要な部品に限定し、出力を 155 → 95 MB に。Mavue 本体を Apache-2.0 とし、ライセンス関連ファイルを追加。Quick View 第 3 工程時点。製品コードに追加した外部依存はなし — WIC 直接デコード・設定ファイル（System.Text.Json）は OS / .NET 標準機能のみ。PDFium の配布物を実物で確認）
 
 ## 0. Mavue 本体のライセンス（2026-10-02 決定）
 
@@ -12,12 +12,46 @@
 - 第三者コンポーネントは各自のライセンスのまま扱い、Apache-2.0 で上書きしない。一覧は `THIRD-PARTY-NOTICES.md`。
 - 互換性の注意: Apache-2.0 のコードに **GPL-2.0 のみ**のコードは組み込めない。GPL-3.0 / AGPL-3.0 のコードを取り込むと
   配布物全体がその条件に縛られる。LGPL は動的リンクなら併用可（§9）。これらのコードは今後も流用しない。
-- Windows App SDK の再配布条件（`license.txt` §3）: バイナリを配布する際は、配布先の利用者に Microsoft とその
-  コードを本契約と同等以上に保護する条項へ同意させること、Microsoft の商標を推奨・提携と誤認させる形で使わないこと等が
-  求められる。Apache-2.0 はソースの開示を強制しないため §3(c)(ii) には抵触しない。**バイナリ配布の開始前に、
-  利用条件（EULA 相当）の文面を用意する**。
-- 現在のビルド出力には、使っていない Windows ML（`DirectML.dll`、`Microsoft.ML.OnnxRuntime.dll`）と WebView2 の DLL が
-  `Microsoft.WindowsAppSDK` メタパッケージ経由で含まれる。配布前に必要なサブパッケージだけを参照する構成を検討する。
+- Windows App SDK の再配布条件（各パッケージの `license.txt` §3。WinUI・Foundation・InteractiveExperiences・Base・
+  メタパッケージの `license.txt` は同一ファイル（SHA-256 一致）であることを確認）:
+  - §3(a)(i): NuGet パッケージが出力に置くファイルは再配布可。フレームワーク依存・自己完結の両方に適用される。
+  - §3(b): 再配布するときは (i) Mavue 側で主要な機能を加えること、(ii) 配布者とエンドユーザーに、このコードと Microsoft を
+    本契約と同等以上に保護する条項へ同意させること、(iii) 配布に関する請求について Microsoft を補償すること。
+  - §3(c): Microsoft の商標を、Microsoft が提供・推奨していると誤認させる形で使わないこと。配布可能コードを、ソース開示や
+    改変許可を求めるライセンス（コピーレフト）の対象にしないこと。Apache-2.0 はソース開示を求めないため抵触しない。
+  - **バイナリ配布の開始前に、利用条件（EULA 相当）の文面を用意する**（ソースのみ公開の現状では対象外）。
+- WebView2（`LICENSE.txt`、BSD-3-Clause 型）: バイナリ再配布時は著作権表示・条件・免責をドキュメント等に再掲する。
+- Windows SDK の C# 投影 `Microsoft.Windows.SDK.NET.dll`（.NET SDK が `net10.0-windows` 向けに自動で追加。パッケージ
+  `Microsoft.Windows.SDK.NET.Ref` 10.0.26100.57）— **再配布可否は未確定。「再配布可能」とは扱わない**:
+  - 確認できていること: パッケージの nuspec の `licenseUrl` は Windows SDK のライセンス（`https://aka.ms/WinSDKLicenseURL`）。
+    Microsoft のメンテナーが「Windows SDK の他の NuGet パッケージと同じライセンス条件」と回答（WindowsAppSDK Discussion #4368）。
+    Windows SDK ライセンス（`Microsoft.Windows.SDK.BuildTools.MSIX` 同梱の `sdk_license.txt` で原文を確認）で再配布できる
+    「Distributable Code」は、REDIST.TXT に記載のファイルと REDIST.TXT 一覧のファイル。条件は主要機能の追加、エンドユーザーの同意する利用条件など。
+    パッケージ内にライセンス文書・REDIST 一覧は同梱されていない。
+  - 確認できていないこと: この DLL（と同じパッケージの `Microsoft.Windows.UI.Xaml.dll`）が REDIST 一覧に含まれるか。
+    .NET SDK はすべての `net*-windows*` アプリの出力にこの DLL を置くが、それは再配布許可の根拠にならない。
+  - 配布前に確認すること: (1) Windows SDK の REDIST 一覧（最新版）にこの DLL が含まれるか、(2) 含まれない場合、Microsoft の公式文書
+    （.NET の Windows 向け TFM のドキュメント、CsWinRT の配布ガイド等）に再配布を認める記述があるか、(3) どちらもなければ Microsoft に
+    問い合わせるか法務確認する。結果をここと THIRD-PARTY-NOTICES.md に記録する。
+- `WinRT.Runtime.dll`（C#/WinRT のランタイム）は MIT（microsoft/CsWinRT リポジトリ）。
+
+### 0.1 Quick View ホストの依存の整理（2026-10-02、実測）
+
+| 項目 | 変更前（メタパッケージ） | 変更後（必要な部品のみ） |
+|---|---|---|
+| 参照 | `Microsoft.WindowsAppSDK` 2.5.1 | `Microsoft.WindowsAppSDK.WinUI` 2.3.9、`.Foundation` 2.3.12、`.InteractiveExperiences` 2.1.9（`.Base` 2.0.4 は自動） |
+| Release 出力 | 254 ファイル・155 MB | 187 ファイル・95 MB |
+| 出力から消えたもの | — | Windows ML（`onnxruntime.dll` 20.7 MB、`DirectML.dll` 17.8 MB、`Microsoft.ML.OnnxRuntime.dll`、`Microsoft.Windows.AI.MachineLearning*.dll`）、Windows AI（`Microsoft.Windows.AI.*`、`Microsoft.Windows.Workloads*`、`NPUDetect.dll`、`PerceptiveStreaming.dll` など）、Search、Widgets、DWriteCore、`System.Numerics.Tensors.dll` など 67 ファイル |
+
+- 判断の根拠: 7 形式（JPEG×2・PNG・WebP・AVIF・HEIF・PDF）を実際に表示した後の常駐プロセスが読み込んでいたアプリフォルダーの DLL は、
+  WinUI・Foundation（`Microsoft.WindowsAppRuntime.dll`、MRT Core）・InteractiveExperiences（Windowing・Input・Composition）と
+  Mavue 自身だけだった。Windows ML・DirectML・ONNX Runtime・WebView2・AI・Search・Widgets・DWriteCore は一度も読み込まれていない
+  （文字描画は OS の `DWrite.dll`）。コードも `Microsoft.UI.*` と `Microsoft.Windows.ApplicationModel.Resources` 以外の Windows App SDK API を使っていない。
+- 部品パッケージの単独参照は Microsoft Learn「Use the Windows App SDK in an existing project」で認められている
+  （「通常はメインのパッケージを推奨するが、特定の部品だけを参照するためにサブパッケージを個別に導入できる場合がある」）。
+- WinUI 2.3.9 は InteractiveExperiences を「2.1.8 以上」で要求するが 2.1.8 は公開されていない（NU1603）。メタパッケージと同じ 2.1.9 を明示した。
+- WebView2 は WinUI パッケージの依存なので出力に残る（読み込まれない）。除外すると WinUI の型解決に影響しうるため残した。
+- `Mavue.App`（エディタ、未リリース）はメタパッケージのまま。必要な部品が決まった時点で同様に整理する。
 
 状態の凡例: **Adopted**（採用・プロジェクトに追加済み）/ **Selected**（採用決定・未追加）/ **Candidate**（評価中）/ **Rejected**（不採用）/ **Legal review**（法務確認待ち）
 
@@ -28,7 +62,7 @@
 | 項目 | バージョン | 入手 | 状態 | 備考 |
 |---|---|---|---|---|
 | .NET SDK | 10.0.401（.NET 10 LTS, サポート終了 2028-11-14） | dotnet-install / winget | Adopted | `global.json` でピン留め（`rollForward: latestFeature`） |
-| Windows App SDK | 2.5.1（2026-09-16 安定版） | NuGet `Microsoft.WindowsAppSDK` | Adopted | MS ソフトウェアライセンス。ランタイム再配布可（フレームワークパッケージ / 自己完結） |
+| Windows App SDK | 2.5.1（2026-09-16 安定版） | NuGet: Quick View ホストは部品パッケージ（WinUI 2.3.9 / Foundation 2.3.12 / InteractiveExperiences 2.1.9）、`Mavue.App` は `Microsoft.WindowsAppSDK` | Adopted | MS ソフトウェアライセンス。出力に置かれるファイルは再配布可（フレームワーク依存 / 自己完結、`license.txt` §3。条件は §0） |
 | Windows SDK BuildTools | 10.0.28000.2705 | NuGet `Microsoft.Windows.SDK.BuildTools` | Adopted | makepri / MSIX ツール。VS 不要でビルド可能 |
 | Windows SDK 投影 (C#) | TFM `net10.0-windows10.0.26100.0` | .NET SDK が自動取得 | Adopted | |
 | Visual Studio 2026 / Build Tools（C++ ワークロード, MSVC v14.5x, Windows 11 SDK 10.0.26100 以降） | — | VS Installer | **未インストール（本機）** | C++ シェル拡張のビルドに必須。BUILD.md 参照 |
@@ -191,3 +225,8 @@ WebP Image Extension 1.2.31, Raw Image Extension 2.5.35, VP9 1.2.20, MPEG-2 1.2.
 3. TWAIN DSM のライセンス表記の一次情報確認。
 4. PDFium の XFA 有効ビルドの要否（XFA は V8 依存でサイズ・攻撃面が増大）。現状の方針は XFA/V8 なしのビルド（2026-10-02 確認の公式ビルドと同じ）。
 5. bblanchon.PDFium の NuGet 表記（Apache-2.0）とリポジトリ LICENSE（MIT）の食い違い — 実害は小さい（どちらも許容型）が、通知文はリポジトリ/tgz の表記に合わせる。
+6. `Microsoft.Windows.SDK.NET.dll`（Windows SDK の C# 投影）の再配布可否 — 確認済み・未確認・配布前の確認手順は §0 を参照。**バイナリ配布の前提条件**。
+7. バイナリ配布用の利用条件（Windows App SDK `license.txt` §3(b)(ii) の要件を満たす文面）の作成。
+8. **TODO（Release 公開前）: `Mavue.App` の依存整理**。現在は `Microsoft.WindowsAppSDK` メタパッケージを参照しており、出力に
+   Windows ML（ONNX Runtime・DirectML）、Windows AI、Search、Widgets、DWriteCore が入る。エディタで実際に使う部品
+   （例: OCR・背景除去で Windows AI / Windows ML を使うなら残す）を決め、§0.1 と同じ方法（読み込みモジュールの実測）で整理する。

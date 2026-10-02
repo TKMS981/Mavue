@@ -2,6 +2,10 @@
   <!-- Versions and license decisions are recorded in docs/DEPENDENCIES.md. -->
   <ItemGroup>
     <PackageVersion Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
+    <!-- Component packages at the versions Microsoft.WindowsAppSDK 2.5.1 pins (Quick View host references only these). -->
+    <PackageVersion Include="Microsoft.WindowsAppSDK.WinUI" Version="2.3.9" />
+    <PackageVersion Include="Microsoft.WindowsAppSDK.Foundation" Version="2.3.12" />
+    <PackageVersion Include="Microsoft.WindowsAppSDK.InteractiveExperiences" Version="2.1.9" />
     <PackageVersion Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2705" />
     <PackageVersion Include="xunit.v3" Version="4.0.1" />
   </ItemGroup>
