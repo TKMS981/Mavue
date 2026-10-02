@@ -93,39 +93,87 @@ internal static partial class Program
         return true;
     }
 
-    /// <summary><c>--register [--no-startup]</c>, <c>--unregister</c>, <c>--registration-status</c> (per user, no administrator rights).</summary>
+    /// <summary>
+    /// Per-user registration (no administrator rights):
+    /// <list type="bullet">
+    /// <item><c>--register [--no-startup]</c>: classic context-menu command (and sign-in start). Skipped for the menu
+    /// when the Windows 11 command is registered, so "Mavue Quick View" never appears twice.</item>
+    /// <item><c>--register-modern-menu &lt;package.msix&gt;</c>: Windows 11 context-menu command (signed identity package
+    /// with this folder as external location); removes the classic command.</item>
+    /// <item><c>--unregister-modern-menu</c>, <c>--unregister</c> (everything), <c>--registration-status</c>,
+    /// <c>--write-identity-manifest &lt;path&gt; [--publisher CN=...] [--package-version a.b.c.d]</c>.</item>
+    /// </list>
+    /// </summary>
     private static int RunRegistration(HostOptions options)
     {
         AttachConsole(-1); // print to the console that started us (WinExe has none of its own)
         var registration = new QuickViewShellRegistration(Registry.CurrentUser, verbName: options.VerbName ?? QuickViewShellRegistration.DefaultVerbName);
+        var modern = new ModernContextMenuRegistration();
         try
         {
+            string host = Environment.ProcessPath ?? throw new InvalidOperationException("Unknown process path.");
             switch (options.Registration)
             {
                 case RegistrationCommand.Register:
-                    string host = Environment.ProcessPath ?? throw new InvalidOperationException("Unknown process path.");
+                    if (options.VerbName is null && modern.IsRegistered)
+                    {
+                        if (!options.NoStartAtSignIn)
+                        {
+                            registration.RegisterStartAtSignIn(host);
+                        }
+
+                        Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"The Windows 11 context-menu command is registered; the classic command was not added. Start at sign-in: {!options.NoStartAtSignIn}."));
+                        break;
+                    }
+
                     registration.Register(host, startAtSignIn: !options.NoStartAtSignIn);
                     Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"Registered \"{QuickViewShellRegistration.MenuText}\" for {QuickViewShellRegistration.Extensions.Count} file types; start at sign-in: {!options.NoStartAtSignIn}."));
                     break;
+
+                case RegistrationCommand.RegisterModernMenu:
+                    string package = Path.GetFullPath(options.RegistrationPath!);
+                    Task.Run(() => modern.RegisterAsync(package, Path.GetDirectoryName(host)!)).GetAwaiter().GetResult();
+                    int classicRemoved = registration.UnregisterContextMenu();
+                    Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"Registered the Windows 11 context-menu command ({string.Join(", ", modern.RegisteredPackages())}); removed {classicRemoved} classic menu entries. Restart File Explorer if the command does not appear."));
+                    break;
+
+                case RegistrationCommand.UnregisterModernMenu:
+                    int packagesRemoved = Task.Run(modern.UnregisterAsync).GetAwaiter().GetResult();
+                    Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"Removed {packagesRemoved} identity package(s). Run --register to use the classic context menu."));
+                    break;
+
                 case RegistrationCommand.Unregister:
                     int removed = registration.Unregister();
-                    Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"Removed {removed} registry entries."));
+                    int removedPackages = options.VerbName is null ? Task.Run(modern.UnregisterAsync).GetAwaiter().GetResult() : 0;
+                    Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"Removed {removed} registry entries and {removedPackages} identity package(s)."));
                     break;
+
+                case RegistrationCommand.WriteIdentityManifest:
+                    Version version = options.PackageVersion ?? IdentityPackageManifest.VersionFor(DateTime.UtcNow);
+                    string manifest = IdentityPackageManifest.Create(options.Publisher, version, QuickViewShellRegistration.Extensions);
+                    string target = Path.GetFullPath(options.RegistrationPath!);
+                    Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                    File.WriteAllText(target, manifest, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                    Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"Wrote {target} (publisher {options.Publisher}, version {version.ToString(4)})."));
+                    break;
+
                 default:
                     RegistrationStatus status = registration.Status();
-                    Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"Context menu: {status.Extensions.Count} file types{(status.Extensions.Count > 0 ? " (" + string.Join(' ', status.Extensions) + ")" : string.Empty)}"));
+                    Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"Classic context menu: {status.Extensions.Count} file types{(status.Extensions.Count > 0 ? " (" + string.Join(' ', status.Extensions) + ")" : string.Empty)}"));
                     foreach (string command in status.Commands)
                     {
                         Console.WriteLine("  command: " + command);
                     }
 
+                    IReadOnlyList<string> packages = modern.RegisteredPackages();
+                    Console.WriteLine("Windows 11 context menu: " + (packages.Count > 0 ? string.Join(", ", packages) : "no"));
                     Console.WriteLine("Start at sign-in: " + (status.StartAtSignIn ?? "no"));
                     break;
             }
 
             return 0;
         }
-        catch (Exception ex) when (ex is ArgumentException or UnauthorizedAccessException or IOException or System.Security.SecurityException or InvalidOperationException)
+        catch (Exception ex) when (ex is ArgumentException or UnauthorizedAccessException or IOException or System.Security.SecurityException or InvalidOperationException or System.Runtime.InteropServices.COMException)
         {
             Console.Error.WriteLine("Registration failed: " + ex.Message);
             return 1;

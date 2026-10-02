@@ -1,0 +1,30 @@
+#include <winver.h>
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 0,1,0,0
+ PRODUCTVERSION 0,1,0,0
+ FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+ FILEFLAGS 0x0L
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_DLL
+ FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "Mavue"
+            VALUE "FileDescription", "Mavue Quick View File Explorer command"
+            VALUE "FileVersion", "0.1.0.0"
+            VALUE "InternalName", "Mavue.Shell.Native"
+            VALUE "LegalCopyright", "Copyright 2026 TKMS981. Licensed under the Apache License 2.0."
+            VALUE "OriginalFilename", "Mavue.Shell.Native.dll"
+            VALUE "ProductName", "Mavue"
+            VALUE "ProductVersion", "0.1.0.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

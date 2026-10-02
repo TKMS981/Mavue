@@ -22,6 +22,8 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Program.cs handles quickview forwarding and registration before WinUI starts. -->
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+    <!-- Native command DLL built by tools/build-native.ps1 (artifacts is git-ignored). -->
+    <MavueNativeCommandDll>$(MSBuildThisFileDirectory)..\..\artifacts\native\$(RuntimeIdentifier)\Mavue.Shell.Native.dll</MavueNativeCommandDll>
   </PropertyGroup>
 
   <ItemGroup>
@@ -34,6 +36,15 @@
     <!-- Pinned to the metapackage's version: WinUI 2.3.9 asks for >= 2.1.8, which is not published (NU1603). -->
     <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
+  </ItemGroup>
+
+  <!-- Windows 11 context-menu command (docs/WINDOWS-INTEGRATION.md §15): the identity package's external location
+       is this output folder, so the native command DLL (built separately with the MSVC Build Tools) and the
+       package logo are copied here. Without the DLL the host builds and works as before. -->
+  <ItemGroup>
+    <Content Include="Assets\QuickViewLogo.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(MavueNativeCommandDll)" Condition="Exists('$(MavueNativeCommandDll)')"
+          Link="Mavue.Shell.Native.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
 
   <ItemGroup>

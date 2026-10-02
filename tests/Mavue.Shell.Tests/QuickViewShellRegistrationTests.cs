@@ -123,6 +123,30 @@ public sealed class QuickViewShellRegistrationTests : IDisposable
         Assert.Empty(Registration("Mavue.QuickView.E2E").Status().Extensions);
     }
 
+    [Fact]
+    public void UnregisterContextMenu_KeepsSignInEntry()
+    {
+        // Used when the Windows 11 menu command replaces the classic one.
+        Registration().Register(_host, startAtSignIn: true);
+
+        int removed = Registration().UnregisterContextMenu();
+
+        Assert.Equal(QuickViewShellRegistration.Extensions.Count, removed);
+        RegistrationStatus status = Registration().Status();
+        Assert.Empty(status.Extensions);
+        Assert.Equal($"\"{_host}\"", status.StartAtSignIn);
+    }
+
+    [Fact]
+    public void RegisterStartAtSignIn_AddsOnlyTheRunValue()
+    {
+        Registration().RegisterStartAtSignIn(_host);
+
+        RegistrationStatus status = Registration().Status();
+        Assert.Empty(status.Extensions);
+        Assert.Equal($"\"{_host}\"", status.StartAtSignIn);
+    }
+
     [Theory]
     [InlineData("relative.exe")]
     [InlineData(@"C:\does\not\exist.exe")]

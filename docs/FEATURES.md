@@ -396,7 +396,7 @@
 |---|---|---|---|
 | F22.01 | Space-key Quick View | In Progress | F03.01 と同一（PoC 実装済み） |
 | F22.02 | Right-click “Open in Mavue” | Planned | Win11 上段はパッケージ ID 必須（MSIX） |
-| F22.03 | Right-click “Mavue Quick View” | In Progress | 従来メニュー（Win11 は「その他のオプションを確認」内）: HKCU の SystemFileAssociations に登録（`--register`）、名前付きパイプで常駐プロセスへ転送し、Explorer の選択（複数選択を含む）を表示・追従。E2E と実際の Explorer メニュー経路（合成入力。1 ファイル・3 ファイル・常駐なしからの起動・↑↓・選択追従・前面表示）で確認。上段メニューはパッケージ ID とネイティブ `IExplorerCommand` が必要で Blocked（Build Tools 導入の判断待ち） |
+| F22.03 | Right-click “Mavue Quick View” | In Progress | **Windows 11 上段メニュー**: `IExplorerCommand`（C++、`native/Mavue.Shell.Native`）+ 署名済み識別パッケージ（スパース）で実装。DLL は Explorer に `--quickview` を起動させるだけで、既存のパイプ経路に合流（前面表示・複数選択・選択追従・未起動からの起動を実機確認。WINDOWS-INTEGRATION §15）。Windows 11 標準の新メニュー（上段）と StartAllBack の従来型メニューの両方で実機確認。**従来メニュー**（Windows 10・パッケージ未登録時）: HKCU の SystemFileAssociations（`--register`）。新メニュー登録時は従来メニューを外す。本番配布には信頼される証明書での署名が必要 |
 | F22.04 | File associations | Planned |  |
 | F22.05 | PDF association | Planned |  |
 | F22.06 | Image associations | Planned |  |

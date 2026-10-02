@@ -72,6 +72,9 @@ internal enum RegistrationCommand
     Register,
     Unregister,
     Status,
+    RegisterModernMenu,
+    UnregisterModernMenu,
+    WriteIdentityManifest,
 }
 
 /// <summary>Command-line options. Unknown arguments are ignored.</summary>
@@ -125,6 +128,18 @@ internal sealed record HostOptions
 
     /// <summary>Context-menu key name (tests use their own so the user's registration is untouched).</summary>
     public string? VerbName { get; init; }
+
+    /// <summary>
+    /// <c>--register-modern-menu &lt;package.msix&gt;</c>: signed identity package to register;
+    /// <c>--write-identity-manifest &lt;path&gt;</c>: where to write its manifest.
+    /// </summary>
+    public string? RegistrationPath { get; init; }
+
+    /// <summary>Publisher of the identity package (the signing certificate's subject).</summary>
+    public string Publisher { get; init; } = "CN=Mavue Dev";
+
+    /// <summary>Version of the identity package (default: from the current date and hour).</summary>
+    public Version? PackageVersion { get; init; }
 
     public static HostOptions Parse(IReadOnlyList<string> args)
     {
@@ -203,6 +218,25 @@ internal sealed record HostOptions
                     break;
                 case "--no-startup":
                     options = options with { NoStartAtSignIn = true };
+                    break;
+                case "--register-modern-menu" when next is not null:
+                    options = options with { Registration = RegistrationCommand.RegisterModernMenu, RegistrationPath = next };
+                    i++;
+                    break;
+                case "--unregister-modern-menu":
+                    options = options with { Registration = RegistrationCommand.UnregisterModernMenu };
+                    break;
+                case "--write-identity-manifest" when next is not null:
+                    options = options with { Registration = RegistrationCommand.WriteIdentityManifest, RegistrationPath = next };
+                    i++;
+                    break;
+                case "--publisher" when next is not null:
+                    options = options with { Publisher = next };
+                    i++;
+                    break;
+                case "--package-version" when next is not null && Version.TryParse(next, out Version? packageVersion):
+                    options = options with { PackageVersion = packageVersion };
+                    i++;
                     break;
                 case "--verb" when next is not null:
                     options = options with { VerbName = next };

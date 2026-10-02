@@ -94,6 +94,39 @@ public sealed partial class QuickViewShellRegistration
     /// <returns>Number of keys and values removed.</returns>
     public int Unregister()
     {
+        int removed = UnregisterContextMenu(notify: false);
+        using (RegistryKey? run = _hive.OpenSubKey(RunPath, writable: true))
+        {
+            if (run?.GetValue(_verbName) is not null)
+            {
+                run.DeleteValue(_verbName, throwOnMissingValue: false);
+                removed++;
+            }
+        }
+
+        NotifyAssociationsChanged();
+        return removed;
+    }
+
+    /// <summary>
+    /// Adds only the sign-in entry (used when the Windows 11 menu command replaces the classic one).
+    /// </summary>
+    public void RegisterStartAtSignIn(string hostPath)
+    {
+        ValidateHostPath(hostPath);
+        using RegistryKey run = _hive.CreateSubKey(RunPath, writable: true);
+        run.SetValue(_verbName, $"\"{hostPath}\"", RegistryValueKind.String);
+    }
+
+    /// <summary>
+    /// Removes the classic context-menu command only (any extension), keeping the sign-in entry. Used when the
+    /// Windows 11 context-menu command is registered, so the menu does not show "Mavue Quick View" twice.
+    /// </summary>
+    /// <returns>Number of keys removed.</returns>
+    public int UnregisterContextMenu() => UnregisterContextMenu(notify: true);
+
+    private int UnregisterContextMenu(bool notify)
+    {
         int removed = 0;
         using (RegistryKey? associations = _hive.OpenSubKey(AssociationsPath, writable: false))
         {
@@ -112,16 +145,11 @@ public sealed partial class QuickViewShellRegistration
             }
         }
 
-        using (RegistryKey? run = _hive.OpenSubKey(RunPath, writable: true))
+        if (notify)
         {
-            if (run?.GetValue(_verbName) is not null)
-            {
-                run.DeleteValue(_verbName, throwOnMissingValue: false);
-                removed++;
-            }
+            NotifyAssociationsChanged();
         }
 
-        NotifyAssociationsChanged();
         return removed;
     }
 

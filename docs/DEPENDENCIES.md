@@ -65,8 +65,8 @@
 | Windows App SDK | 2.5.1（2026-09-16 安定版） | NuGet: Quick View ホストは部品パッケージ（WinUI 2.3.9 / Foundation 2.3.12 / InteractiveExperiences 2.1.9）、`Mavue.App` は `Microsoft.WindowsAppSDK` | Adopted | MS ソフトウェアライセンス。出力に置かれるファイルは再配布可（フレームワーク依存 / 自己完結、`license.txt` §3。条件は §0） |
 | Windows SDK BuildTools | 10.0.28000.2705 | NuGet `Microsoft.Windows.SDK.BuildTools` | Adopted | makepri / MSIX ツール。VS 不要でビルド可能 |
 | Windows SDK 投影 (C#) | TFM `net10.0-windows10.0.26100.0` | .NET SDK が自動取得 | Adopted | |
-| Visual Studio 2026 / Build Tools（C++ ワークロード, MSVC v14.5x, Windows 11 SDK 10.0.26100 以降） | — | VS Installer | **未インストール（本機）** | C++ シェル拡張のビルドに必須。BUILD.md 参照 |
-| CMake / Ninja | — | VS 同梱 | 未インストール | ネイティブ依存（PDFium 以外）のビルドに使用予定 |
+| Visual Studio 2026 / Build Tools（C++ ワークロード, MSVC v14.5x, Windows 11 SDK 10.0.26100 以降） | 18.10.2（MSVC 19.51） | winget（管理者） | **Adopted**（2026-10-02 導入） | `native/Mavue.Shell.Native` のビルドに使用。CRT は静的リンク（VC++ 再頒布パッケージを配布しない） |
+| CMake / Ninja | Build Tools 同梱 | VS 同梱 | **Adopted** | `tools/build-native.ps1` が使用 |
 | vcpkg（マニフェストモード） | — | VS 同梱 / git | Candidate | ネイティブ依存のバージョン固定。ベースラインをコミット |
 | C++/WinRT | 3.0.260818.1 | NuGet | Candidate | ネイティブ側で WinRT を使う場合 |
 

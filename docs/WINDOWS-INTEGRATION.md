@@ -221,3 +221,48 @@ C++ ツールチェーン（Build Tools）が必要になる（§14.4）。
 `Microsoft.VisualStudio.Workload.VCTools`（C++ によるデスクトップ開発）、`Microsoft.VisualStudio.Component.VC.Tools.x86.x64`、
 `Microsoft.VisualStudio.Component.VC.Tools.ARM64`、`Microsoft.VisualStudio.Component.Windows11SDK.26100`（以降の SDK でも可）。
 CMake（`Microsoft.VisualStudio.Component.VC.CMake.Project`）は vcpkg/CMake を使う場合のみ。
+
+## 15. Windows 11 上段コンテキストメニュー「Mavue Quick View」（2026-10-02 実装）
+
+### 15.1 構成（Microsoft Learn「Add a File Explorer context menu command to a packaged desktop app」の方式）
+
+| 部品 | 内容 |
+|---|---|
+| `native/Mavue.Shell.Native`（C++20、CMake、MSVC） | `IExplorerCommand` を実装した COM DLL。`GetTitle`「Mavue Quick View」、`GetState` は常に有効（対象拡張子はマニフェストで限定、ファイルは読まない）。`Invoke` は **Explorer に** `Mavue.QuickView.Host.exe --quickview "<path>"…` を起動させるだけ（デスクトップの Shell オートメーション `ShellWindows.FindWindowSW(SWC_DESKTOP)` → `IShellDispatch2::ShellExecute`）。DLL がホストを直接起動することはない |
+| 識別パッケージ（スパースパッケージ） | `AppxManifest.xml` だけを含む署名済み MSIX。外部の場所 = ホストの出力フォルダー。`com:SurrogateServer`（DLL は COM の代理プロセス dllhost で動く）と `desktop4:FileExplorerContextMenus`（従来メニューと同じ 18 拡張子の `desktop5:ItemType`）。マニフェストは `Mavue.Shell.IdentityPackageManifest` が生成（拡張子の一覧を従来メニューと共有） |
+| ホスト | 変更なし（exe に msix 要素を付けないので、ホストはパッケージ ID なしで今までどおり動く）。`--quickview` → 名前付きパイプ → 常駐ホストの既存経路をそのまま使う |
+
+Explorer に起動させる理由（実測、2026-10-02）: 代理プロセスから直接起動したプロセスは前面に出られず（TeraCopy のパッケージ版項目で確認）、
+パッケージのコンテナ内で動く（VS Code issue #334716）。Explorer が起動したプロセスは前面化の権利を持ち、コンテナ外で動く。
+
+### 15.2 登録（現在のユーザーのみ、管理者権限不要）
+
+```powershell
+powershell -File tools/build-native.ps1                 # DLL（MSVC Build Tools が必要）→ artifacts/native/win-x64
+dotnet build Mavue.slnx -c Release                      # ホストの出力フォルダーに DLL とロゴがコピーされる
+powershell -File tools/new-dev-certificate.ps1          # 開発用の自己署名証明書（CN=Mavue Dev、CurrentUser\TrustedPeople で信頼）
+powershell -File tools/package-identity.ps1             # マニフェスト生成 → MakeAppx → SignTool（NuGet の Windows SDK BuildTools）
+& $qv --register-modern-menu artifacts\identity\Mavue.QuickView.Identity.msix   # 登録し、従来メニューの項目を外す
+& $qv --registration-status
+& $qv --unregister-modern-menu                         # 外す（従来メニューに戻すなら続けて --register）
+```
+
+- 新メニューを登録したときは従来メニューの項目を外す（同じ項目が 2 つ並ぶのを避ける。StartAllBack 環境の従来型メニューにもパッケージの項目は出る）。
+  新メニューが登録されている間の `--register` は、従来メニューを追加せず、サインイン時の起動だけを登録する。
+- Windows 10、署名証明書がない環境、パッケージを登録しない環境では、従来どおり `--register` の従来メニューを使う。
+- 本番配布では、利用者の PC が信頼する証明書（Azure Trusted Signing や CA の証明書）での署名が必要。開発者モードは不要。
+
+### 15.3 実機確認（2026-10-02、Release、この PC は StartAllBack により右クリックで従来型メニューが開く）
+
+| 確認 | 結果 |
+|---|---|
+| ビルド | DLL は x64・ARM64 とも `/W4 /WX` で警告なし（MSVC 19.51）。静的 CRT（VC++ 再頒布パッケージ不要） |
+| 登録 | 自己署名の公開部分を CurrentUser\TrustedPeople に入れただけでは `0x800B0109`（ルート証明書が信頼されていない）。Microsoft Learn「Create a certificate for package signing」のとおり LocalMachine\TrustedPeople に入れて成功（スパースパッケージの手順書の「CurrentUser でよい」という記述はこの PC では通らなかった） |
+| 1 ファイル右クリック →「Mavue Quick View」（パッケージの項目） | 約 310 ms で前面表示（アクティブ）。↓・Explorer の選択変更に追従、Esc で Explorer に戻る |
+| 3 ファイル選択 | 約 312 ms、「1 / 3」、→ で 2 番目へ。`DllHost.exe /Processid:{3C34DBCC-…}`（親 svchost）で DLL が動き、`--quickview` の 3 パスを持つプロセスが 1 つだけ **explorer.exe を親として**起動された |
+| 常駐ホストなし | 約 634 ms で前面表示。そのプロセスが常駐ホストになり、親は explorer.exe、`GetPackageFullName` は APPMODEL_ERROR_NO_PACKAGE（パッケージ ID なし＝コンテナ外） |
+| Space | 87 ms で表示（パネル、Explorer が前面のまま）、従来どおり |
+| 切り替え | 新メニュー登録中の `--register` は従来メニューを追加しない／`--unregister-modern-menu` → `--register` で従来メニューに戻る／`--register-modern-menu` で従来メニューの 18 項目を外す。メニューの「Mavue Quick View」は 1 つだけ |
+| Windows 11 標準の新しいメニュー | StartAllBack を一時的に無効化（`HKCU\Software\StartIsBack` の `Disabled=1`、Explorer 再起動。確認後に 0 へ戻した）して確認。上段にアイコン付きで「Mavue Quick View」が 1 つ表示（Copilot・Malwarebytes 等のアプリ項目の並び）。1 ファイル 429 ms、3 ファイル 417 ms（「1 / 3」、`--quickview` は 3 パスで 1 プロセス、親 explorer.exe）、常駐ホストなし 614 ms、Space 66 ms。いずれも前面表示・選択追従・Esc で Explorer に戻る |
+
+- 自動操作での注意: 常駐ホストの停止直後や Explorer の再起動直後に、合成した右クリックでメニューが開かない・選択の設定に失敗することがあった（計 3 回、再実行で成功）。製品側の動作ではなく、操作スクリプト側のタイミング。

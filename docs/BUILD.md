@@ -13,13 +13,13 @@
 | .NET SDK | **10.0.401**（`global.json` で固定、`latestFeature` へロールフォワード） | **ユーザーローカルに導入済み** (`%LOCALAPPDATA%\Microsoft\dotnet`)。マシン全体 (`C:\Program Files\dotnet`) には SDK なし・ランタイム 6/8/9 のみ |
 | Windows App SDK | 2.5.1（NuGet で自動取得。アプリは自己完結でランタイム同梱） | ランタイム 1.1〜1.8 / 2.x がマシンにも導入済み（必須ではない） |
 | Windows SDK | C#: NuGet (`Microsoft.Windows.SDK.BuildTools` 10.0.28000.2705) + 投影 TFM 10.0.26100.0 で **VS 不要** | Windows Kits 未導入 |
-| Visual Studio 2026 / Build Tools | **C++ コンポーネント（シェル拡張・ネイティブ描画コア・TWAIN ブリッジ）に必須**: 「C++ によるデスクトップ開発」、MSVC v14.5x x64/ARM64、Windows 11 SDK (10.0.26100 以降)、C++ CMake ツール | **未導入**（`vswhere` なし） |
+| Visual Studio 2026 / Build Tools | **C++ コンポーネント（シェル拡張・ネイティブ描画コア・TWAIN ブリッジ）に必須**: 「C++ によるデスクトップ開発」、MSVC v14.5x x64/ARM64、Windows 11 SDK (10.0.26100 以降)、C++ CMake ツール | **導入済み**（2026-10-02、Build Tools 2026 18.10.2、MSVC 19.51、`C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools`） |
 | Git | 2.4x 以降 | 2.55.0.windows.3（リポジトリは未初期化） |
 | PowerShell | 5.1 以降 | 5.1 |
 
 > C# 部分（Quick View PoC を含む現在のソリューションすべて）は .NET SDK だけでビルド・テスト・起動できることを確認済み。
-> **現時点で Build Tools は不要**。必要になるのはネイティブ COM DLL（右クリックメニュー上段・サムネイル・プレビューハンドラー等）に着手する時点
-> （必要コンポーネントは `docs/WINDOWS-INTEGRATION.md` §14.4）。インストールは管理者権限が必要なためユーザーが実施する。
+> Build Tools が必要なのはネイティブ COM DLL（Windows 11 右クリックメニュー上段 `native/Mavue.Shell.Native`。今後サムネイル・プレビューハンドラー等）だけ。
+> ネイティブ DLL は `Mavue.slnx` に含めず `tools/build-native.ps1` でビルドする（DLL がなくてもソリューションはビルド・テストでき、ネイティブのテストはスキップされる）。
 
 ## 2. セットアップ
 
@@ -132,6 +132,21 @@ dotnet publish src/Mavue.QuickView.Host -c Release -r win-x64 -p:PublishReadyToR
 
 NativeAOT（`-p:PublishAot=true`）は MSVC リンカー（§2.2 の Build Tools）が必要で、現状の開発機では「Platform linker not found」で失敗する（未導入のため）。
 起動中は Explorer で Space を押すと Quick View が動作する（他の Quick Look 系ツールと同時に動かすと二重表示の可能性あり）。
+
+### 5.2 Windows 11 右クリックメニュー上段（識別パッケージ）
+
+手順と設計は `docs/WINDOWS-INTEGRATION.md` §15。要点:
+
+```powershell
+powershell -File tools/build-native.ps1 -Architecture x64,arm64   # artifacts/native/win-<arch>/Mavue.Shell.Native.dll
+dotnet build Mavue.slnx -c Release                                 # ホスト出力に DLL とロゴをコピー
+powershell -File tools/new-dev-certificate.ps1                     # 開発用の自己署名証明書（初回のみ）
+powershell -File tools/package-identity.ps1                        # artifacts/identity/Mavue.QuickView.Identity.msix
+& $qv --register-modern-menu artifacts\identity\Mavue.QuickView.Identity.msix
+```
+
+開発用証明書は、自己署名の公開部分を **LocalMachine\TrustedPeople**（管理者権限）に入れる必要があった（CurrentUser\TrustedPeople だけでは
+`0x800B0109` で登録できない。実測、2026-10-02。§15.3）。ホストの再ビルドで出力フォルダーを消しても、パッケージの登録はそのまま残る（DLL がないと項目が動かない）。
 
 ## 6. パッケージング・インストール（計画）
 

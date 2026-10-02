@@ -28,6 +28,7 @@ the .NET runtime is not included) contains these third-party files:
 | Microsoft.Web.WebView2 | 1.0.3719.77 | BSD-3-Clause-style license, © Microsoft Corporation (`LICENSE.txt`); notices in `NOTICE.txt` | A dependency of the WinUI package. In the output (`Microsoft.Web.WebView2.Core.dll`, `WebView2Loader.dll`) but not loaded by Quick View (measured) |
 | Windows SDK C# projection (`Microsoft.Windows.SDK.NET.dll`, from Microsoft.Windows.SDK.NET.Ref) | 10.0.26100.57 | Microsoft Software License Terms — Windows SDK | Added by the .NET SDK for the `net10.0-windows` target |
 | C#/WinRT runtime (`WinRT.Runtime.dll`) | (with the projection above) | MIT | |
+| Microsoft C/C++ runtime (statically linked into `Mavue.Shell.Native.dll`, the Windows 11 context-menu command) | MSVC 19.51 (Visual Studio Build Tools 2026) | Microsoft Visual Studio license terms (runtime code linked into the program) | No separate VC++ redistributable is shipped |
 
 ## 3. Other projects in the repository
 

@@ -1,0 +1,4 @@
+LIBRARY Mavue.Shell.Native
+EXPORTS
+    DllGetClassObject PRIVATE
+    DllCanUnloadNow PRIVATE

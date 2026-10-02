@@ -69,6 +69,15 @@ powershell -ExecutionPolicy Bypass -File tools/smoke-test.ps1 -Configuration Deb
 | `Mavue.Shell.Tests`（新規） | 右クリック・サインイン登録（`QuickViewShellRegistration`）: 専用の HKCU サブキーで実行。全拡張子への登録、他アプリの項目を消さない、空キーの片付け、再登録、別名の動詞、不正なパス・名前の拒否 | 12 |
 | **全体** | Core 62 + Image 28 + QuickView 131 + Repository 6 + Shell 12 | **239（238 成功、1 スキップ: 開発者モードが必要）** |
 
+Windows 11 上段メニュー対応（2026-10-02）の追加:
+
+| プロジェクト | 追加内容 | 件数（計） |
+|---|---|---|
+| `Mavue.Shell.Tests` | 識別パッケージのマニフェスト（識別・スパース設定・COM サーバーとメニューの CLSID 一致・全拡張子・C++ ヘッダーの CLSID との一致・不正な発行者/拡張子/バージョンの拒否）、従来メニューだけを外す／サインイン登録だけを追加、ネイティブ DLL を直接読み込んで COM の vtable 経由で呼ぶテスト（表示名・アイコン・状態・フラグ・正規名、項目なしの Invoke は何も起動しない、未知のクラスの拒否、アンロード可能）。ネイティブのテストは DLL がない環境ではスキップ | 28 |
+| **全体** | Core 62 + Image 28 + QuickView 131 + Repository 6 + Shell 28 | **255（254 成功、1 スキップ: 開発者モードが必要）** |
+
+新メニューの実機確認は E2E ハーネスではなく、実際の Explorer メニューを合成入力で操作するスクリプトで行った（WINDOWS-INTEGRATION §15.3）。
+
 E2E シナリオの追加: `cli-quickview`（`--quickview` の転送・アクティブ表示・選択追従）、`context-menu-verb`（テスト用の名前で動詞を登録し、
 Explorer に 1 ファイル・3 ファイルで実行させる。終了後に登録を削除）。
 

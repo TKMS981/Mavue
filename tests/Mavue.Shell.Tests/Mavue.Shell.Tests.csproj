@@ -2,6 +2,8 @@
   <PropertyGroup>
     <TargetFramework>$(MavueWindowsTfm)</TargetFramework>
     <TargetPlatformMinVersion>$(MavueMinWindows)</TargetPlatformMinVersion>
+    <!-- NativeCommandTests call the native command DLL through COM vtables. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Mavue.Shell\Mavue.Shell.csproj" />
