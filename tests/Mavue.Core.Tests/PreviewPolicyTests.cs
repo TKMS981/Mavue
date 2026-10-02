@@ -1,8 +1,8 @@
-using Mavue.QuickView.Preview;
+using Mavue.Core.Viewing;
 
-namespace Mavue.QuickView.Tests;
+namespace Mavue.Core.Tests;
 
-[Trait("Category", "QuickView")]
+[Trait("Category", "Viewer")]
 public class PreviewSizingTests
 {
     [Theory]
@@ -29,7 +29,7 @@ public class PreviewSizingTests
     }
 }
 
-[Trait("Category", "QuickView")]
+[Trait("Category", "Viewer")]
 public class PreviewSafetyPolicyTests
 {
     [Theory]

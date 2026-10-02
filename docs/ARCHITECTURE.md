@@ -104,6 +104,7 @@ Mavue/
 │  ├─ Mavue.Scan/        net10.0-windows   IScannerService 抽象（WIA / WinRT / TWAIN）
 │  ├─ Mavue.Shell/       net10.0-windows   マネージド側シェル連携（関連付け登録補助、Explorer 選択取得）
 │  ├─ Mavue.QuickView/   net10.0-windows   Quick View のロジック（トリガー判定、ナビゲーション、プレビュー選択）
+│  ├─ Mavue.Viewer/      WinUI 3 ライブラリ 共通ビューア（表示面・画像デコード・PDF 描画・GIF・動画/音声。App と Quick View で共有）
 │  ├─ Mavue.App/         WinUI 3           エディタ UI
 │  └─ Mavue.QuickView.Host/ WinUI 3        常駐 Quick View プロセス（Mavue.QuickView.Host.exe。ライブラリ名との衝突を避けるため名称変更）
 ├─ native/
@@ -119,13 +120,27 @@ Mavue/
    └─ assets/                テスト用ファイル（ライセンス明記・生成スクリプト）
 ```
 
+### 3.2 共通ビューア（2026-10-02）
+
+- `Mavue.Core.Viewing`（BCL のみ）: 表示サイズ（`DisplaySizing`・`PreviewSizing`）、PDF の現在ページ（`PdfPageCursor`）、動画/音声のシーク・音量（`MediaControlMath`）、
+  ファイルの安全ポリシーと事前情報（`PreviewSafetyPolicy`・`FileFacts`）、開ける形式（`ViewerFormats`）、前後移動の一覧（`ViewerFileList`、Explorer に近い名前順）。
+- `Mavue.Viewer`（WinUI 3 ライブラリ。XAML ページを持たずコードで UI を組む＝ライブラリの PRI 統合に依存しない）:
+  - `Controls.ViewerSurface`: 画像（プレースホルダー付き）・動画/音声（`MediaPlayerElement`）・メッセージの表示面。描くだけで、何をどの大きさでデコードするかは呼び出し側が決める。
+  - `Rendering`: `ImageDecoding`（WIC 直接 / WinRT）、`PdfRendering`（Windows.Data.Pdf）、`DecodedImage`。
+  - `Playback`: `GifPlayer`、`MediaSession`（1 ファイル 1 セッション、UI スレッドにイベント、破棄後のイベントは捨てる）。
+  - `DocumentViewer`: App 用のまとめ役。1 度に 1 ファイル。開く・切替・閉じる・破棄で、デコードの取り消し、GIF/動画の停止、ビットマップ・プレーヤー・ファイルの解放を行う。
+    表示面の大きさとスケールモードから計画し、リサイズ・モニター変更で作り直す。ズーム・サムネイル・ページ先読みはここに足す。
+- Quick View は表示面・デコード・再生を共有し、段階表示（シェルのサムネイル → 本画像）・先読みキャッシュ・計測などの Quick View 固有の制御は `QuickViewController` に残す。
+
 ### 3.1 依存方向（循環禁止）
 
 ```
-Mavue.App ─┬─► Mavue.Pdf / Image / Ocr / Markup / Print / Scan / Metadata / Shell / QuickView
+Mavue.App ─┬─► Mavue.Viewer ─► Mavue.Image / Core
+           ├─► Mavue.Pdf / Image / Ocr / Markup / Print / Scan / Metadata / Shell / QuickView（予定）
            └─► Mavue.Core
 Mavue.QuickView.Host ─┬─► Mavue.QuickView ─► Mavue.Codecs / Pdf(読み取りのみ) / Core
-                      └─► Mavue.Image（WIC 直接デコード。App と同じ実装を共有）
+                      ├─► Mavue.Viewer（App と同じ表示面・デコード・再生）
+                      └─► Mavue.Image（WIC 直接デコード）
 各ドメインモジュール ─► Mavue.Core（のみ）
 Mavue.Core ─► BCL のみ（Windows 非依存。将来のテスト容易性のため）
 ```
@@ -242,7 +257,7 @@ NativeAOT / ReadyToRun / Release 構成でどこまで縮むかは未計測（�
 | 表示サイズ | **実装済み**: 既定は「拡大しない」（画像領域の物理ピクセルに合わせてデコードし 1:1 表示、小さい画像は元のサイズ）。設定 `imageScale=ActualSize` で 1 画素 = 画面の 1 画素 + スクロール（5,000 万画素まで）。設定は `%LOCALAPPDATA%\Mavue\QuickView\settings.json`（`DisplaySizing` / `QuickViewSettings`）で、Quick View を開くたびに更新時刻を見て読み直す（ホストの再起動不要）。ウィンドウ内の切替ボタンはユーザー要望で廃止し、将来の設定画面（F23.03）で切り替える。画像領域はウィンドウの実際のクライアントサイズと `GetDpiForWindow` から計算し、表示中のリサイズ・別モニターへの移動で変わったら作り直す（QUICKVIEW-POC §10.6, §10.8） |
 | 先読み | **実装済み**: 表示中の前後の項目をバックグラウンドでデコードし LRU キャッシュ（192 MB）に保持（QUICKVIEW-POC §10.2） |
 | タブ切替の追従 | **実装済み**: 持ち主の Explorer に限定した `EVENT_OBJECT_FOCUS` でタブの切替を検知（QUICKVIEW-POC §10.1） |
-| 全画面 / ズーム / 回転 | 共通ビューアコントロール（App と共有）。Quick View のズーム・パンは未実装 |
+| 全画面 / ズーム / 回転 | 共通ビューア（`Mavue.Viewer.Controls.ViewerSurface`。App と共有、§3.2）に追加する。ズーム・パン・回転は未実装 |
 | インデックスシート | 複数選択時のグリッド表示（サムネイルは Windows サムネイルキャッシュ + Mavue キャッシュ） |
 | 他アプリで開く | `SHAssocEnumHandlers` / `IAssocHandler::Invoke`（「プログラムから開く」相当） |
 | コピー / ドラッグ | `IDataObject`（CF_HDROP + 画像形式）|

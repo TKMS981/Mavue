@@ -69,6 +69,46 @@ powershell -ExecutionPolicy Bypass -File tools/smoke-test.ps1 -Configuration Deb
 | `Mavue.Shell.Tests`（新規） | 右クリック・サインイン登録（`QuickViewShellRegistration`）: 専用の HKCU サブキーで実行。全拡張子への登録、他アプリの項目を消さない、空キーの片付け、再登録、別名の動詞、不正なパス・名前の拒否 | 12 |
 | **全体** | Core 62 + Image 28 + QuickView 131 + Repository 6 + Shell 12 | **239（238 成功、1 スキップ: 開発者モードが必要）** |
 
+Quick View の GIF アニメーション（2026-10-02）の追加: `Mavue.Image.Tests` に `GifComposer`（遅延の正規化・ループ回数の解析・オフセット/透過/はみ出し・
+破棄方法 2/3・リセット）と `GifAnimationReader`（Windows のエンコーダーで作った GIF のフレーム数・遅延・ループ・各フレームの色、ループなし、GIF 以外の拒否）の 14 件（計 42）。
+全体 276（275 成功、1 スキップ）。E2E `gif-animation`: 3 フレーム 100 ms の無限ループ GIF で、画面中央の色が変わること、ループすること、フレーム間隔、
+↓ で静止画に切り替えると停止し以後フレームが出ないこと、↑ で戻ると新しい再生が 1 つだけ（約 10 フレーム/秒）であること、Esc で停止すること。
+
+Quick View の PDF ページ送り（2026-10-02）の追加: `Mavue.QuickView.Tests` に `PdfPageCursor`（未確定・1 ページ・先頭/末尾で止まる・0 は移動でない・ページ数の変化・リセット）と
+ページ別のキャッシュキーの 7 件（計 138）。全体 262（261 成功、1 スキップ）。E2E `pdf-pages`: 3 ページの PDF で PageDown×3（末尾で止まる）・PageUp・ホイール（拡大しないモードのみ）、
+Explorer の選択が変わらないこと、↓↑ でファイル移動して戻ると 1 ページ目から表示されること。
+
+Quick View の動画・音声（2026-10-02）の追加: `Mavue.Core.Tests` に形式判定（MP4/MOV/M4A のブランド、汎用ブランドでの拡張子による判定、MKV/WebM の DocType、
+WAV/AVI、ASF、FLAC、Ogg（Opus/Theora）、MPEG-PS/TS、MP3（ID3・フレーム同期）、AAC、画像と誤判定しないこと、拡張子フォールバック、種類の判定）、
+`Mavue.QuickView.Tests` に `MediaControlMath`（シークの範囲、音量の範囲と丸め、時間表示）。全体 319（318 成功、1 スキップ）。
+E2E（生成したファイルのみ使用。30 秒の MP4 は MediaComposition で赤→緑→青の各 10 秒＋正弦波、MP3/M4A/WMA/FLAC/WMV は Windows のエンコーダー）:
+`media-video`（画面上の色・ホストの音声セッションのピーク値・Enter で一時停止〔停止中は無音〕・Ctrl+→ で +10 秒〔緑になる〕・Ctrl+↓/↑ の音量・
+Ctrl+矢印でファイルが移動しないこと・Quick View 上の →/← と Explorer の ↓/↑ でのファイル移動と停止・Quick View 上の Esc で閉じて解放）、
+`media-switch`（動画→画像→MP3→PDF→壊れた MP4→WAV→逆順で戻る。毎回前の再生が止まること、音声は音が出ること、壊れたファイルはメッセージで Quick View は継続、
+同時に動く再生は 1 つ、Space で閉じて解放）、`media-formats`（M4A・WMA・FLAC・WMV の再生）。
+ハーネスに `--only <名前の前方一致,...>`（指定したシナリオだけ実行）を追加。
+
+本体の閲覧基盤と共通ビューア（2026-10-02）の追加:
+
+- 表示サイズ・PDF のページ・動画/音声の計算・安全ポリシーを `Mavue.Core.Viewing` に移したため、対応するテスト（`MediaControlMathTests`・`PdfPageCursorTests`・`PreviewPolicyTests`）は
+  `Mavue.Core.Tests` に移動（内容は同じ。ページ別キャッシュキーのテストは `Mavue.QuickView.Tests` の `PreviewCacheTests` に残す）。
+- `Mavue.Core.Tests` に `ViewerFileListTests`（開いた順・重複除去・両端で止まる・フォルダー内の絞り込みと名前順・未知の拡張子のファイルも残す・自然順の比較・開ける形式・サイズ表記）。
+- 全体 339（338 成功、1 スキップ）。
+- 実機 E2E（本体）: `dotnet run --project tools/Mavue.QuickView.Harness -c Release --no-build -- --configuration Release --app`。
+  `Mavue.exe --trace-file <log> <file>` を起動し、ログ・画面の画素・アプリの音声セッションのピーク値で確認する。
+  - `app-formats`: JPEG・PNG・WebP・AVIF・HEIF・GIF（アニメーション）・PDF・MP4・WMV・MP3・WAV・M4A・WMA・FLAC と、壊れた MP4・JPEG（メッセージ）。閉じると再生停止・プロセス終了。
+  - `app-folder-navigation`: 1 ファイルを開いてフォルダー内を →/← で 10 回移動（動画→画像→MP3→PDF→壊れた MP4→WAV→戻る）。毎回前の再生が止まり、同時に存在するプレーヤーは 1 つ、音は現在のファイルからだけ。
+  - `app-pdf-pages`: PageDown×3（末尾で止まる）・PageUp・ホイール、隣の画像へ移って戻ると 1 ページ目。
+  - `app-media-keys`: Space で一時停止（無音）、Ctrl+→ で +10 秒（画面が緑）、Ctrl+↓/↑ で音量、Space で再開、再生中に閉じても解放。
+  - `app-multiple-files`: 引数の 3 ファイルだけを順に移動（フォルダーは使わない）。
+  - `app-open-dialog`: Ctrl+O で Windows のファイル選択（アンパッケージアプリでは PickerHost.exe が表示）、Esc で取り消し、アプリは応答を続ける。
+- ドラッグ＆ドロップは E2E 化していない。Explorer の項目を UI Automation で探して合成マウス入力でドラッグし、開くことを実機で確認した
+  （`SetCursorPos` だけではドラッグが始まらず、`mouse_event` の移動が必要）。
+- ハーネスの追加: `--only <シナリオ名の前方一致,...>`、`--app`、`--app-path <Mavue.exe>`（「他のアプリ」として起動する Mavue.exe を差し替える）、
+  `media-esc-repeat`（Quick View をアクティブにした後の Esc を 20 回）。
+- ハーネスの修正: 計測ログの読み取り（`TimingLog.Poll`）が、読み取り中にホストが追記した行を読み飛ばすことがあった（読んだ後にファイル長へ位置を合わせていた）。
+  読んだバイト数だけ進めるよう修正（`media-video` の失敗の 1 つはこれ。QUICKVIEW-POC §15）。
+
 Windows 11 上段メニュー対応（2026-10-02）の追加:
 
 | プロジェクト | 追加内容 | 件数（計） |

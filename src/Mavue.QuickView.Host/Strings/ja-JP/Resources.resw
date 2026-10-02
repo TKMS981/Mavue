@@ -24,6 +24,15 @@
   <data name="QuickView_InfoImage" xml:space="preserve">
     <value>{0} · {1} × {2} ピクセル · {3}</value>
   </data>
+  <data name="QuickView_InfoPdfPage" xml:space="preserve">
+    <value>PDF · {0} / {1} ページ · {2}</value>
+  </data>
+  <data name="QuickView_PreviousPage" xml:space="preserve">
+    <value>前のページ（Page Up）</value>
+  </data>
+  <data name="QuickView_NextPage" xml:space="preserve">
+    <value>次のページ（Page Down）</value>
+  </data>
   <data name="QuickView_InfoPdf" xml:space="preserve">
     <value>PDF · {0} ページ · {1}</value>
   </data>
@@ -50,5 +59,23 @@
   </data>
   <data name="QuickView_ActualSizeTooLarge" xml:space="preserve">
     <value>5,000 万画素を超えるためウィンドウに合わせて表示</value>
+  </data>
+  <data name="QuickView_InfoVideo" xml:space="preserve">
+    <value>動画 · {0} · {1} × {2} · {3} · {4}</value>
+  </data>
+  <data name="QuickView_InfoAudio" xml:space="preserve">
+    <value>音声 · {0} · {1} · {2}</value>
+  </data>
+  <data name="QuickView_MediaPlaying" xml:space="preserve">
+    <value>再生中</value>
+  </data>
+  <data name="QuickView_MediaPaused" xml:space="preserve">
+    <value>一時停止</value>
+  </data>
+  <data name="QuickView_MediaEnded" xml:space="preserve">
+    <value>再生終了</value>
+  </data>
+  <data name="QuickView_Error_Media" xml:space="preserve">
+    <value>このファイルは再生できません。破損しているか、この形式のデコーダーが Windows にありません。</value>
   </data>
 </root>

@@ -42,7 +42,34 @@ public static class FileFormatDetector
         [".jpx"] = FileFormat.Jpeg2000,
         [".jxl"] = FileFormat.JpegXl,
         [".svg"] = FileFormat.Svg,
+        [".mp4"] = FileFormat.Mp4,
+        [".m4v"] = FileFormat.Mp4,
+        [".mov"] = FileFormat.QuickTime,
+        [".mkv"] = FileFormat.Matroska,
+        [".webm"] = FileFormat.WebM,
+        [".avi"] = FileFormat.Avi,
+        [".wmv"] = FileFormat.WindowsMediaVideo,
+        [".asf"] = FileFormat.WindowsMediaVideo,
+        [".ts"] = FileFormat.MpegTransportStream,
+        [".m2ts"] = FileFormat.MpegTransportStream,
+        [".mts"] = FileFormat.MpegTransportStream,
+        [".mpg"] = FileFormat.MpegProgramStream,
+        [".mpeg"] = FileFormat.MpegProgramStream,
+        [".ogv"] = FileFormat.OggVideo,
+        [".mp3"] = FileFormat.Mp3,
+        [".aac"] = FileFormat.Aac,
+        [".m4a"] = FileFormat.M4a,
+        [".m4b"] = FileFormat.M4a,
+        [".wav"] = FileFormat.Wav,
+        [".flac"] = FileFormat.Flac,
+        [".ogg"] = FileFormat.OggAudio,
+        [".oga"] = FileFormat.OggAudio,
+        [".opus"] = FileFormat.OggAudio,
+        [".wma"] = FileFormat.WindowsMediaAudio,
     };
+
+    // ASF (WMV/WMA) header object GUID.
+    private static readonly byte[] AsfHeader = [0x30, 0x26, 0xB2, 0x75, 0x8E, 0x66, 0xCF, 0x11, 0xA6, 0xD9, 0x00, 0xAA, 0x00, 0x62, 0xCE, 0x6C];
 
     /// <summary>Detects the format of the file at <paramref name="path"/>.</summary>
     public static FileFormat Detect(string path)
@@ -67,7 +94,7 @@ public static class FileFormatDetector
     /// <summary>Detects the format from the leading bytes of a file.</summary>
     public static FileFormat Detect(ReadOnlySpan<byte> header, string? extensionHint = null)
     {
-        FileFormat byContent = DetectByContent(header);
+        FileFormat byContent = DetectByContent(header, extensionHint);
         return byContent != FileFormat.Unknown ? byContent : FromExtension(extensionHint);
     }
 
@@ -87,7 +114,7 @@ public static class FileFormatDetector
         return ExtensionMap.TryGetValue(normalized, out FileFormat format) ? format : FileFormat.Unknown;
     }
 
-    private static FileFormat DetectByContent(ReadOnlySpan<byte> h)
+    private static FileFormat DetectByContent(ReadOnlySpan<byte> h, string? extensionHint)
     {
         if (h.StartsWith("%PDF-"u8))
         {
@@ -119,6 +146,16 @@ public static class FileFormatDetector
             return FileFormat.WebP;
         }
 
+        if (h.Length >= 12 && h.StartsWith("RIFF"u8) && h.Slice(8, 4).SequenceEqual("WAVE"u8))
+        {
+            return FileFormat.Wav;
+        }
+
+        if (h.Length >= 12 && h.StartsWith("RIFF"u8) && h.Slice(8, 4).SequenceEqual("AVI "u8))
+        {
+            return FileFormat.Avi;
+        }
+
         if (h.Length >= 14 && h.StartsWith("BM"u8))
         {
             return FileFormat.Bmp;
@@ -144,10 +181,16 @@ public static class FileFormatDetector
             return FileFormat.JpegXl;
         }
 
-        FileFormat isoBmff = DetectIsoBmff(h);
+        FileFormat isoBmff = DetectIsoBmff(h, extensionHint);
         if (isoBmff != FileFormat.Unknown)
         {
             return isoBmff;
+        }
+
+        FileFormat media = DetectMedia(h, FromExtension(extensionHint));
+        if (media != FileFormat.Unknown)
+        {
+            return media;
         }
 
         if (LooksLikeSvg(h))
@@ -160,7 +203,7 @@ public static class FileFormatDetector
         return h.IndexOf("%PDF-"u8) > 0 ? FileFormat.Pdf : FileFormat.Unknown;
     }
 
-    private static FileFormat DetectIsoBmff(ReadOnlySpan<byte> h)
+    private static FileFormat DetectIsoBmff(ReadOnlySpan<byte> h, string? extensionHint)
     {
         if (h.Length < 16 || !h.Slice(4, 4).SequenceEqual("ftyp"u8))
         {
@@ -183,7 +226,71 @@ public static class FileFormatDetector
             heif |= Array.IndexOf(HeifBrands, brand) >= 0;
         }
 
-        return heif ? FileFormat.Heif : FileFormat.Unknown;
+        if (heif)
+        {
+            return FileFormat.Heif;
+        }
+
+        // Not an image: an MP4-family movie or audio file. Generic brands (isom, mp41, mp42…) are also written for
+        // audio-only files (e.g. by Media Foundation), so the extension decides between .m4a/.mov and .mp4 then.
+        string major = Encoding.ASCII.GetString(h.Slice(8, 4));
+        return major switch
+        {
+            "qt  " => FileFormat.QuickTime,
+            "M4A " or "M4B " or "M4P " => FileFormat.M4a,
+            _ => FromExtension(extensionHint) is (FileFormat.M4a or FileFormat.QuickTime) and var byExtension ? byExtension : FileFormat.Mp4,
+        };
+    }
+
+    /// <summary>
+    /// Audio/video containers. Where the header alone cannot tell audio from video (ASF, Ogg), the extension decides.
+    /// </summary>
+    private static FileFormat DetectMedia(ReadOnlySpan<byte> h, FileFormat byExtension)
+    {
+        if (h.StartsWith((ReadOnlySpan<byte>)[0x1A, 0x45, 0xDF, 0xA3]))
+        {
+            // EBML: the DocType says "webm" or "matroska".
+            return h[..Math.Min(h.Length, 64)].IndexOf("webm"u8) >= 0 ? FileFormat.WebM : FileFormat.Matroska;
+        }
+
+        if (h.StartsWith(AsfHeader))
+        {
+            return byExtension == FileFormat.WindowsMediaAudio ? FileFormat.WindowsMediaAudio : FileFormat.WindowsMediaVideo;
+        }
+
+        if (h.StartsWith("fLaC"u8))
+        {
+            return FileFormat.Flac;
+        }
+
+        if (h.StartsWith("OggS"u8))
+        {
+            return h.IndexOf("theora"u8) >= 0 || byExtension == FileFormat.OggVideo ? FileFormat.OggVideo : FileFormat.OggAudio;
+        }
+
+        if (h.StartsWith((ReadOnlySpan<byte>)[0x00, 0x00, 0x01, 0xBA]))
+        {
+            return FileFormat.MpegProgramStream;
+        }
+
+        // MPEG transport stream: a sync byte every 188 bytes (192 for M2TS with a 4-byte time code).
+        if ((h.Length > 188 && h[0] == 0x47 && h[188] == 0x47) || (h.Length > 196 && h[4] == 0x47 && h[196] == 0x47))
+        {
+            return FileFormat.MpegTransportStream;
+        }
+
+        if (h.StartsWith("ID3"u8))
+        {
+            return byExtension == FileFormat.Aac ? FileFormat.Aac : FileFormat.Mp3;
+        }
+
+        // MPEG audio frame sync (11 set bits). Layer bits 00 = AAC in ADTS; otherwise MPEG-1/2 Layer I-III.
+        if (h.Length >= 2 && h[0] == 0xFF && (h[1] & 0xE0) == 0xE0)
+        {
+            return (h[1] & 0x06) == 0 ? FileFormat.Aac : FileFormat.Mp3;
+        }
+
+        return FileFormat.Unknown;
     }
 
     private static bool LooksLikeSvg(ReadOnlySpan<byte> h)

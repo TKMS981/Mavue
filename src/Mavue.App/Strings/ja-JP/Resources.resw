@@ -19,6 +19,75 @@
     <value>Mavue へようこそ</value>
   </data>
   <data name="MainWindow_DropHint.Text" xml:space="preserve">
-    <value>画像または PDF を開いて始めましょう。</value>
+    <value>ファイルを開くか (Ctrl+O)、ここにドロップしてください。画像・PDF・動画・音声に対応しています。</value>
+  </data>
+  <data name="MainWindow_Open" xml:space="preserve">
+    <value>開く</value>
+  </data>
+  <data name="MainWindow_PreviousFile" xml:space="preserve">
+    <value>前のファイル</value>
+  </data>
+  <data name="MainWindow_NextFile" xml:space="preserve">
+    <value>次のファイル</value>
+  </data>
+  <data name="MainWindow_PreviousPage" xml:space="preserve">
+    <value>前のページ</value>
+  </data>
+  <data name="MainWindow_NextPage" xml:space="preserve">
+    <value>次のページ</value>
+  </data>
+  <data name="MainWindow_PageNumber" xml:space="preserve">
+    <value>{0} / {1}</value>
+  </data>
+  <data name="MainWindow_Position" xml:space="preserve">
+    <value>{0} / {1}</value>
+  </data>
+  <data name="MainWindow_TitleWithFile" xml:space="preserve">
+    <value>{0} – Mavue</value>
+  </data>
+  <data name="Viewer_Loading" xml:space="preserve">
+    <value>読み込んでいます…</value>
+  </data>
+  <data name="Viewer_Error_NotFile" xml:space="preserve">
+    <value>この項目は開けるファイルではありません。</value>
+  </data>
+  <data name="Viewer_Error_Unsupported" xml:space="preserve">
+    <value>この形式のデコーダーがこの PC にインストールされていません。</value>
+  </data>
+  <data name="Viewer_Error_TooLarge" xml:space="preserve">
+    <value>この画像は大きすぎるため開けません。</value>
+  </data>
+  <data name="Viewer_Error_PdfPassword" xml:space="preserve">
+    <value>この PDF はパスワードで保護されています。</value>
+  </data>
+  <data name="Viewer_Error_Failed" xml:space="preserve">
+    <value>このファイルを開けませんでした。破損しているか、対応していない形式の可能性があります。</value>
+  </data>
+  <data name="Viewer_Error_Media" xml:space="preserve">
+    <value>このファイルは再生できません。破損しているか、この形式のデコーダーが Windows にありません。</value>
+  </data>
+  <data name="Viewer_MediaPlaying" xml:space="preserve">
+    <value>再生中</value>
+  </data>
+  <data name="Viewer_MediaPaused" xml:space="preserve">
+    <value>一時停止</value>
+  </data>
+  <data name="Viewer_MediaEnded" xml:space="preserve">
+    <value>再生終了</value>
+  </data>
+  <data name="Viewer_InfoImage" xml:space="preserve">
+    <value>{0} · {1} × {2} · {3}</value>
+  </data>
+  <data name="Viewer_InfoPdf" xml:space="preserve">
+    <value>PDF · {0} ページ · {1}</value>
+  </data>
+  <data name="Viewer_InfoVideo" xml:space="preserve">
+    <value>動画 · {0} · {1} × {2} · {3} · {4}</value>
+  </data>
+  <data name="Viewer_InfoAudio" xml:space="preserve">
+    <value>音声 · {0} · {1} · {2}</value>
+  </data>
+  <data name="Viewer_InfoBasic" xml:space="preserve">
+    <value>{0} · {1}</value>
   </data>
 </root>

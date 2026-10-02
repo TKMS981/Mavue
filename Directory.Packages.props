@@ -1,8 +1,8 @@
 <Project>
   <!-- Versions and license decisions are recorded in docs/DEPENDENCIES.md. -->
   <ItemGroup>
-    <PackageVersion Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
-    <!-- Component packages at the versions Microsoft.WindowsAppSDK 2.5.1 pins (Quick View host references only these). -->
+    <!-- Windows App SDK 2.5.1: only these component packages, at the versions the Microsoft.WindowsAppSDK 2.5.1
+         metapackage pins (Quick View host, Mavue.App and Mavue.Viewer; docs/DEPENDENCIES.md §0.1). -->
     <PackageVersion Include="Microsoft.WindowsAppSDK.WinUI" Version="2.3.9" />
     <PackageVersion Include="Microsoft.WindowsAppSDK.Foundation" Version="2.3.12" />
     <PackageVersion Include="Microsoft.WindowsAppSDK.InteractiveExperiences" Version="2.1.9" />

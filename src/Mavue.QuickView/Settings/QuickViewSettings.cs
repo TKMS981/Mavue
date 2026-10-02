@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Mavue.Core.IO;
-using Mavue.QuickView.Preview;
+using Mavue.Core.Viewing;
 
 namespace Mavue.QuickView.Settings;
 

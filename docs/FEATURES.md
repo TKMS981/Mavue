@@ -4,11 +4,11 @@
 > 本表は SPEC から機械抽出した項目に状態を付与したもの。**SPEC の項目は削除しない**。
 > 「Implemented」は中核動作が機能する場合のみ、「Tested」は SPEC §31 の Definition of Done を満たす場合のみ使用する。
 
-最終更新: 2026-10-02（Quick View 第 3 工程: タブ追従・先読み・WIC デコード・表示サイズ）
+最終更新: 2026-10-02（Mavue 本体の閲覧基盤: 共通ビューア `Mavue.Viewer`、ファイルを開く・切り替える）
 
 状態: **Planned** / **Investigating** / **In Progress** / **Implemented** / **Tested** / **Blocked** / **Excluded (SPEC §29)** / **Backlog (SPEC §16)**
 
-現時点で **Implemented / Tested の製品機能はない**。Quick View PoC で動作を確認した項目は **In Progress**（製品品質・DoD 未達）。
+現時点で **Implemented / Tested の製品機能はない**。Quick View PoC と本体の閲覧基盤で動作を確認した項目は **In Progress**（製品品質・DoD 未達）。
 "Blocked" は実装ではなく「実機検証」がハードウェア不足で止まっている項目を備考に記載している（実装自体は Planned/Investigating のまま）。
 
 
@@ -31,9 +31,9 @@
 | F03.13 | Share | Planned | DataTransferManagerInterop.ShowShareUIForWindow |
 | F03.14 | Print | Planned |  |
 | F03.15 | Markup from Quick View | Planned |  |
-| F03.16 | GIF preview | Planned |  |
-| F03.17 | Audio preview | Planned | PoC では音声（.wav/.ogg）は「デコーダーなし」表示（実操作で確認） |
-| F03.18 | Video preview | Planned |  |
+| F03.16 | GIF preview | In Progress | アニメーション再生（F20.01）。E2E `gif-animation` |
+| F03.17 | Audio preview | In Progress | MediaPlayerElement（Media Foundation）で再生。音符アイコン＋再生状態（再生中/一時停止/再生終了）＋標準の操作バー。E2E `media-switch`/`media-formats` で MP3・WAV・M4A・WMA・FLAC の再生と音声出力（ホストの音声セッションのピーク値）を確認 |
+| F03.18 | Video preview | In Progress | MediaPlayerElement で映像＋音声。拡大しない（画像と同じ規則）。E2E `media-video` で MP4（H.264/AAC）の画面上の映像・音声・一時停止・シーク・音量、`media-formats` で WMV を確認 |
 | F03.19 | HDR support where practical | Investigating | scRGB スワップチェーン。形式ごとの HDR メタデータ対応を調査 |
 | F03.20 | Explorer Preview Pane integration | Planned |  |
 | F03.21 | File association integration | Planned |  |
@@ -72,8 +72,8 @@
 |---|---|---|---|
 | F05.01 | Zoom | Planned |  |
 | F05.02 | Pan | Planned |  |
-| F05.03 | Fit to Window | In Progress | Quick View のみ: ウィンドウに収める（拡大はしない）。物理ピクセルでデコードし 1:1 表示（E2E で画面上の寸法を確認）。メインビューアは未実装 |
-| F05.04 | Actual Size | In Progress | Quick View のみ: 設定ファイルの `imageScale` を `ActualSize` にすると原寸（5,000 万画素まで、はみ出す場合はスクロール）。設定は Quick View を開くたびに読み直す。ウィンドウ内の切替ボタンはユーザー要望で廃止し、設定画面（F23.03）で切り替える予定。メインビューアは未実装 |
+| F05.03 | Fit to Window | In Progress | Quick View と本体（Mavue.App）: ウィンドウに収める（拡大はしない）。物理ピクセルでデコードし 1:1 表示（Quick View は E2E で画面上の寸法を確認）。本体はリサイズ・モニター移動で作り直す（共通ビューア `DocumentViewer`） |
+| F05.04 | Actual Size | In Progress | Quick View のみ: 設定ファイルの `imageScale` を `ActualSize` にすると原寸（5,000 万画素まで、はみ出す場合はスクロール）。設定は Quick View を開くたびに読み直す。ウィンドウ内の切替ボタンはユーザー要望で廃止し、設定画面（F23.03）で切り替える予定。本体: 共通ビューアに原寸モード（`DocumentViewer.ScaleMode`）はあるが UI 未接続 |
 | F05.05 | Rotate | Planned |  |
 | F05.06 | Flip horizontal | Planned |  |
 | F05.07 | Flip vertical | Planned |  |
@@ -82,7 +82,7 @@
 | F05.10 | Image information | Planned |  |
 | F05.11 | Pixel-level inspection where useful | Planned |  |
 | F05.12 | Transparency checkerboard | Planned |  |
-| F05.13 | Drag & drop | Planned |  |
+| F05.13 | Drag & drop | In Progress | 本体: ファイルをウィンドウにドロップして開く（Explorer からのドラッグを合成マウス入力で実機確認）。アプリからのドラッグ（書き出し）は未実装 |
 | F05.14 | Copy/paste | Planned |  |
 
 ## SPEC §6. Image Editing
@@ -158,10 +158,10 @@
 | ID | 機能 | 状態 | 備考 |
 |---|---|---|---|
 | F09.01 | Fast PDF rendering | Planned |  |
-| F09.02 | Page navigation | Planned |  |
+| F09.02 | Page navigation | In Progress | Quick View のみ: PageUp/PageDown（Explorer が前面のときはフックで受け取り、Explorer の選択は変えない）・マウスホイール・前後ボタンでページ送り。先頭/末尾の先へは移動しない。↑↓←→ のファイル移動とは独立。前後のページを先読み。E2E `pdf-pages` と実機で確認。本体: PageUp/PageDown・マウスホイール・ツールバーの前後ボタン（共通の `PdfPageCursor`、E2E `app-pdf-pages`）。本体は前後ページの先読みなし |
 | F09.03 | Thumbnail sidebar | Planned |  |
 | F09.04 | Table of contents | Planned |  |
-| F09.05 | Page numbers | Planned |  |
+| F09.05 | Page numbers | In Progress | Quick View: 情報バーに「PDF · 現在 / 総ページ」。本体: ツールバーに「現在 / 総ページ」 |
 | F09.06 | Jump to page | Planned |  |
 | F09.07 | Continuous scroll | Planned |  |
 | F09.08 | Single-page view | Planned |  |
@@ -349,21 +349,21 @@
 
 | ID | 機能 | 状態 | 備考 |
 |---|---|---|---|
-| F19.01 | Audio preview | Planned |  |
-| F19.02 | Video preview | Planned |  |
-| F19.03 | Playback controls | Planned |  |
-| F19.04 | Seek | Planned |  |
-| F19.05 | Volume | Planned |  |
-| F19.06 | Fullscreen | Planned |  |
-| F19.07 | Supported Windows/media formats where practical | Planned | Media Foundation。FFmpeg は法務確認待ち |
+| F19.01 | Audio preview | In Progress | Quick View（F03.17）と本体（共通の `MediaSession`。E2E `app-formats` で MP3・WAV・M4A・WMA・FLAC の音声出力を確認） |
+| F19.02 | Video preview | In Progress | Quick View（F03.18）と本体（E2E `app-formats` で MP4・WMV の画面上の映像と音声を確認） |
+| F19.03 | Playback controls | In Progress | Quick View: 標準の操作バー（再生/一時停止）と Enter（Quick View にフォーカスがあるとき）。本体: 操作バーと Space/Enter（E2E `app-media-keys`） |
+| F19.04 | Seek | In Progress | Quick View と本体: シークバーと Ctrl+←/→（10 秒） |
+| F19.05 | Volume | In Progress | Quick View と本体: 音量/ミュートボタンと Ctrl+↑/↓（10%） |
+| F19.06 | Fullscreen | Planned | WinUI 3 の MediaTransportControls には全画面ボタンがない（テンプレートでコメントアウト、未サポート）。別途実装が必要 |
+| F19.07 | Supported Windows/media formats where practical | In Progress | 形式判定: MP4/M4V・MOV・MKV・WebM・AVI・WMV/ASF・MPEG-TS/M2TS・MPEG-PS・Ogg（映像/音声）・MP3・AAC・M4A/M4B・WAV・FLAC・Opus・WMA。再生は Windows（Media Foundation）にあるデコーダー次第。実機確認済み: MP4(H.264/AAC)・MP3・WAV・M4A・WMA・FLAC・WMV。MKV/WebM/HEVC 等は Store の拡張機能の有無に依存（未確認）。FFmpeg は法務確認待ち |
 | F19.08 | Video trimming | Excluded (SPEC §29) | |
 
 ## SPEC §20. GIF
 
 | ID | 機能 | 状態 | 備考 |
 |---|---|---|---|
-| F20.01 | Animated GIF preview | Planned |  |
-| F20.02 | Playback | Planned |  |
+| F20.01 | Animated GIF preview | In Progress | Quick View のみ: 各フレームを GIF の遅延時間で再生（20 ms 未満は 100 ms）、NETSCAPE2.0 のループ回数どおり繰り返し、オフセット・透過・破棄方法（0〜3）を合成。フレームはバックグラウンドで 1 枚ずつ復号し、メモリはキャンバス分のみ。800 万画素を超える GIF は 1 コマ目の静止表示。ファイル切替・ページ送り・非表示で停止。E2E `gif-animation` で画面上の変化・ループ・二重再生なしを確認。本体も同じ `GifPlayer`（E2E `app-formats`） |
+| F20.02 | Playback | In Progress | Quick View: 自動再生のみ（一時停止・コマ送りの操作は未実装） |
 | F20.03 | Pause | Planned |  |
 | F20.04 | Frame navigation where practical | Planned |  |
 | F20.05 | Fullscreen | Planned |  |
@@ -384,7 +384,7 @@
 | F21.09 | Lock | Planned |  |
 | F21.10 | File properties/info | Planned |  |
 | F21.11 | Recent files | Planned |  |
-| F21.12 | Drag & drop | Planned |  |
+| F21.12 | Drag & drop | In Progress | F05.13 と同じ（ドロップで開く）。複数ファイルのドロップはその順に前後移動 |
 | F21.13 | Clipboard | Planned |  |
 | F21.14 | Version/history/backup where practical | Planned |  |
 | F21.15 | Tabs | Planned |  |
@@ -423,9 +423,9 @@
 | F23.01 | Dark mode | Planned |  |
 | F23.02 | Light mode | Planned |  |
 | F23.03 | Settings | Planned | 最初の項目: Quick View の表示サイズ（拡大しない／原寸）。ユーザー要望で、その場の切替ではなく設定画面で切り替える。それまでは `%LOCALAPPDATA%\Mavue\QuickView\settings.json` を直接編集（開くたびに読み直し） |
-| F23.04 | Keyboard shortcuts | Planned |  |
-| F23.05 | High-DPI support | In Progress | Quick View のみ: ウィンドウのあるモニターの DPI で物理ピクセルに合わせてデコードし 1:1 表示（150 % と 100 % のモニターで E2E 確認）。メインアプリは未実装 |
-| F23.06 | Multi-monitor support | In Progress | Quick View のみ: Explorer のあるモニターに表示。拡大率の異なるモニターへの移動・表示中のリサイズで画像を作り直す（3 台構成で E2E 確認）。メインアプリは未実装 |
+| F23.04 | Keyboard shortcuts | In Progress | 本体: Ctrl+O（開く）、←/→（前後のファイル）、PageUp/PageDown（PDF のページ）、Space/Enter・Ctrl+←/→・Ctrl+↑/↓（動画・音声）。一覧・カスタマイズは未実装 |
+| F23.05 | High-DPI support | In Progress | Quick View のみ: ウィンドウのあるモニターの DPI で物理ピクセルに合わせてデコードし 1:1 表示（150 % と 100 % のモニターで E2E 確認）。本体: XAML の拡大率で 1:1、拡大率の変化で作り直す（モニター間移動の E2E は未作成） |
+| F23.06 | Multi-monitor support | In Progress | Quick View のみ: Explorer のあるモニターに表示。拡大率の異なるモニターへの移動・表示中のリサイズで画像を作り直す（3 台構成で E2E 確認）。本体: リサイズで作り直す（モニター間移動の E2E は未作成） |
 | F23.07 | Accessibility | Planned |  |
 | F23.08 | Touch support | Planned |  |
 | F23.09 | Windows Ink support | Investigating | InkCanvas Experimental。実機ペン検証 Blocked |
@@ -479,7 +479,9 @@
 | ソリューション / モジュール分割 | Implemented | `Mavue.slnx` |
 | ファイル形式判定（マジックバイト） | Implemented | `Mavue.Core.Formats.FileFormatDetector`、単体テストあり |
 | 安全保存（一時ファイル + アトミック置換） | Implemented | `Mavue.Core.IO.SafeFileWriter`、単体テストあり。シンボリックリンク経由の保存は実体を更新するよう修正（本機では symlink を作成できずテストはスキップ＝未検証） |
-| WinUI 3 アプリ起動 | Implemented | `Mavue.App`（空のメインウィンドウ、ja/en リソース） |
+| WinUI 3 アプリ起動 | Implemented | `Mavue.App`（ja/en リソース、`tools/smoke-test.ps1`） |
+| 本体の閲覧基盤 | In Progress | `Mavue.App`: 引数・開くダイアログ（Ctrl+O）・ドロップでファイルを開き、共通ビューアで画像・GIF・PDF・動画・音声を表示。1 ファイルならフォルダー内の対応ファイルを ←/→ で移動、複数ならその範囲。終了・切替で再生停止とファイル解放。E2E `--app`（6 シナリオ） |
+| 共通ビューア | In Progress | `Mavue.Viewer`（表示面 `ViewerSurface`・`DocumentViewer`・画像デコード・PDF 描画・GIF・動画/音声）と `Mavue.Core.Viewing`（表示サイズ・ページ・安全ポリシー・ファイル一覧）。Quick View と本体で共有 |
 | Quick View 常駐ホスト（PoC） | In Progress | `Mavue.QuickView.Host`: フック、STA 選択取得、panel 表示、段階表示、計測（ETW/JSONL）、プリウォーム |
 | Quick View 実機 E2E ハーネス | Implemented | `tools/Mavue.QuickView.Harness`（開発用ツール） |
 | ファイル安全ポリシー（プレビュー） | Implemented | `PreviewSafetyPolicy`（クラウドプレースホルダー・デバイスパス・UNC・巨大寸法）、単体テストあり |

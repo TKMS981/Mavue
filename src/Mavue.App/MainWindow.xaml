@@ -6,10 +6,71 @@
     <MicaBackdrop />
   </Window.SystemBackdrop>
 
-  <Grid x:Name="RootGrid">
-    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+  <!-- Files can be dropped anywhere on the window. Keys (arrows, PageUp/PageDown, media shortcuts) are handled here
+       after the focused element had its chance, so the toolbar keeps its own keyboard navigation. -->
+  <!-- Transparent (not null) background: an element without a background is not hit-tested, so drops on empty
+       areas would be missed. Mica still shows through. -->
+  <Grid x:Name="RootGrid" Background="Transparent" AllowDrop="True" DragOver="OnDragOver" Drop="OnDrop" KeyDown="OnRootKeyDown">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <CommandBar x:Name="Toolbar" HorizontalAlignment="Left" DefaultLabelPosition="Right" IsDynamicOverflowEnabled="True">
+      <AppBarButton x:Name="OpenButton" Click="OnOpenClick">
+        <AppBarButton.Icon>
+          <FontIcon Glyph="&#xE8E5;" />
+        </AppBarButton.Icon>
+        <AppBarButton.KeyboardAccelerators>
+          <KeyboardAccelerator Modifiers="Control" Key="O" />
+        </AppBarButton.KeyboardAccelerators>
+      </AppBarButton>
+      <AppBarSeparator />
+      <AppBarButton x:Name="PreviousFileButton" LabelPosition="Collapsed" IsEnabled="False" Click="OnPreviousFileClick">
+        <AppBarButton.Icon>
+          <FontIcon Glyph="&#xE76B;" />
+        </AppBarButton.Icon>
+      </AppBarButton>
+      <AppBarButton x:Name="NextFileButton" LabelPosition="Collapsed" IsEnabled="False" Click="OnNextFileClick">
+        <AppBarButton.Icon>
+          <FontIcon Glyph="&#xE76C;" />
+        </AppBarButton.Icon>
+      </AppBarButton>
+      <AppBarSeparator x:Name="PageSeparator" Visibility="Collapsed" />
+      <AppBarButton x:Name="PreviousPageButton" LabelPosition="Collapsed" Visibility="Collapsed" Click="OnPreviousPageClick">
+        <AppBarButton.Icon>
+          <FontIcon Glyph="&#xE70E;" />
+        </AppBarButton.Icon>
+      </AppBarButton>
+      <AppBarElementContainer x:Name="PageNumberContainer" VerticalContentAlignment="Center" Visibility="Collapsed">
+        <TextBlock x:Name="PageNumberText" Margin="8,0" VerticalAlignment="Center" />
+      </AppBarElementContainer>
+      <AppBarButton x:Name="NextPageButton" LabelPosition="Collapsed" Visibility="Collapsed" Click="OnNextPageClick">
+        <AppBarButton.Icon>
+          <FontIcon Glyph="&#xE70D;" />
+        </AppBarButton.Icon>
+      </AppBarButton>
+    </CommandBar>
+
+    <!-- The shared viewer surface (Mavue.Viewer) is added here in code. The grid takes the keyboard focus while a
+         file is shown, so the transport controls of a video never keep it. -->
+    <Grid x:Name="ViewerHost" Grid.Row="1" Background="Transparent" IsTabStop="True" UseSystemFocusVisuals="False" PointerPressed="OnViewerPointerPressed" />
+
+    <StackPanel x:Name="EmptyState" Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
       <TextBlock x:Name="WelcomeText" x:Uid="MainWindow_Welcome" Style="{StaticResource TitleTextBlockStyle}" HorizontalAlignment="Center" />
-      <TextBlock x:Uid="MainWindow_DropHint" Style="{StaticResource BodyTextBlockStyle}" HorizontalAlignment="Center" Opacity="0.7" />
+      <TextBlock x:Uid="MainWindow_DropHint" Style="{StaticResource BodyTextBlockStyle}" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Opacity="0.7" />
     </StackPanel>
+
+    <Grid x:Name="StatusBar" Grid.Row="2" Padding="16,6,16,8" ColumnSpacing="16" Visibility="Collapsed">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
+      </Grid.ColumnDefinitions>
+      <TextBlock x:Name="NameText" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" MaxWidth="480" AutomationProperties.AutomationId="NameText" />
+      <TextBlock x:Name="InfoText" Grid.Column="1" Opacity="0.75" TextTrimming="CharacterEllipsis" AutomationProperties.AutomationId="InfoText" />
+      <TextBlock x:Name="PositionText" Grid.Column="2" Opacity="0.75" AutomationProperties.AutomationId="PositionText" />
+    </Grid>
   </Grid>
 </Window>

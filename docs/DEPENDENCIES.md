@@ -51,7 +51,8 @@
   （「通常はメインのパッケージを推奨するが、特定の部品だけを参照するためにサブパッケージを個別に導入できる場合がある」）。
 - WinUI 2.3.9 は InteractiveExperiences を「2.1.8 以上」で要求するが 2.1.8 は公開されていない（NU1603）。メタパッケージと同じ 2.1.9 を明示した。
 - WebView2 は WinUI パッケージの依存なので出力に残る（読み込まれない）。除外すると WinUI の型解決に影響しうるため残した。
-- `Mavue.App`（エディタ、未リリース）はメタパッケージのまま。必要な部品が決まった時点で同様に整理する。
+- `Mavue.App` と `Mavue.Viewer` も 2026-10-02 から同じ部品パッケージだけを参照する（閲覧基盤の実装時。クリーンな出力に ML・AI・Search・Widgets・DWriteCore が含まれないことを確認、WebView2 は WinUI の依存として残る）。
+  OCR・背景除去などで Windows AI / Windows ML が必要になった時点で、その部品だけを追加する。
 
 状態の凡例: **Adopted**（採用・プロジェクトに追加済み）/ **Selected**（採用決定・未追加）/ **Candidate**（評価中）/ **Rejected**（不採用）/ **Legal review**（法務確認待ち）
 
@@ -62,7 +63,7 @@
 | 項目 | バージョン | 入手 | 状態 | 備考 |
 |---|---|---|---|---|
 | .NET SDK | 10.0.401（.NET 10 LTS, サポート終了 2028-11-14） | dotnet-install / winget | Adopted | `global.json` でピン留め（`rollForward: latestFeature`） |
-| Windows App SDK | 2.5.1（2026-09-16 安定版） | NuGet: Quick View ホストは部品パッケージ（WinUI 2.3.9 / Foundation 2.3.12 / InteractiveExperiences 2.1.9）、`Mavue.App` は `Microsoft.WindowsAppSDK` | Adopted | MS ソフトウェアライセンス。出力に置かれるファイルは再配布可（フレームワーク依存 / 自己完結、`license.txt` §3。条件は §0） |
+| Windows App SDK | 2.5.1（2026-09-16 安定版） | NuGet: 部品パッケージ（WinUI 2.3.9 / Foundation 2.3.12 / InteractiveExperiences 2.1.9）。Quick View ホスト・`Mavue.App`・`Mavue.Viewer` | Adopted | MS ソフトウェアライセンス。出力に置かれるファイルは再配布可（フレームワーク依存 / 自己完結、`license.txt` §3。条件は §0） |
 | Windows SDK BuildTools | 10.0.28000.2705 | NuGet `Microsoft.Windows.SDK.BuildTools` | Adopted | makepri / MSIX ツール。VS 不要でビルド可能 |
 | Windows SDK 投影 (C#) | TFM `net10.0-windows10.0.26100.0` | .NET SDK が自動取得 | Adopted | |
 | Visual Studio 2026 / Build Tools（C++ ワークロード, MSVC v14.5x, Windows 11 SDK 10.0.26100 以降） | 18.10.2（MSVC 19.51） | winget（管理者） | **Adopted**（2026-10-02 導入） | `native/Mavue.Shell.Native` のビルドに使用。CRT は静的リンク（VC++ 再頒布パッケージを配布しない） |
@@ -74,7 +75,7 @@
 
 | パッケージ | バージョン | ライセンス | 用途 | 状態 | 再配布・注意 |
 |---|---|---|---|---|---|
-| Microsoft.WindowsAppSDK | 2.5.1 | MS-EULA（再配布可） | WinUI 3 / AppLifecycle / MRT Core | Adopted | 推移的に WinUI, Foundation, AI, ML, Search 等を含む |
+| Microsoft.WindowsAppSDK.WinUI / .Foundation / .InteractiveExperiences | 2.3.9 / 2.3.12 / 2.1.9（メタパッケージ 2.5.1 の固定版） | MS-EULA（再配布可） | WinUI 3 / MRT Core / Windowing | Adopted | メタパッケージ `Microsoft.WindowsAppSDK` は参照しない（§0.1）。AI・ML 等は必要になった時点で部品として追加 |
 | Microsoft.Windows.SDK.BuildTools | 10.0.28000.2705 | MS-EULA | ビルドツール | Adopted | 開発時のみ |
 | Microsoft.Graphics.Win2D | 1.4.0 | MIT | GPU 2D 描画・エフェクト | Selected | ネイティブ DLL 同梱 |
 | CommunityToolkit.Mvvm | 8.4.2 | MIT | MVVM（ソース生成） | Selected | |
@@ -227,6 +228,4 @@ WebP Image Extension 1.2.31, Raw Image Extension 2.5.35, VP9 1.2.20, MPEG-2 1.2.
 5. bblanchon.PDFium の NuGet 表記（Apache-2.0）とリポジトリ LICENSE（MIT）の食い違い — 実害は小さい（どちらも許容型）が、通知文はリポジトリ/tgz の表記に合わせる。
 6. `Microsoft.Windows.SDK.NET.dll`（Windows SDK の C# 投影）の再配布可否 — 確認済み・未確認・配布前の確認手順は §0 を参照。**バイナリ配布の前提条件**。
 7. バイナリ配布用の利用条件（Windows App SDK `license.txt` §3(b)(ii) の要件を満たす文面）の作成。
-8. **TODO（Release 公開前）: `Mavue.App` の依存整理**。現在は `Microsoft.WindowsAppSDK` メタパッケージを参照しており、出力に
-   Windows ML（ONNX Runtime・DirectML）、Windows AI、Search、Widgets、DWriteCore が入る。エディタで実際に使う部品
-   （例: OCR・背景除去で Windows AI / Windows ML を使うなら残す）を決め、§0.1 と同じ方法（読み込みモジュールの実測）で整理する。
+8. ~~`Mavue.App` の依存整理~~（2026-10-02 対応: 部品パッケージのみ。§0.1）。Windows AI / Windows ML を使う機能を実装するときに、必要な部品だけを追加して再確認する。

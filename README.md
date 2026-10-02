@@ -32,7 +32,10 @@ dotnet build Mavue.slnx
 dotnet test --solution Mavue.slnx
 powershell -ExecutionPolicy Bypass -File tools/smoke-test.ps1
 
-# Quick View 常駐ホスト（PoC）: 起動後、Explorer で画像/PDF を選んで Space
+# 本体: 画像・GIF・PDF・動画・音声を開く（引数 / Ctrl+O / ドロップ）
+.\src\Mavue.App\bin\Debug\net10.0-windows10.0.26100.0\win-x64\Mavue.exe <ファイル>
+
+# Quick View 常駐ホスト（PoC）: 起動後、Explorer で画像/PDF/動画/音声を選んで Space
 .\src\Mavue.QuickView.Host\bin\Debug\net10.0-windows10.0.26100.0\win-x64\Mavue.QuickView.Host.exe
 ```
 

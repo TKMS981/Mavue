@@ -38,7 +38,7 @@ var options = new HarnessOptions
     Navigation = !args.Contains("--no-navigation"),
     QuickLookAfterHostSeconds = args.Contains("--quicklook-after-host") ? int.Parse(Arg("--quicklook-after-host", "12"), CultureInfo.InvariantCulture) : null,
     HostPath = args.Contains("--host") ? Path.GetFullPath(Arg("--host", "")) : Path.Combine(repo, "src", "Mavue.QuickView.Host", binTail, "Mavue.QuickView.Host.exe"),
-    AppPath = Path.Combine(repo, "src", "Mavue.App", binTail, "Mavue.exe"),
+    AppPath = args.Contains("--app-path") ? Path.GetFullPath(Arg("--app-path", "")) : Path.Combine(repo, "src", "Mavue.App", binTail, "Mavue.exe"),
     WorkDirectory = Path.Combine(Path.GetTempPath(), "Mavue.QuickView.E2E"),
     AttachHostLog = args.Contains("--attach-host") ? Arg("--attach-host", "") : null,
     ChildHost = args.Contains("--child-host"),
@@ -46,6 +46,7 @@ var options = new HarnessOptions
     ScaleMode = Arg("--scale", "fit"),
     SettleMilliseconds = int.Parse(Arg("--settle", "500"), CultureInfo.InvariantCulture),
     PauseAfterSampleMilliseconds = int.Parse(Arg("--pause", "0"), CultureInfo.InvariantCulture),
+    OnlyScenarios = args.Contains("--only") ? Arg("--only", "").Split(',', StringSplitOptions.RemoveEmptyEntries) : null,
 };
 
 if (args.Contains("--thumb"))
@@ -114,7 +115,14 @@ var runThread = new Thread(() =>
 {
     try
     {
-        runner.Run(assets);
+        if (args.Contains("--app"))
+        {
+            runner.RunApp(assets); // Mavue.App scenarios only (no Quick View host)
+        }
+        else
+        {
+            runner.Run(assets);
+        }
     }
     catch (Exception ex)
     {

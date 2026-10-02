@@ -196,6 +196,11 @@ internal sealed partial class Runner
 
     private void Guarded(string name, Func<(bool Ok, string Observed)> body, string expected)
     {
+        if (options.OnlyScenarios is { } only && !only.Any(prefix => name.StartsWith(prefix, StringComparison.Ordinal)))
+        {
+            return;
+        }
+
         try
         {
             (bool ok, string observed) = body();
@@ -222,7 +227,8 @@ internal sealed partial class Runner
         Thread.Sleep(options.SettleMilliseconds);
         if (!SendKeyIfForeground(Native.VK_SPACE, explorer, out long t0))
         {
-            why = "foreground changed before Space";
+            nint fg = Native.GetForegroundWindow();
+            why = $"foreground changed before Space (now {Native.ClassName(fg)}, {ProcessName(fg)})";
             return false;
         }
 
@@ -253,6 +259,19 @@ internal sealed partial class Runner
             8000,
             null);
         return (nav, done);
+    }
+
+    private static string ProcessName(nint window)
+    {
+        try
+        {
+            using var process = Process.GetProcessById((int)Pid(window));
+            return process.ProcessName;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return "?";
+        }
     }
 
     private bool ShowsFile(long request, string path) =>

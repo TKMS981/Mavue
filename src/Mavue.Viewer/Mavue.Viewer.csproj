@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Shared viewer (docs/ARCHITECTURE.md §3, §4.6): the display surface, image decoding, PDF page rendering, GIF
+       animation and video/audio playback used by both Mavue.App and the resident Quick View host. The surface is
+       built in code (no XAML pages in this library), so nothing depends on merging library resources into an
+       unpackaged app's PRI file. -->
+  <PropertyGroup>
+    <TargetFramework>$(MavueWindowsTfm)</TargetFramework>
+    <TargetPlatformMinVersion>$(MavueMinWindows)</TargetPlatformMinVersion>
+    <RootNamespace>Mavue.Viewer</RootNamespace>
+    <UseWinUI>true</UseWinUI>
+    <Platforms>x64;ARM64</Platforms>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <!-- WIC writes into SoftwareBitmap memory through IMemoryBufferByteAccess; LibraryImport. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Same Windows App SDK components as the Quick View host (docs/DEPENDENCIES.md §0.1). -->
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mavue.Core\Mavue.Core.csproj" />
+    <ProjectReference Include="..\Mavue.Image\Mavue.Image.csproj" />
+  </ItemGroup>
+</Project>

@@ -11,25 +11,28 @@
       <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
 
-    <!-- Images are sized explicitly (one decoded pixel per screen pixel). Scrolling is enabled only
-         in actual-size mode when the image is larger than the area. -->
-    <ScrollViewer x:Name="Scroller" Padding="12" IsTabStop="False" ZoomMode="Disabled"
-                  HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Disabled"
-                  HorizontalScrollMode="Disabled" VerticalScrollMode="Disabled">
-      <Grid x:Name="ImageHost" HorizontalAlignment="Center" VerticalAlignment="Center">
-        <Image x:Name="ThumbnailImage" Stretch="Uniform" />
-        <Image x:Name="FullImage" Stretch="Uniform" />
-      </Grid>
-    </ScrollViewer>
-
-    <TextBlock x:Name="StatusText" HorizontalAlignment="Center" VerticalAlignment="Center"
-               Foreground="#FFE0E0E0" TextWrapping="Wrap" MaxWidth="560" TextAlignment="Center" />
+    <!-- Image, video/audio and messages: the viewer surface shared with Mavue.App (Mavue.Viewer.Controls.ViewerSurface),
+         added in code. Images are sized explicitly (one decoded pixel per screen pixel); the file of a video or audio
+         is streamed by the player, never read into memory by Quick View. -->
+    <Grid x:Name="SurfaceHost" />
 
     <!-- The image scale (fit without enlarging / actual size) is a setting, not an in-window control
          (user decision): it is read from settings.json each time Quick View opens. -->
-    <StackPanel x:Name="InfoBar" Grid.Row="1" Padding="16,8,16,12" Spacing="2" Background="#FF181818">
-      <TextBlock x:Name="NameText" Foreground="#FFF2F2F2" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-      <TextBlock x:Name="InfoText" Foreground="#FFB0B0B0" FontSize="12" TextTrimming="CharacterEllipsis" />
-    </StackPanel>
+    <Grid x:Name="InfoBar" Grid.Row="1" Padding="16,8,16,12" ColumnSpacing="12" Background="#FF181818">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
+      </Grid.ColumnDefinitions>
+      <StackPanel Spacing="2" VerticalAlignment="Center">
+        <TextBlock x:Name="NameText" Foreground="#FFF2F2F2" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+        <TextBlock x:Name="InfoText" Foreground="#FFB0B0B0" FontSize="12" TextTrimming="CharacterEllipsis" />
+      </StackPanel>
+      <!-- Previous/next page of a multi-page PDF (also PageUp/PageDown and the mouse wheel). Not tab stops,
+           so keyboard focus stays on the window and Space/Esc keep closing Quick View. -->
+      <StackPanel x:Name="PageButtons" Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Visibility="Collapsed">
+        <Button x:Name="PreviousPageButton" IsTabStop="False" Click="OnPreviousPageClick" Padding="10,6" FontFamily="Segoe Fluent Icons,Segoe MDL2 Assets" Content="&#xE76B;" />
+        <Button x:Name="NextPageButton" IsTabStop="False" Click="OnNextPageClick" Padding="10,6" FontFamily="Segoe Fluent Icons,Segoe MDL2 Assets" Content="&#xE76C;" />
+      </StackPanel>
+    </Grid>
   </Grid>
 </Window>

@@ -25,6 +25,9 @@ internal sealed record HarnessOptions
     /// <summary>Pause after each open/close sample, e.g. to let the host record its idle memory (1 s after hiding).</summary>
     public int PauseAfterSampleMilliseconds { get; init; }
 
+    /// <summary>Run only the navigation scenarios whose names start with one of these (null = all).</summary>
+    public IReadOnlyList<string>? OnlyScenarios { get; init; }
+
     /// <summary>
     /// Before every Space, activate an unrelated window and then Explorer, so Quick View never benefits
     /// from having been the foreground process just before (the realistic "first Space" condition).
@@ -176,6 +179,9 @@ internal sealed partial class Runner(HarnessOptions options, Action<string> log)
                 RunTabScenario(assets);
                 RunDisplayScenarios(assets);
                 RunContextMenuScenarios(assets);
+                RunPdfPageScenario(assets);
+                RunGifScenario(assets);
+                RunMediaScenario(assets);
             }
 
             TestAsset? small = assets.FirstOrDefault(a => a.Case == "small-jpeg");

@@ -1,4 +1,4 @@
-namespace Mavue.QuickView.Preview;
+namespace Mavue.Core.Viewing;
 
 /// <summary>How Quick View sizes images (user setting).</summary>
 public enum ImageScaleMode

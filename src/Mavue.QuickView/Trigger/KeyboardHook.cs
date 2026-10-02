@@ -25,6 +25,8 @@ public sealed class KeyboardHook : IDisposable
     private const int VkRWin = 0x5C;
     private const uint LlkhfInjected = 0x10;
     private const uint ImeQueryTimeoutMs = 30;
+    private const int VkPageUp = 0x21;
+    private const int VkPageDown = 0x22;
     private const int VkLeft = 0x25;
     private const int VkDown = 0x28;
     private const uint WmReinstall = 0x8000 + 1; // WM_APP + 1, posted to the hook thread
@@ -67,9 +69,10 @@ public sealed class KeyboardHook : IDisposable
     public Func<bool>? AcceptedProbe { get; set; }
 
     /// <summary>
-    /// Optional handler for unmodified arrow keys (←↑→↓) pressed while a shell item view has the focus.
-    /// Called on the hook thread with the virtual-key code and the foreground window; return true to
-    /// swallow the key (Quick View steps through a multi-selection itself). Must not block.
+    /// Optional handler for unmodified arrow keys (←↑→↓) and PageUp/PageDown pressed while a shell item view
+    /// has the focus. Called on the hook thread with the virtual-key code and the foreground window; return
+    /// true to swallow the key (Quick View steps through a multi-selection or the pages of a PDF itself).
+    /// Must not block.
     /// </summary>
     public Func<int, nint, bool>? NavigationKeyHandler { get; set; }
 
@@ -216,9 +219,9 @@ public sealed class KeyboardHook : IDisposable
             return isDown ? OnSpaceDown(now, (info->flags & LlkhfInjected) != 0) : OnSpaceUp();
         }
 
-        if (vk is >= VkLeft and <= VkDown)
+        if (vk is >= VkLeft and <= VkDown or VkPageUp or VkPageDown)
         {
-            return OnArrow(vk, isDown);
+            return OnNavigationKey(vk, isDown);
         }
 
         if (!isDown)
@@ -280,11 +283,11 @@ public sealed class KeyboardHook : IDisposable
         return _swallowingSpace;
     }
 
-    private bool OnArrow(int vk, bool isDown)
+    private bool OnNavigationKey(int vk, bool isDown)
     {
         if (!isDown)
         {
-            // Swallow the key-up of an arrow whose key-down we took, so Explorer sees a consistent pair.
+            // Swallow the key-up of a key whose key-down we took, so Explorer sees a consistent pair.
             bool swallowUp = _swallowedArrow == vk;
             _swallowedArrow = swallowUp ? 0 : _swallowedArrow;
             return swallowUp;

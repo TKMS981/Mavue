@@ -19,6 +19,75 @@
     <value>Welcome to Mavue</value>
   </data>
   <data name="MainWindow_DropHint.Text" xml:space="preserve">
-    <value>Open an image or PDF to get started.</value>
+    <value>Open a file (Ctrl+O) or drop it here: images, PDF, video and audio.</value>
+  </data>
+  <data name="MainWindow_Open" xml:space="preserve">
+    <value>Open</value>
+  </data>
+  <data name="MainWindow_PreviousFile" xml:space="preserve">
+    <value>Previous file</value>
+  </data>
+  <data name="MainWindow_NextFile" xml:space="preserve">
+    <value>Next file</value>
+  </data>
+  <data name="MainWindow_PreviousPage" xml:space="preserve">
+    <value>Previous page</value>
+  </data>
+  <data name="MainWindow_NextPage" xml:space="preserve">
+    <value>Next page</value>
+  </data>
+  <data name="MainWindow_PageNumber" xml:space="preserve">
+    <value>{0} / {1}</value>
+  </data>
+  <data name="MainWindow_Position" xml:space="preserve">
+    <value>{0} of {1}</value>
+  </data>
+  <data name="MainWindow_TitleWithFile" xml:space="preserve">
+    <value>{0} – Mavue</value>
+  </data>
+  <data name="Viewer_Loading" xml:space="preserve">
+    <value>Loading…</value>
+  </data>
+  <data name="Viewer_Error_NotFile" xml:space="preserve">
+    <value>This item is not a file that can be opened.</value>
+  </data>
+  <data name="Viewer_Error_Unsupported" xml:space="preserve">
+    <value>No decoder for this format is installed on this PC.</value>
+  </data>
+  <data name="Viewer_Error_TooLarge" xml:space="preserve">
+    <value>This image is too large to open.</value>
+  </data>
+  <data name="Viewer_Error_PdfPassword" xml:space="preserve">
+    <value>This PDF is password-protected.</value>
+  </data>
+  <data name="Viewer_Error_Failed" xml:space="preserve">
+    <value>This file could not be opened. It may be damaged or in an unsupported format.</value>
+  </data>
+  <data name="Viewer_Error_Media" xml:space="preserve">
+    <value>This file can't be played. It may be damaged, or Windows has no decoder for its format.</value>
+  </data>
+  <data name="Viewer_MediaPlaying" xml:space="preserve">
+    <value>Playing</value>
+  </data>
+  <data name="Viewer_MediaPaused" xml:space="preserve">
+    <value>Paused</value>
+  </data>
+  <data name="Viewer_MediaEnded" xml:space="preserve">
+    <value>Finished</value>
+  </data>
+  <data name="Viewer_InfoImage" xml:space="preserve">
+    <value>{0} · {1} × {2} · {3}</value>
+  </data>
+  <data name="Viewer_InfoPdf" xml:space="preserve">
+    <value>PDF · {0} pages · {1}</value>
+  </data>
+  <data name="Viewer_InfoVideo" xml:space="preserve">
+    <value>Video · {0} · {1} × {2} · {3} · {4}</value>
+  </data>
+  <data name="Viewer_InfoAudio" xml:space="preserve">
+    <value>Audio · {0} · {1} · {2}</value>
+  </data>
+  <data name="Viewer_InfoBasic" xml:space="preserve">
+    <value>{0} · {1}</value>
   </data>
 </root>

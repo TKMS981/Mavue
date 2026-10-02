@@ -18,6 +18,9 @@ internal sealed class TimingLog(string path)
 {
     private readonly List<Mark> _marks = [];
     private readonly StringBuilder _partial = new();
+
+    // Keeps a UTF-8 sequence split across two reads.
+    private readonly Decoder _decoder = new UTF8Encoding(false).GetDecoder();
     private long _position;
 
     public IReadOnlyList<Mark> Marks => _marks;
@@ -35,10 +38,18 @@ internal sealed class TimingLog(string path)
             return;
         }
 
+        // Advance only by the bytes actually read. Setting the position to the file length after reading lost the
+        // lines the host appended in between (seen as a missing media-command mark in media-video).
         stream.Position = _position;
-        using var reader = new StreamReader(stream, Encoding.UTF8);
-        _partial.Append(reader.ReadToEnd());
-        _position = stream.Length;
+        byte[] buffer = new byte[64 * 1024];
+        char[] chars = new char[buffer.Length + 4];
+        int read;
+        while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
+        {
+            _position += read;
+            int count = _decoder.GetChars(buffer, 0, read, chars, 0, flush: false);
+            _partial.Append(chars, 0, count);
+        }
 
         string text = _partial.ToString();
         int lastNewline = text.LastIndexOf('\n');

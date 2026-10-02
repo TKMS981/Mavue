@@ -93,8 +93,11 @@ powershell -ExecutionPolicy Bypass -File tools/smoke-test.ps1 -Configuration Deb
 
 ```powershell
 $env:DOTNET_ROOT = "$env:LOCALAPPDATA\Microsoft\dotnet"   # ユーザーローカル SDK の場合
-.\src\Mavue.App\bin\Debug\net10.0-windows10.0.26100.0\win-x64\Mavue.exe
+.\src\Mavue.App\bin\Debug\net10.0-windows10.0.26100.0\win-x64\Mavue.exe [ファイル ...]
 ```
+
+ファイルは引数・「開く」（Ctrl+O）・ウィンドウへのドロップで開ける。1 ファイルならそのフォルダー内の対応ファイルを ←/→ で移動、
+複数ならその範囲を移動する。`--trace-file <path>` は自動テスト用の診断ログ（JSON Lines、指定したローカルファイルにのみ書く）。
 
 ### 5.1 Quick View 常駐ホスト（PoC）
 

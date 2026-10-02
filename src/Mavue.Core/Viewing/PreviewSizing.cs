@@ -1,4 +1,4 @@
-namespace Mavue.QuickView.Preview;
+namespace Mavue.Core.Viewing;
 
 /// <summary>
 /// Chooses decode dimensions for "fit to window" previews so large images are decoded directly to

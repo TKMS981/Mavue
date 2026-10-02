@@ -1,4 +1,4 @@
-namespace Mavue.QuickView.Preview;
+namespace Mavue.Core.Viewing;
 
 /// <summary>What Quick View may do with a file before reading its content.</summary>
 public enum PreviewAccess

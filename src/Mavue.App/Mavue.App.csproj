@@ -23,11 +23,18 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" />
+    <!-- Only the Windows App SDK components the viewer uses (WinUI; Foundation for MRT Core resources and the runtime;
+         InteractiveExperiences for windowing), as in the Quick View host (docs/DEPENDENCIES.md §0.1). The
+         Microsoft.WindowsAppSDK metapackage also brought Windows ML (ONNX Runtime, DirectML), Windows AI, Search and
+         Widgets, which nothing uses yet; add components back when a feature (e.g. OCR) needs them. -->
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Mavue.Core\Mavue.Core.csproj" />
+    <ProjectReference Include="..\Mavue.Viewer\Mavue.Viewer.csproj" />
   </ItemGroup>
 </Project>

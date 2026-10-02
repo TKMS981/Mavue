@@ -2,12 +2,14 @@ namespace Mavue.QuickView.Preview;
 
 /// <summary>
 /// Identifies a decoded preview. Size and last-write time make a changed file a cache miss;
-/// the viewport makes a resized window decode again. Paths compare case-insensitively.
+/// the viewport makes a resized window decode again; each PDF page is its own entry.
+/// Paths compare case-insensitively.
 /// </summary>
 public readonly record struct PreviewKey
 {
-    private PreviewKey(string normalizedPath, long length, DateTime lastWriteUtc, uint viewportWidth, uint viewportHeight)
+    private PreviewKey(string normalizedPath, long length, DateTime lastWriteUtc, uint viewportWidth, uint viewportHeight, int page)
     {
+        Page = page;
         NormalizedPath = normalizedPath;
         Length = length;
         LastWriteUtc = lastWriteUtc;
@@ -25,10 +27,14 @@ public readonly record struct PreviewKey
 
     public uint ViewportHeight { get; }
 
-    public static PreviewKey Create(string path, long length, DateTime lastWriteUtc, uint viewportWidth, uint viewportHeight)
+    /// <summary>Zero-based page (PDF); 0 for images.</summary>
+    public int Page { get; }
+
+    public static PreviewKey Create(string path, long length, DateTime lastWriteUtc, uint viewportWidth, uint viewportHeight, int page = 0)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
-        return new PreviewKey(path.ToUpperInvariant(), length, lastWriteUtc, viewportWidth, viewportHeight);
+        ArgumentOutOfRangeException.ThrowIfNegative(page);
+        return new PreviewKey(path.ToUpperInvariant(), length, lastWriteUtc, viewportWidth, viewportHeight, page);
     }
 }
 

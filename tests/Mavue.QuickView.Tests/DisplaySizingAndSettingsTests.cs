@@ -1,3 +1,4 @@
+using Mavue.Core.Viewing;
 using Mavue.QuickView.Preview;
 using Mavue.QuickView.Settings;
 

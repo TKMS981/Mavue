@@ -119,4 +119,16 @@ public class PreviewCacheTests
         Assert.Equal(0, cache.Count);
         Assert.Equal(0, cache.Bytes);
     }
+
+    [Fact]
+    public void PreviewKey_DistinguishesPages()
+    {
+        var write = new DateTime(2026, 10, 2, 0, 0, 0, DateTimeKind.Utc);
+        PreviewKey first = PreviewKey.Create(@"C:\a.pdf", 10, write, 800, 600);
+        PreviewKey second = PreviewKey.Create(@"C:\a.pdf", 10, write, 800, 600, page: 1);
+
+        Assert.NotEqual(first, second);
+        Assert.Equal(first, PreviewKey.Create(@"C:\A.PDF", 10, write, 800, 600, page: 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => PreviewKey.Create(@"C:\a.pdf", 10, write, 800, 600, page: -1));
+    }
 }

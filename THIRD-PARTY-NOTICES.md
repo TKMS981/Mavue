@@ -32,11 +32,10 @@ the .NET runtime is not included) contains these third-party files:
 
 ## 3. Other projects in the repository
 
-`Mavue.App` (the editor; not released yet) still references the `Microsoft.WindowsAppSDK` 2.5.1 metapackage. In
-addition to the components above, its output contains Windows App SDK AI, ML, Search, Widgets, DWrite and Runtime
-components (same Microsoft license), Microsoft.Windows.AI.MachineLearning 2.1.74 (Microsoft Software License Terms —
-Microsoft Windows ML Runtime, which includes ONNX Runtime and DirectML; notices in its `ThirdPartyNotices.txt`) and
-System.Numerics.Tensors 9.0.0 (MIT). Only the components the editor really uses will be kept before it is released.
+`Mavue.App` (the main application; not released yet) and the shared viewer library `Mavue.Viewer` reference the same
+Windows App SDK component packages as the Quick View host (listed above), so their output contains the same
+third-party components. The Windows App SDK metapackage (which adds Windows AI, Windows ML with ONNX Runtime and
+DirectML, Search and Widgets) is not used; components are added only when a feature needs them.
 
 ### 3.1 Build-time only (not redistributed)
 

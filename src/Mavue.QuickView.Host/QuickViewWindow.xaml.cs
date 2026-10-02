@@ -1,5 +1,7 @@
 using System.Runtime.InteropServices.WindowsRuntime;
 using Mavue.QuickView.Shell;
+using Mavue.Viewer.Controls;
+using Mavue.Viewer.Playback;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -22,8 +24,19 @@ public sealed partial class QuickViewWindow : Window
     {
         InitializeComponent();
         Handle = Win32Interop.GetWindowFromWindowId(AppWindow.Id);
-        Scroller.SizeChanged += (_, _) => ImageAreaChanged?.Invoke();
-        Root.Loaded += (_, _) => Root.XamlRoot.Changed += (_, _) => ImageAreaChanged?.Invoke();
+
+        // Shared display area (Mavue.Viewer). Quick View's background is always dark, so its texts are light.
+        Surface = new ViewerSurface { KeyboardFocusTarget = Root };
+        Surface.SetTextColors(new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xE0, 0xE0, 0xE0)), new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xD0, 0xD0, 0xD0)));
+        Surface.AreaChanged += () => ImageAreaChanged?.Invoke();
+        SurfaceHost.Children.Add(Surface);
+
+        // handledEventsToo: the ScrollViewer marks wheel events handled even when it cannot scroll.
+        Root.AddHandler(UIElement.PointerWheelChangedEvent, new PointerEventHandler(OnPointerWheelChanged), handledEventsToo: true);
+        var strings = new Microsoft.Windows.ApplicationModel.Resources.ResourceLoader();
+        SetButtonText(PreviousPageButton, strings.GetString("QuickView_PreviousPage"));
+        SetButtonText(NextPageButton, strings.GetString("QuickView_NextPage"));
+
         AppWindow.Closing += (_, args) =>
         {
             // The title-bar close button hides the window; the process stays resident.
@@ -45,6 +58,27 @@ public sealed partial class QuickViewWindow : Window
     /// <summary>Raised for arrow keys while the window has keyboard focus: -1 for ←/↑, +1 for →/↓.</summary>
     public event Action<int>? NavigateRequested;
 
+    /// <summary>
+    /// Raised for PageUp/PageDown (window focused), the mouse wheel over the window, and the page buttons:
+    /// -1 for the previous page, +1 for the next. The controller ignores it unless a multi-page PDF is shown.
+    /// </summary>
+    public event Action<int, string>? PageRequested;
+
+    /// <summary>Diagnostics: every key the window receives (before it is handled).</summary>
+    public event Action<VirtualKey>? KeyReceived;
+
+    /// <summary>Diagnostics: type and name of the element that has keyboard focus, or "none".</summary>
+    public string FocusDescription() =>
+        Root.XamlRoot is { } root && Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(root) is { } focused
+            ? focused is FrameworkElement { Name.Length: > 0 } named ? $"{focused.GetType().Name}#{named.Name}" : focused.GetType().Name
+            : "none";
+
+    /// <summary>Media shortcuts while the window has keyboard focus (see <see cref="MediaCommand"/>).</summary>
+    public event Action<MediaCommand>? MediaCommandRequested;
+
+    /// <summary>Image, video/audio and messages (shared with Mavue.App).</summary>
+    public ViewerSurface Surface { get; }
+
     /// <summary>Win32 handle of the window.</summary>
     public nint Handle { get; }
 
@@ -55,68 +89,25 @@ public sealed partial class QuickViewWindow : Window
     public event Action? ImageAreaChanged;
 
     /// <summary>XAML's scale (physical pixels per device-independent pixel); may lag behind a monitor change.</summary>
-    public double RasterizationScale => Root.XamlRoot?.RasterizationScale ?? 1.0;
+    public double RasterizationScale => Surface.PixelScale;
+
+    /// <summary>Diagnostics: the image area according to the last XAML layout, in physical pixels.</summary>
+    public (int Width, int Height) LayoutImageAreaPixels() => Surface.LayoutAreaPixels();
 
     /// <summary>
     /// Space around the image area in device-independent pixels (padding and the info bar). These do not
     /// depend on the monitor scale, so the controller combines them with the window's real client size and
     /// DPI instead of using the last layout, which is stale right after the window moves to another monitor.
     /// </summary>
-    /// <summary>Diagnostics: the image area according to the last XAML layout, in physical pixels.</summary>
-    public (int Width, int Height) LayoutImageAreaPixels()
-    {
-        double scale = RasterizationScale;
-        return ((int)Math.Floor((Scroller.ActualWidth - Scroller.Padding.Left - Scroller.Padding.Right) * scale),
-                (int)Math.Floor((Scroller.ActualHeight - Scroller.Padding.Top - Scroller.Padding.Bottom) * scale));
-    }
-
     public (double Width, double Height) ImageChromeDip()
     {
         double infoBar = InfoBar.ActualHeight > 0 ? InfoBar.ActualHeight : 56; // before the first layout
-        return (Scroller.Padding.Left + Scroller.Padding.Right, Scroller.Padding.Top + Scroller.Padding.Bottom + infoBar);
-    }
-
-    /// <summary>
-    /// Sizes both images to an exact box (device-independent pixels) so a bitmap decoded for that box
-    /// is shown 1:1 and the placeholder thumbnail occupies the same place. Null restores "fit the area".
-    /// </summary>
-    /// <param name="size">Element size, or null when the final size is not known yet.</param>
-    /// <param name="scrollable">Allow scrolling (actual size larger than the area).</param>
-    public void SetImageBox((double Width, double Height)? size, bool scrollable)
-    {
-        foreach (Microsoft.UI.Xaml.Controls.Image image in new[] { ThumbnailImage, FullImage })
-        {
-            if (size is { } box)
-            {
-                image.Width = box.Width;
-                image.Height = box.Height;
-                image.Stretch = Stretch.Fill;
-            }
-            else
-            {
-                image.Width = double.NaN;
-                image.Height = double.NaN;
-                image.Stretch = Stretch.Uniform;
-            }
-        }
-
-        var bar = scrollable ? Microsoft.UI.Xaml.Controls.ScrollBarVisibility.Auto : Microsoft.UI.Xaml.Controls.ScrollBarVisibility.Disabled;
-        var mode = scrollable ? Microsoft.UI.Xaml.Controls.ScrollMode.Auto : Microsoft.UI.Xaml.Controls.ScrollMode.Disabled;
-        Scroller.HorizontalScrollBarVisibility = bar;
-        Scroller.VerticalScrollBarVisibility = bar;
-        Scroller.HorizontalScrollMode = mode;
-        Scroller.VerticalScrollMode = mode;
-        if (!scrollable)
-        {
-            Scroller.ChangeView(0, 0, null, disableAnimation: true);
-        }
+        return (2 * ViewerSurface.ContentPadding, (2 * ViewerSurface.ContentPadding) + infoBar);
     }
 
     public void ResetContent(string fileName)
     {
-        ReplaceSource(ThumbnailImage, null);
-        ReplaceSource(FullImage, null);
-        StatusText.Text = string.Empty;
+        Surface.ShowStatusOnly(string.Empty);
         NameText.Text = fileName;
         InfoText.Text = string.Empty;
     }
@@ -128,19 +119,7 @@ public sealed partial class QuickViewWindow : Window
     {
         NameText.Text = fileName;
         InfoText.Text = string.Empty;
-        StatusText.Text = string.Empty;
-    }
-
-    public void SetStatus(string status) => StatusText.Text = status;
-
-    /// <summary>
-    /// Shows only a message: any image of a previous item is removed so it cannot be mistaken for
-    /// the current file (e.g. when the current file cannot be previewed).
-    /// </summary>
-    public void ShowStatusOnly(string status)
-    {
-        ClearImages();
-        StatusText.Text = status;
+        Surface.SetStatus(string.Empty);
     }
 
     public void SetThumbnail(BgraImage image)
@@ -152,51 +131,59 @@ public sealed partial class QuickViewWindow : Window
         }
 
         bitmap.Invalidate();
-        ReplaceSource(ThumbnailImage, bitmap);
-        ReplaceSource(FullImage, null); // a previous item's full image would cover the new thumbnail
-    }
-
-    public bool HasFullImage => FullImage.Source is not null && ThumbnailImage.Source is null;
-
-    public void SetFullImage(ImageSource source)
-    {
-        ReplaceSource(FullImage, source);
-        ReplaceSource(ThumbnailImage, null);
-        StatusText.Text = string.Empty;
-    }
-
-    /// <summary>Puts a not-yet-decoded image above the thumbnail; the thumbnail stays until <see cref="CommitFullImage"/>.</summary>
-    public void SetFullImagePending(ImageSource source) => ReplaceSource(FullImage, source);
-
-    /// <summary>Drops the thumbnail once the full image is decoded.</summary>
-    public void CommitFullImage()
-    {
-        ReplaceSource(ThumbnailImage, null);
-        StatusText.Text = string.Empty;
-    }
-
-    public void ClearImages()
-    {
-        ReplaceSource(ThumbnailImage, null);
-        ReplaceSource(FullImage, null);
-    }
-
-    /// <summary>
-    /// Sets an image source and disposes the previous one. Decoded surfaces (SoftwareBitmapSource) hold
-    /// native memory that is otherwise released only when the garbage collector finalizes them, which kept
-    /// the resident process large after Quick View closed (measured).
-    /// </summary>
-    private static void ReplaceSource(Microsoft.UI.Xaml.Controls.Image image, ImageSource? source)
-    {
-        ImageSource? previous = image.Source;
-        image.Source = source;
-        if (previous is IDisposable disposable && !ReferenceEquals(previous, source))
-        {
-            disposable.Dispose();
-        }
+        Surface.SetThumbnail(bitmap);
     }
 
     public void FocusContent() => Root.Focus(FocusState.Programmatic);
+
+    /// <summary>Shows the page buttons for a multi-page PDF (enabled only where a step is possible), or hides them.</summary>
+    public void SetPageControls(bool visible, bool canPrevious, bool canNext)
+    {
+        PageButtons.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        PreviousPageButton.IsEnabled = canPrevious;
+        NextPageButton.IsEnabled = canNext;
+        Surface.ResetWheel();
+    }
+
+    private static void SetButtonText(Microsoft.UI.Xaml.Controls.Button button, string text)
+    {
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, text);
+        Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(button, text);
+    }
+
+    private void OnPreviousPageClick(object sender, RoutedEventArgs e) => RequestPageFromButton(-1);
+
+    private void OnNextPageClick(object sender, RoutedEventArgs e) => RequestPageFromButton(+1);
+
+    private void RequestPageFromButton(int delta)
+    {
+        Root.Focus(FocusState.Programmatic); // keep Space/Esc on the window, not on the button
+        PageRequested?.Invoke(delta, "button");
+    }
+
+    private static MediaCommand? MediaShortcut(VirtualKey key, bool control) => (key, control) switch
+    {
+        (VirtualKey.Enter, false) => MediaCommand.TogglePlay,
+        (VirtualKey.Left, true) => MediaCommand.SeekBackward,
+        (VirtualKey.Right, true) => MediaCommand.SeekForward,
+        (VirtualKey.Up, true) => MediaCommand.VolumeUp,
+        (VirtualKey.Down, true) => MediaCommand.VolumeDown,
+        _ => null,
+    };
+
+    private void OnPointerWheelChanged(object sender, PointerRoutedEventArgs e)
+    {
+        if (PageButtons.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
+        if (Surface.WheelPageStep(e.GetCurrentPoint(Root).Properties.MouseWheelDelta) is { } step)
+        {
+            e.Handled = true;
+            PageRequested?.Invoke(step, "wheel");
+        }
+    }
 
     public void CloseForExit()
     {
@@ -206,6 +193,20 @@ public sealed partial class QuickViewWindow : Window
 
     private void OnRootKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        KeyReceived?.Invoke(e.Key);
+        bool control = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+        if (Surface.ShowsMedia && MediaShortcut(e.Key, control) is { } command)
+        {
+            // Media keys use Enter and Ctrl+arrows, so plain arrows (files), Space/Esc (close) and PageUp/PageDown keep their meaning.
+            e.Handled = true;
+            if (command != MediaCommand.TogglePlay || !e.KeyStatus.WasKeyDown) // a held Enter toggles once
+            {
+                MediaCommandRequested?.Invoke(command);
+            }
+
+            return;
+        }
+
         switch (e.Key)
         {
             case VirtualKey.Left or VirtualKey.Up:
@@ -215,6 +216,14 @@ public sealed partial class QuickViewWindow : Window
             case VirtualKey.Right or VirtualKey.Down:
                 e.Handled = true;
                 NavigateRequested?.Invoke(+1);
+                break;
+            case VirtualKey.PageUp:
+                e.Handled = true;
+                PageRequested?.Invoke(-1, "window-page");
+                break;
+            case VirtualKey.PageDown:
+                e.Handled = true;
+                PageRequested?.Invoke(+1, "window-page");
                 break;
             case VirtualKey.Escape or VirtualKey.Space when !e.KeyStatus.WasKeyDown:
                 // Auto-repeat ignored so a held Space cannot toggle repeatedly.

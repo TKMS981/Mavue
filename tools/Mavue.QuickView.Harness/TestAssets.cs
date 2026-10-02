@@ -123,6 +123,55 @@ internal static class TestAssets
         return pixels;
     }
 
+    /// <summary>
+    /// A valid A4 PDF with <paramref name="pages"/> pages; each page has its own fill color and "Page n" text,
+    /// so the pages are distinguishable on screen.
+    /// </summary>
+    internal static byte[] MultiPagePdf(int pages)
+    {
+        // Objects: 1 catalog, 2 page tree, 3 font, then a page and its content stream per page.
+        var objects = new List<string>
+        {
+            "<< /Type /Catalog /Pages 2 0 R >>",
+            string.Empty, // page tree, filled in below
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        };
+        var kids = new List<string>();
+        for (int i = 0; i < pages; i++)
+        {
+            double r = 0.2 + (0.6 * i / Math.Max(1, pages - 1)), b = 0.8 - (0.6 * i / Math.Max(1, pages - 1));
+            string content = FormattableString.Invariant($"{r:0.00} 0.40 {b:0.00} rg 40 40 515 762 re f\n1 1 1 rg BT /F1 48 Tf 70 740 Td (Page {i + 1}) Tj ET\n");
+            int pageObject = objects.Count + 1;
+            objects.Add($"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents {pageObject + 1} 0 R >>");
+            objects.Add($"<< /Length {Encoding.ASCII.GetByteCount(content)} >>\nstream\n{content}endstream");
+            kids.Add($"{pageObject} 0 R");
+        }
+
+        objects[1] = $"<< /Type /Pages /Kids [{string.Join(' ', kids)}] /Count {pages} >>";
+        return BuildPdf(objects);
+    }
+
+    private static byte[] BuildPdf(List<string> objects)
+    {
+        var pdf = new StringBuilder("%PDF-1.7\n");
+        var offsets = new List<int>();
+        for (int i = 0; i < objects.Count; i++)
+        {
+            offsets.Add(Encoding.ASCII.GetByteCount(pdf.ToString()));
+            pdf.Append(i + 1).Append(" 0 obj\n").Append(objects[i]).Append("\nendobj\n");
+        }
+
+        int xref = Encoding.ASCII.GetByteCount(pdf.ToString());
+        pdf.Append("xref\n0 ").Append(objects.Count + 1).Append("\n0000000000 65535 f \n");
+        foreach (int offset in offsets)
+        {
+            pdf.Append(offset.ToString("D10", System.Globalization.CultureInfo.InvariantCulture)).Append(" 00000 n \n");
+        }
+
+        pdf.Append("trailer\n<< /Size ").Append(objects.Count + 1).Append(" /Root 1 0 R >>\nstartxref\n").Append(xref).Append("\n%%EOF\n");
+        return Encoding.ASCII.GetBytes(pdf.ToString());
+    }
+
     /// <summary>A valid single-page A4 PDF with a large colored rectangle and ASCII text.</summary>
     private static byte[] MinimalPdf()
     {

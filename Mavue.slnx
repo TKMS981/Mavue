@@ -13,6 +13,7 @@
     <Project Path="src/Mavue.QuickView/Mavue.QuickView.csproj" />
     <Project Path="src/Mavue.Scan/Mavue.Scan.csproj" />
     <Project Path="src/Mavue.Shell/Mavue.Shell.csproj" />
+    <Project Path="src/Mavue.Viewer/Mavue.Viewer.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Mavue.Core.Tests/Mavue.Core.Tests.csproj" />

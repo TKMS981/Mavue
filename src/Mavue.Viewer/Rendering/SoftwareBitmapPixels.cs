@@ -4,14 +4,14 @@ using Windows.Foundation;
 using Windows.Graphics.Imaging;
 using WinRT;
 
-namespace Mavue.QuickView.Host;
+namespace Mavue.Viewer.Rendering;
 
 /// <summary>
 /// Lets WIC write decoded pixels straight into a <see cref="SoftwareBitmap"/>'s memory. Going through a
 /// managed array first cost one extra full-size copy per decode (96 MB for a 24 MP photo shown at actual
 /// size) and left large-object-heap garbage behind until the next full collection (measured).
 /// </summary>
-internal static unsafe class SoftwareBitmapPixels
+public static unsafe class SoftwareBitmapPixels
 {
     // IMemoryBufferByteAccess (robuffer.h / MemoryBuffer.h)
     private static readonly Guid MemoryBufferByteAccessId = new("5B0D3235-4DBA-4D44-865E-8F1D0E4FD04D");
