@@ -12,6 +12,7 @@ internal static partial class NativeMethods
     public static readonly nint HWND_TOPMOST = -1;
     public static readonly nint HWND_NOTOPMOST = -2;
     public const uint DWMWA_CLOAK = 13;
+    public const uint GA_PARENT = 1;
     public const uint GA_ROOT = 2;
     public const uint GW_HWNDNEXT = 2;
 
@@ -20,6 +21,12 @@ internal static partial class NativeMethods
 
     [LibraryImport("user32.dll")]
     public static partial nint GetForegroundWindow();
+
+    [LibraryImport("user32.dll")]
+    public static partial uint GetDpiForWindow(nint hwnd);
+
+    [LibraryImport("user32.dll")]
+    public static partial uint GetDpiForSystem();
 
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

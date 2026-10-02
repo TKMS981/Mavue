@@ -53,12 +53,34 @@ internal enum DecoderMode
     Xaml,
 }
 
+/// <summary>What to do when another Space-key preview tool (QuickLook, Seer) is running.</summary>
+internal enum OtherQuickLookPolicy
+{
+    /// <summary>
+    /// Default. Keep Mavue's hook first in the low-level hook chain so Mavue handles Space and the other
+    /// tool never sees it (measured: QuickLook passes Space on, so whichever hook is first decides).
+    /// </summary>
+    Prefer,
+
+    /// <summary>Leave Space to the other tool while it runs (Mavue stays reachable from the context menu).</summary>
+    Yield,
+}
+
 /// <summary>Command-line options. Unknown arguments are ignored.</summary>
 internal sealed record HostOptions
 {
     public ActivationMode Activation { get; init; } = ActivationMode.Panel;
 
     public DecoderMode Decoder { get; init; } = DecoderMode.WinRt;
+
+    /// <summary>Decode JPEG through WIC directly (faster; falls back to WinRT for color-managed images). Off for comparison.</summary>
+    public bool UseWicForJpeg { get; init; } = true;
+
+    /// <summary>Settings file (default: %LOCALAPPDATA%\Mavue\QuickView\settings.json). Tests use their own.</summary>
+    public string? SettingsPath { get; init; }
+
+    /// <summary>After Quick View hides, compact the managed heap (decode buffers are large and short-lived).</summary>
+    public bool IdleTrim { get; init; } = true;
 
     /// <summary>Scaling interpolation for the WinRT decode path (fant|linear|cubic|nearest), for measurement.</summary>
     public string Interpolation { get; init; } = "fant";
@@ -68,6 +90,8 @@ internal sealed record HostOptions
 
     /// <summary>Render the hidden window once at startup so the first Space does not pay XAML/DWM setup.</summary>
     public bool Prewarm { get; init; } = true;
+
+    public OtherQuickLookPolicy OtherQuickLook { get; init; } = OtherQuickLookPolicy.Prefer;
 
     /// <summary>Also react to Space in Open/Save dialogs.</summary>
     public bool IncludeFileDialogs { get; init; }
@@ -113,6 +137,20 @@ internal sealed record HostOptions
                 case "--timing-log" when next is not null:
                     options = options with { TimingLog = next };
                     i++;
+                    break;
+                case "--other-quicklook" when next is not null:
+                    options = options with { OtherQuickLook = next.Equals("yield", StringComparison.OrdinalIgnoreCase) ? OtherQuickLookPolicy.Yield : OtherQuickLookPolicy.Prefer };
+                    i++;
+                    break;
+                case "--settings" when next is not null:
+                    options = options with { SettingsPath = next };
+                    i++;
+                    break;
+                case "--no-idle-trim":
+                    options = options with { IdleTrim = false };
+                    break;
+                case "--no-wic":
+                    options = options with { UseWicForJpeg = false };
                     break;
                 case "--no-prewarm":
                     options = options with { Prewarm = false };

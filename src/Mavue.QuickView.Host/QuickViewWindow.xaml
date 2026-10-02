@@ -11,12 +11,23 @@
       <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
 
-    <Image x:Name="ThumbnailImage" Stretch="Uniform" Margin="12" />
-    <Image x:Name="FullImage" Stretch="Uniform" Margin="12" />
+    <!-- Images are sized explicitly (one decoded pixel per screen pixel). Scrolling is enabled only
+         in actual-size mode when the image is larger than the area. -->
+    <ScrollViewer x:Name="Scroller" Padding="12" IsTabStop="False" ZoomMode="Disabled"
+                  HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Disabled"
+                  HorizontalScrollMode="Disabled" VerticalScrollMode="Disabled">
+      <Grid x:Name="ImageHost" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <Image x:Name="ThumbnailImage" Stretch="Uniform" />
+        <Image x:Name="FullImage" Stretch="Uniform" />
+      </Grid>
+    </ScrollViewer>
+
     <TextBlock x:Name="StatusText" HorizontalAlignment="Center" VerticalAlignment="Center"
                Foreground="#FFE0E0E0" TextWrapping="Wrap" MaxWidth="560" TextAlignment="Center" />
 
-    <StackPanel Grid.Row="1" Padding="16,8,16,12" Spacing="2" Background="#FF181818">
+    <!-- The image scale (fit without enlarging / actual size) is a setting, not an in-window control
+         (user decision): it is read from settings.json each time Quick View opens. -->
+    <StackPanel x:Name="InfoBar" Grid.Row="1" Padding="16,8,16,12" Spacing="2" Background="#FF181818">
       <TextBlock x:Name="NameText" Foreground="#FFF2F2F2" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
       <TextBlock x:Name="InfoText" Foreground="#FFB0B0B0" FontSize="12" TextTrimming="CharacterEllipsis" />
     </StackPanel>

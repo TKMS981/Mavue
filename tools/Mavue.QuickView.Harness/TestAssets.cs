@@ -80,7 +80,7 @@ internal static class TestAssets
         }
     }
 
-    private static async Task EncodeAsync(string path, Guid encoderId, uint width, uint height, double? quality)
+    internal static async Task EncodeAsync(string path, Guid encoderId, uint width, uint height, double? quality)
     {
         byte[] pixels = Pattern(width, height);
         using IRandomAccessStream stream = await FileRandomAccessStream.OpenAsync(path, FileAccessMode.ReadWrite, StorageOpenOptions.None, FileOpenDisposition.CreateAlways);

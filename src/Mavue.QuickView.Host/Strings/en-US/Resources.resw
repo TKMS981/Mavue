@@ -45,4 +45,10 @@
   <data name="QuickView_Error_Failed" xml:space="preserve">
     <value>This file could not be previewed. It may be damaged or in an unsupported format.</value>
   </data>
+  <data name="QuickView_Position" xml:space="preserve">
+    <value>{0} / {1}</value>
+  </data>
+  <data name="QuickView_ActualSizeTooLarge" xml:space="preserve">
+    <value>shown fitted: actual size is limited to 50 megapixels</value>
+  </data>
 </root>

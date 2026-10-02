@@ -6,6 +6,7 @@ using Mavue.QuickView.Harness;
 //
 //   Mavue.QuickView.Harness [--activation panel|noactivate|auto|hookgrant|setforeground|appwindow|attach|noactivate-topmost]
 //                           [--attach-host <timing log of an independently started host>] [--child-host]
+//                           [--no-navigation] [--quicklook-after-host <seconds>] [--host <path to Mavue.QuickView.Host.exe>]
 //                           [--decoder winrt|xaml] [--warm] [--list-explorer] [--thumb <file>]
 //                           [--iterations N] [--cases small-jpeg,pdf,...] [--huge] [--no-prewarm]
 //                           [--no-scenarios] [--configuration Debug|Release] [--out report.json]
@@ -34,11 +35,17 @@ var options = new HarnessOptions
     Prewarm = !args.Contains("--no-prewarm"),
     Scenarios = !args.Contains("--no-scenarios"),
     Cold = !args.Contains("--warm"),
-    HostPath = Path.Combine(repo, "src", "Mavue.QuickView.Host", binTail, "Mavue.QuickView.Host.exe"),
+    Navigation = !args.Contains("--no-navigation"),
+    QuickLookAfterHostSeconds = args.Contains("--quicklook-after-host") ? int.Parse(Arg("--quicklook-after-host", "12"), CultureInfo.InvariantCulture) : null,
+    HostPath = args.Contains("--host") ? Path.GetFullPath(Arg("--host", "")) : Path.Combine(repo, "src", "Mavue.QuickView.Host", binTail, "Mavue.QuickView.Host.exe"),
     AppPath = Path.Combine(repo, "src", "Mavue.App", binTail, "Mavue.exe"),
     WorkDirectory = Path.Combine(Path.GetTempPath(), "Mavue.QuickView.E2E"),
     AttachHostLog = args.Contains("--attach-host") ? Arg("--attach-host", "") : null,
     ChildHost = args.Contains("--child-host"),
+    HostExtraArgs = Arg("--host-args", ""),
+    ScaleMode = Arg("--scale", "fit"),
+    SettleMilliseconds = int.Parse(Arg("--settle", "500"), CultureInfo.InvariantCulture),
+    PauseAfterSampleMilliseconds = int.Parse(Arg("--pause", "0"), CultureInfo.InvariantCulture),
 };
 
 if (args.Contains("--thumb"))

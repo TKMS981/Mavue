@@ -14,7 +14,16 @@ internal sealed record HarnessOptions
     public bool IncludeHuge { get; init; }
     public bool Prewarm { get; init; } = true;
     public bool Scenarios { get; init; } = true;
+
+    /// <summary>Run the Explorer-selection navigation scenarios (single and multi-selection).</summary>
+    public bool Navigation { get; init; } = true;
+
+    /// <summary>If set, (re)start QuickLook after the host and wait this many seconds before measuring.</summary>
+    public int? QuickLookAfterHostSeconds { get; init; }
     public int SettleMilliseconds { get; init; } = 500;
+
+    /// <summary>Pause after each open/close sample, e.g. to let the host record its idle memory (1 s after hiding).</summary>
+    public int PauseAfterSampleMilliseconds { get; init; }
 
     /// <summary>
     /// Before every Space, activate an unrelated window and then Explorer, so Quick View never benefits
@@ -37,6 +46,12 @@ internal sealed record HarnessOptions
     /// Default is a detached start through WMI (Win32_Process.Create), so the host's parent is unrelated.
     /// </summary>
     public bool ChildHost { get; init; }
+
+    /// <summary>Extra command-line arguments passed to the host (e.g. "--no-idle-trim").</summary>
+    public string HostExtraArgs { get; init; } = string.Empty;
+
+    /// <summary>Image scale mode written to the host's private settings file: "fit" (default) or "actual".</summary>
+    public string ScaleMode { get; init; } = "fit";
 }
 
 /// <summary>One Space → preview → Esc measurement. Times are milliseconds after the injected Space.</summary>
@@ -76,11 +91,11 @@ internal sealed record Sample
 internal sealed record ScenarioResult(string Name, bool Passed, string Expected, string Observed);
 
 /// <summary>Drives Explorer + Mavue.QuickView.Host on the real desktop and records what actually happened.</summary>
-internal sealed class Runner(HarnessOptions options, Action<string> log) : IDisposable
+internal sealed partial class Runner(HarnessOptions options, Action<string> log) : IDisposable
 {
     private const string ExplorerClass = "CabinetWClass";
     private const string ItemViewClass = "DirectUIHWND";
-    private static readonly double TicksPerMs = Stopwatch.Frequency / 1000.0;
+    internal static readonly double TicksPerMs = Stopwatch.Frequency / 1000.0;
 
     private readonly ExplorerSelectionProvider _shell = new();
     private readonly List<nint> _createdExplorers = [];
@@ -130,6 +145,11 @@ internal sealed class Runner(HarnessOptions options, Action<string> log) : IDisp
             // ordinary use of other apps. The reverse order measurably flatters foreground behavior.
             StartHost();
             StartNeutralApp();
+            if (options.QuickLookAfterHostSeconds is { } wait)
+            {
+                StartQuickLookAfterHost(wait);
+            }
+
             nint firstExplorer = 0;
             foreach (TestAsset asset in assets)
             {
@@ -146,7 +166,15 @@ internal sealed class Runner(HarnessOptions options, Action<string> log) : IDisp
                     Sample sample = MeasureOpenAndEscape(asset, explorer, i);
                     _samples.Add(sample);
                     log($"{asset.Case} #{i}: {(sample.Ok ? "OK" : "FAIL")} full={sample.FullVisibleMs:0.0}ms pixel={sample.ScreenPixelMs:0.0}ms fg={sample.ForegroundAtShown} {sample.Note}");
+                    Thread.Sleep(options.PauseAfterSampleMilliseconds);
                 }
+            }
+
+            if (options.Navigation && assets.Count > 0)
+            {
+                RunNavigationScenarios(assets);
+                RunTabScenario(assets);
+                RunDisplayScenarios(assets);
             }
 
             TestAsset? small = assets.FirstOrDefault(a => a.Case == "small-jpeg");
@@ -161,6 +189,15 @@ internal sealed class Runner(HarnessOptions options, Action<string> log) : IDisp
         }
         finally
         {
+            if (_host is { HasExited: false })
+            {
+                // Resident cost while Quick View is hidden (after a short settle, caches cleared on hide).
+                Thread.Sleep(1500);
+                _host.Refresh();
+                Environment["hostIdleWorkingSetMb"] = Math.Round(_host.WorkingSet64 / (1024.0 * 1024), 1);
+                Environment["hostIdlePrivateMb"] = Math.Round(_host.PrivateMemorySize64 / (1024.0 * 1024), 1);
+            }
+
             ShutdownHost();
             if (_neutralApp is { HasExited: false })
             {
@@ -203,7 +240,11 @@ internal sealed class Runner(HarnessOptions options, Action<string> log) : IDisp
 
         string logPath = Path.Combine(options.WorkDirectory, $"timing-{DateTime.Now:yyyyMMdd-HHmmss}.jsonl");
         _log = new TimingLog(logPath);
-        string args = $"--activation {options.Activation} --decoder {options.Decoder} --interpolation {options.Interpolation} --timing-log \"{logPath}\"" + (options.Prewarm ? string.Empty : " --no-prewarm") + " --trace-shell";
+        // The host gets its own settings file so the user's Quick View preferences are never read or changed.
+        string settingsPath = Path.Combine(options.WorkDirectory, "settings-e2e.json");
+        File.WriteAllText(settingsPath, $"{{\"version\": 1, \"imageScale\": \"{(options.ScaleMode == "actual" ? "ActualSize" : "FitNoUpscale")}\"}}");
+        Environment["scaleMode"] = options.ScaleMode;
+        string args = $"--activation {options.Activation} --decoder {options.Decoder} --interpolation {options.Interpolation} --timing-log \"{logPath}\" --settings \"{settingsPath}\"" + (options.Prewarm ? string.Empty : " --no-prewarm") + " --trace-shell " + options.HostExtraArgs;
         long start = Stopwatch.GetTimestamp();
         if (options.ChildHost)
         {

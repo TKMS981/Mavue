@@ -25,6 +25,9 @@ public sealed class KeyboardHook : IDisposable
     private const int VkRWin = 0x5C;
     private const uint LlkhfInjected = 0x10;
     private const uint ImeQueryTimeoutMs = 30;
+    private const int VkLeft = 0x25;
+    private const int VkDown = 0x28;
+    private const uint WmReinstall = 0x8000 + 1; // WM_APP + 1, posted to the hook thread
 
     private static KeyboardHook? s_instance;
 
@@ -37,6 +40,8 @@ public sealed class KeyboardHook : IDisposable
     private nint _hook;
     private bool _spaceDown;
     private bool _swallowingSpace;
+    private int _swallowedArrow;
+    private int _reinstallCount;
 
     /// <param name="classifier">Decides whether a Space press opens Quick View.</param>
     /// <param name="onTrigger">Called on the hook thread; must not block (enqueue and return).</param>
@@ -60,6 +65,33 @@ public sealed class KeyboardHook : IDisposable
     /// moment). Must be fast; its result is carried in <see cref="SpaceTrigger.HookProbeResult"/>.
     /// </summary>
     public Func<bool>? AcceptedProbe { get; set; }
+
+    /// <summary>
+    /// Optional handler for unmodified arrow keys (←↑→↓) pressed while a shell item view has the focus.
+    /// Called on the hook thread with the virtual-key code and the foreground window; return true to
+    /// swallow the key (Quick View steps through a multi-selection itself). Must not block.
+    /// </summary>
+    public Func<int, nint, bool>? NavigationKeyHandler { get; set; }
+
+    /// <summary>When true, Space is never taken (another Quick Look tool was given priority by the user).</summary>
+    public bool SuspendSpace { get; set; }
+
+    /// <summary>How many times the hook was re-installed (see <see cref="Reinstall"/>).</summary>
+    public int ReinstallCount => Volatile.Read(ref _reinstallCount);
+
+    /// <summary>
+    /// Re-installs the hook at the head of the low-level hook chain (Windows calls the most recently
+    /// installed hook first). Restores priority over tools that hooked the keyboard later (e.g. QuickLook,
+    /// which then sees Space first and lets it through, causing a double preview) and recovers a hook
+    /// that Windows removed silently after a callback timeout. Non-blocking; runs on the hook thread.
+    /// </summary>
+    public void Reinstall()
+    {
+        if (_threadId != 0)
+        {
+            Win32.PostThreadMessageW(_threadId, WmReinstall, 0, 0);
+        }
+    }
 
     /// <summary>Last decision, for diagnostics (classes only, no key content).</summary>
     public event Action<SpaceKeyContext, PassThroughReason>? Classified;
@@ -125,9 +157,20 @@ public sealed class KeyboardHook : IDisposable
         _started.Set();
         try
         {
-            while (Win32.GetMessageW(out _, 0, 0, 0) > 0)
+            while (Win32.GetMessageW(out Win32.MSG message, 0, 0, 0) > 0)
             {
                 // Low-level hook callbacks are delivered while this thread waits in GetMessage.
+                if (message.message == WmReinstall)
+                {
+                    // Install the new hook before removing the old one so no key press is missed.
+                    nint replacement = Win32.SetWindowsHookExW(Win32.WH_KEYBOARD_LL, &HookProc, Win32.GetModuleHandleW(null), 0);
+                    if (replacement != 0)
+                    {
+                        Win32.UnhookWindowsHookEx(_hook);
+                        _hook = replacement;
+                        Interlocked.Increment(ref _reinstallCount);
+                    }
+                }
             }
         }
         finally
@@ -173,6 +216,11 @@ public sealed class KeyboardHook : IDisposable
             return isDown ? OnSpaceDown(now, (info->flags & LlkhfInjected) != 0) : OnSpaceUp();
         }
 
+        if (vk is >= VkLeft and <= VkDown)
+        {
+            return OnArrow(vk, isDown);
+        }
+
         if (!isDown)
         {
             return false;
@@ -202,6 +250,12 @@ public sealed class KeyboardHook : IDisposable
         }
 
         _spaceDown = true;
+        if (SuspendSpace)
+        {
+            _swallowingSpace = false;
+            return false;
+        }
+
         nint foreground = Win32.GetForegroundWindow();
         nint focus = GetFocus(foreground, out nint focusParent);
 
@@ -224,6 +278,36 @@ public sealed class KeyboardHook : IDisposable
         }
 
         return _swallowingSpace;
+    }
+
+    private bool OnArrow(int vk, bool isDown)
+    {
+        if (!isDown)
+        {
+            // Swallow the key-up of an arrow whose key-down we took, so Explorer sees a consistent pair.
+            bool swallowUp = _swallowedArrow == vk;
+            _swallowedArrow = swallowUp ? 0 : _swallowedArrow;
+            return swallowUp;
+        }
+
+        if (NavigationKeyHandler is not { } handler ||
+            IsDown(VkControl) || IsDown(VkMenu) || IsDown(VkShift) || IsDown(VkLWin) || IsDown(VkRWin))
+        {
+            return false;
+        }
+
+        nint foreground = Win32.GetForegroundWindow();
+        nint focus = GetFocus(foreground, out nint focusParent);
+        bool itemViewFocused =
+            Win32.GetClassName(focusParent) == SpaceKeyClassifier.ShellViewClass &&
+            Win32.GetClassName(focus) is SpaceKeyClassifier.DirectUiViewClass or SpaceKeyClassifier.ListViewClass;
+        if (!itemViewFocused || !handler(vk, foreground))
+        {
+            return false;
+        }
+
+        _swallowedArrow = vk;
+        return true;
     }
 
     private bool OnSpaceUp()

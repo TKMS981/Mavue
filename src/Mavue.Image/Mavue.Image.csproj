@@ -4,6 +4,8 @@
     <TargetFramework>$(MavueWindowsTfm)</TargetFramework>
     <TargetPlatformMinVersion>$(MavueMinWindows)</TargetPlatformMinVersion>
     <RootNamespace>Mavue.Image</RootNamespace>
+    <!-- WIC is called through COM vtables and LibraryImport (no runtime marshalling). -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Mavue.Core\Mavue.Core.csproj" />

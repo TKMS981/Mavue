@@ -76,6 +76,115 @@ internal partial interface IShellView
     // IOleWindow
     [PreserveSig]
     int GetWindow(out nint hwnd);
+
+    void ContextSensitiveHelp(int enterMode);
+
+    // IShellView
+    void TranslateAccelerator(nint msg);
+    void EnableModeless(int enable);
+    void UIActivate(uint state);
+    void Refresh();
+    void CreateViewWindow(nint previous, nint settings, nint browser, nint rect, out nint hwnd);
+    void DestroyViewWindow();
+    void GetCurrentInfo(nint settings);
+    void AddPropertySheetPages(uint reserved, nint callback, nint lParam);
+    void SaveViewState();
+    void SelectItem(nint pidl, uint flags);
+
+    /// <summary>SVGIO_BACKGROUND + IID_IDispatch returns the view's automation object (ShellFolderView).</summary>
+    [PreserveSig]
+    int GetItemObject(uint item, in Guid riid, out nint obj);
+}
+
+[GeneratedComInterface]
+[Guid("B196B284-BAB4-101A-B69C-00AA00341D07")]
+internal partial interface IConnectionPointContainer
+{
+    void EnumConnectionPoints(out nint enumerator);
+
+    [PreserveSig]
+    int FindConnectionPoint(in Guid riid, out nint connectionPoint);
+}
+
+[GeneratedComInterface]
+[Guid("B196B286-BAB4-101A-B69C-00AA00341D07")]
+internal partial interface IConnectionPoint
+{
+    void GetConnectionInterface(out Guid iid);
+    void GetConnectionPointContainer(out nint container);
+
+    [PreserveSig]
+    int Advise(nint sink, out uint cookie);
+
+    [PreserveSig]
+    int Unadvise(uint cookie);
+}
+
+/// <summary>IDispatch layout used by event sinks. Explorer only calls Invoke on outgoing (event) interfaces.</summary>
+[GeneratedComInterface]
+[Guid("00020400-0000-0000-C000-000000000046")]
+internal partial interface IDispatchSink
+{
+    [PreserveSig]
+    int GetTypeInfoCount(out uint count);
+
+    [PreserveSig]
+    int GetTypeInfo(uint index, uint lcid, out nint typeInfo);
+
+    [PreserveSig]
+    int GetIDsOfNames(in Guid riid, nint names, uint count, uint lcid, nint dispIds);
+
+    [PreserveSig]
+    int Invoke(int dispId, in Guid riid, uint lcid, ushort flags, nint parameters, nint result, nint exceptionInfo, nint argumentError);
+}
+
+/// <summary>DShellFolderViewEvents (shldisp.h): SelectionChanged = 200, EnumDone = 201.</summary>
+[GeneratedComInterface]
+[Guid("62112AA2-EBE4-11CF-A5FB-0020AFE7292D")]
+internal partial interface IShellFolderViewEventsSink : IDispatchSink
+{
+}
+
+/// <summary>DWebBrowserEvents2 (exdisp.h): NavigateComplete2 = 252, OnQuit = 253.</summary>
+[GeneratedComInterface]
+[Guid("34A715A0-6587-11D0-924A-0020AFC7AC4D")]
+internal partial interface IWebBrowserEventsSink : IDispatchSink
+{
+}
+
+/// <summary>Receives dispinterface events and forwards the DISPID. Runs on the thread that advised (an STA).</summary>
+[GeneratedComClass]
+internal sealed partial class DispatchEventSink(Action<int> onEvent) : IShellFolderViewEventsSink, IWebBrowserEventsSink
+{
+    private const int ENotImpl = unchecked((int)0x80004001);
+
+    public int GetTypeInfoCount(out uint count)
+    {
+        count = 0;
+        return 0;
+    }
+
+    public int GetTypeInfo(uint index, uint lcid, out nint typeInfo)
+    {
+        typeInfo = 0;
+        return ENotImpl;
+    }
+
+    public int GetIDsOfNames(in Guid riid, nint names, uint count, uint lcid, nint dispIds) => ENotImpl;
+
+    public int Invoke(int dispId, in Guid riid, uint lcid, ushort flags, nint parameters, nint result, nint exceptionInfo, nint argumentError)
+    {
+        try
+        {
+            onEvent(dispId);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Mavue shell event sink error: {ex.GetType().Name}");
+        }
+
+        return 0;
+    }
 }
 
 [GeneratedComInterface]

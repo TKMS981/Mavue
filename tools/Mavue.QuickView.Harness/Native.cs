@@ -6,6 +6,9 @@ namespace Mavue.QuickView.Harness;
 internal static partial class Native
 {
     public const ushort VK_SPACE = 0x20;
+    public const ushort VK_LEFT = 0x25;
+    public const ushort VK_RIGHT = 0x27;
+    public const ushort VK_DOWN = 0x28;
     public const ushort VK_ESCAPE = 0x1B;
     public const ushort VK_TAB = 0x09;
     public const ushort VK_MENU = 0x12;

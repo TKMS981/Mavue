@@ -1,17 +1,27 @@
 using System.Collections.Concurrent;
+using System.Runtime.InteropServices;
 
 namespace Mavue.QuickView.Host;
 
 /// <summary>
-/// A dedicated single-threaded-apartment thread that runs queued work in order. Shell COM objects
-/// (IShellWindows, IShellBrowser, shell items) are used only from such threads; see
-/// ExplorerSelectionProvider for the measured MTA failure. Blocking waits on an STA thread pump COM
-/// messages in .NET, so cross-process calls and their callbacks are serviced.
+/// A dedicated single-threaded-apartment thread with a real Win32 message loop. Shell COM objects
+/// (IShellWindows, IShellBrowser, shell items) are used only from such threads (ExplorerSelectionProvider
+/// documents the measured MTA failure), and Explorer's events (DShellFolderViewEvents, DWebBrowserEvents2)
+/// arrive as incoming cross-process COM calls that an STA only receives while it dispatches messages.
+/// Queued work and incoming calls are processed in order on this one thread; there is no polling.
 /// </summary>
-internal sealed class StaThread : IDisposable
+internal sealed partial class StaThread : IDisposable
 {
-    private readonly BlockingCollection<Action> _work = new();
+    private const uint QsAllInput = 0x04FF;
+    private const uint MwmoInputAvailable = 0x0004;
+    private const uint PmRemove = 0x0001;
+    private const uint Infinite = 0xFFFFFFFF;
+    private const uint WaitObject0 = 0;
+
+    private readonly ConcurrentQueue<Action> _work = new();
+    private readonly AutoResetEvent _signal = new(false);
     private readonly Thread _thread;
+    private volatile bool _stopping;
 
     public StaThread(string name)
     {
@@ -21,13 +31,17 @@ internal sealed class StaThread : IDisposable
     }
 
     /// <summary>Queues fire-and-forget work.</summary>
-    public void Post(Action action) => _work.Add(action);
+    public void Post(Action action)
+    {
+        _work.Enqueue(action);
+        _signal.Set();
+    }
 
     /// <summary>Runs <paramref name="func"/> on the STA thread and returns its result.</summary>
     public Task<T> InvokeAsync<T>(Func<T> func)
     {
         var completion = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _work.Add(() =>
+        Post(() =>
         {
             try
             {
@@ -43,16 +57,71 @@ internal sealed class StaThread : IDisposable
 
     public void Dispose()
     {
-        _work.CompleteAdding();
+        _stopping = true;
+        _signal.Set();
         _thread.Join(TimeSpan.FromSeconds(2));
-        _work.Dispose();
+        _signal.Dispose();
     }
 
     private void Run()
     {
-        foreach (Action action in _work.GetConsumingEnumerable())
+        nint handle = _signal.SafeWaitHandle.DangerousGetHandle();
+        while (true)
         {
-            action();
+            uint result = MsgWaitForMultipleObjectsEx(1, ref handle, Infinite, QsAllInput, MwmoInputAvailable);
+            if (result == WaitObject0)
+            {
+                while (_work.TryDequeue(out Action? action))
+                {
+                    try
+                    {
+                        action();
+                    }
+                    catch (Exception ex)
+                    {
+                        // Work items handle their own errors; never let one kill the shell thread.
+                        System.Diagnostics.Debug.WriteLine($"Mavue STA work error: {ex.GetType().Name}");
+                    }
+                }
+
+                if (_stopping)
+                {
+                    return;
+                }
+            }
+
+            // Dispatch window messages, including the ones COM uses to deliver incoming calls.
+            while (PeekMessageW(out Msg message, 0, 0, 0, PmRemove))
+            {
+                TranslateMessage(message);
+                DispatchMessageW(message);
+            }
         }
     }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Msg
+    {
+        public nint Hwnd;
+        public uint Message;
+        public nuint WParam;
+        public nint LParam;
+        public uint Time;
+        public int X;
+        public int Y;
+    }
+
+    [LibraryImport("user32.dll")]
+    private static partial uint MsgWaitForMultipleObjectsEx(uint count, ref nint handles, uint milliseconds, uint wakeMask, uint flags);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool PeekMessageW(out Msg message, nint hwnd, uint min, uint max, uint remove);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool TranslateMessage(in Msg message);
+
+    [LibraryImport("user32.dll")]
+    private static partial nint DispatchMessageW(in Msg message);
 }

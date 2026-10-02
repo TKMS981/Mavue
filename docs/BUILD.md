@@ -106,7 +106,19 @@ $qv = ".\src\Mavue.QuickView.Host\bin\Debug\net10.0-windows10.0.26100.0\win-x64\
 ```
 
 オプション: `--activation panel|noactivate|auto|hookgrant|setforeground|appwindow|attach|noactivate-topmost`（比較用）、
-`--decoder winrt|xaml`、`--interpolation fant|linear|cubic|nearest`、`--no-prewarm`、`--include-dialogs`、`--trace-shell`。
+`--decoder winrt|xaml`、`--interpolation fant|linear|cubic|nearest`、`--no-prewarm`、`--include-dialogs`、`--trace-shell`、
+`--no-wic`（JPEG の WIC 直接デコードを無効化）、`--no-idle-trim`（非表示後の GC を無効化）、
+`--settings <path>`（設定ファイル。既定 `%LOCALAPPDATA%\Mavue\QuickView\settings.json`。`{"version": 1, "imageScale": "FitNoUpscale"}` または
+`"ActualSize"`。Quick View を開くたびに読み直すので、書き換えはホストの再起動なしで次の Space から反映。設定画面は未実装）、
+`--other-quicklook yield`（QuickLook 等の動作中は Space に反応しない）。
+
+ReadyToRun（起動直後の最初の表示が速くなる。実測は `docs/QUICKVIEW-POC.md` §10.4）:
+
+```powershell
+dotnet publish src/Mavue.QuickView.Host -c Release -r win-x64 -p:PublishReadyToRun=true
+```
+
+NativeAOT（`-p:PublishAot=true`）は MSVC リンカー（§2.2 の Build Tools）が必要で、現状の開発機では「Platform linker not found」で失敗する（未導入のため）。
 起動中は Explorer で Space を押すと Quick View が動作する（他の Quick Look 系ツールと同時に動かすと二重表示の可能性あり）。
 
 ## 6. パッケージング・インストール（計画）
@@ -116,11 +128,11 @@ $qv = ".\src\Mavue.QuickView.Host\bin\Debug\net10.0-windows10.0.26100.0\win-x64\
 | 開発実行 | 非パッケージ（`WindowsPackageType=None`）+ WinAppSDK 自己完結 | 実装済み |
 | MSIX | `packaging/Mavue.Package`（App + QuickView ホスト + C++ シェル拡張 + マニフェスト拡張）。`dotnet publish` + `MakeAppx`/`SignTool`（Windows SDK BuildTools 同梱） | Planned |
 | 署名 | 開発: 自己署名テスト証明書 / 配布: コード署名証明書（LL フックを使うため署名は必須級: `WINDOWS-INTEGRATION.md` §1） | Planned |
-| .NET ランタイム | 配布物は自己完結（`SelfContained`）または ReadyToRun/NativeAOT。Quick View ホストは NativeAOT を検証予定 | Planned |
+| .NET ランタイム | 配布物は自己完結（`SelfContained`）または ReadyToRun/NativeAOT。Quick View ホストは ReadyToRun を計測済み、NativeAOT は Build Tools 導入後に検証 | Planned |
 | Windows Search IFilter | MSIX 拡張がないため別コンポーネント（管理者インストール）を調査 | Investigating |
 
 ## 7. 既知の注意点
 
 - リポジトリルートの `package.json` / `package-lock.json` / `node_modules`（`claude-code` 依存）は Mavue とは無関係。`.gitignore` で除外している（削除はしていない）。
-- Git リポジトリは未初期化（`git init` は未実行）。
+- Git リポジトリは初期化済み（初回コミット 862d47a）。
 - 生成物（`bin/`, `obj/`, `TestResults/`, `AppPackages/`）はコミットしない。

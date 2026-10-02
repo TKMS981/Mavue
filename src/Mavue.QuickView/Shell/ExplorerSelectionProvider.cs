@@ -69,6 +69,34 @@ public sealed class ExplorerSelectionProvider : IDisposable
         });
     }
 
+    /// <summary>
+    /// Opens an event subscription on the view identified like <see cref="GetSelection"/>. The returned
+    /// session raises <paramref name="onEvent"/> on this (STA) thread; dispose it on the same thread.
+    /// </summary>
+    public ExplorerViewSession? OpenSession(nint topLevelWindow, nint shellViewWindow, Action<ViewEvent> onEvent)
+    {
+        ArgumentNullException.ThrowIfNull(onEvent);
+        return WithReconnect(() =>
+        {
+            IShellWindows windows = ShellWindows();
+            Marshal.ThrowExceptionForHR(windows.get_Count(out int count));
+            for (int i = 0; i < count; i++)
+            {
+                if (windows.Item(ComVariant.Create(i), out nint dispatch) < 0 || dispatch == 0)
+                {
+                    continue;
+                }
+
+                if (TryOpenSession(dispatch, topLevelWindow, shellViewWindow, onEvent) is { } session)
+                {
+                    return session;
+                }
+            }
+
+            return null;
+        });
+    }
+
     /// <summary>Selections of all open Explorer views (diagnostics and test harness).</summary>
     public IReadOnlyList<ExplorerSelection> EnumerateWindows() =>
         WithReconnect(() => EnumerateCore(0, 0, stopAtFirst: false).OfType<ExplorerSelection>().ToList());
@@ -146,6 +174,63 @@ public sealed class ExplorerSelectionProvider : IDisposable
         }
 
         return ReadBrowser(dispatch, (nint)desktopHwnd, shellViewWindow, Trace, requireTopLevelMatch: false);
+    }
+
+    /// <summary>Creates a session if <paramref name="dispatch"/> is the requested view. Takes ownership of <paramref name="dispatch"/>.</summary>
+    private ExplorerViewSession? TryOpenSession(nint dispatch, nint topLevelWindow, nint shellViewWindow, Action<ViewEvent> onEvent)
+    {
+        object dispatchObject = ShellNative.Wrap<object>(dispatch);
+        object? browserObject = null;
+        bool handedOver = false;
+        try
+        {
+            if (dispatchObject is not IServiceProvider services ||
+                services.QueryService(ShellNative.SidTopLevelBrowser, ShellNative.IidOf<IShellBrowser>(), out nint browserPointer) < 0)
+            {
+                return null;
+            }
+
+            browserObject = ShellNative.Wrap<object>(browserPointer);
+            var browser = (IShellBrowser)browserObject;
+            if (browser.GetWindow(out nint browserWindow) < 0 || Win32.GetAncestor(browserWindow, Win32.GA_ROOT) != topLevelWindow)
+            {
+                return null;
+            }
+
+            if (browser.QueryActiveShellView(out nint viewPointer) < 0 || viewPointer == 0)
+            {
+                return null;
+            }
+
+            object viewObject = ShellNative.Wrap<object>(viewPointer);
+            nint viewWindow;
+            try
+            {
+                ((IShellView)viewObject).GetWindow(out viewWindow);
+            }
+            finally
+            {
+                ShellNative.Release(viewObject);
+            }
+
+            if (shellViewWindow != 0 && viewWindow != shellViewWindow)
+            {
+                return null;
+            }
+
+            var session = new ExplorerViewSession(dispatchObject, browserObject, topLevelWindow, onEvent);
+            handedOver = true;
+            Trace?.Invoke($"session opened frame=0x{topLevelWindow:X} view=0x{session.ShellViewWindow:X} listening={session.IsListening}");
+            return session;
+        }
+        finally
+        {
+            if (!handedOver)
+            {
+                ShellNative.Release(browserObject);
+                ShellNative.Release(dispatchObject);
+            }
+        }
     }
 
     /// <summary>Reads one browser's selection. Takes ownership of <paramref name="dispatch"/>.</summary>

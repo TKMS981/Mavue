@@ -45,4 +45,10 @@
   <data name="QuickView_Error_Failed" xml:space="preserve">
     <value>このファイルをプレビューできませんでした。破損しているか、対応していない形式の可能性があります。</value>
   </data>
+  <data name="QuickView_Position" xml:space="preserve">
+    <value>{0} / {1}</value>
+  </data>
+  <data name="QuickView_ActualSizeTooLarge" xml:space="preserve">
+    <value>5,000 万画素を超えるためウィンドウに合わせて表示</value>
+  </data>
 </root>

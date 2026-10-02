@@ -124,7 +124,8 @@ Mavue/
 ```
 Mavue.App ─┬─► Mavue.Pdf / Image / Ocr / Markup / Print / Scan / Metadata / Shell / QuickView
            └─► Mavue.Core
-Mavue.QuickView.Host ─► Mavue.QuickView ─► Mavue.Codecs / Pdf(読み取りのみ) / Core
+Mavue.QuickView.Host ─┬─► Mavue.QuickView ─► Mavue.Codecs / Pdf(読み取りのみ) / Core
+                      └─► Mavue.Image（WIC 直接デコード。App と同じ実装を共有）
 各ドメインモジュール ─► Mavue.Core（のみ）
 Mavue.Core ─► BCL のみ（Windows 非依存。将来のテスト容易性のため）
 ```
@@ -236,9 +237,12 @@ NativeAOT / ReadyToRun / Release 構成でどこまで縮むかは未計測（�
 
 | 機能 | 実装方針 |
 |---|---|
-| 複数選択 / 前後移動 | パネル表示では矢印キーが Explorer に届くため、**Explorer の選択変更に Quick View が追従**する（macOS Finder + Quick Look と同じ）。複数選択時は選択内を移動。検知方式は要比較（未実装） |
+| 複数選択 / 前後移動 | **実装済み**: `DShellFolderViewEvents.SelectionChanged` / `DWebBrowserEvents2` を購読して Explorer の選択変更に追従（ポーリングなし）。複数選択時は ←/→ をフックで横取りして選択内を移動（詳細は QUICKVIEW-POC §7） |
 | Esc / Space で閉じる | パネル表示中はフックで処理（Explorer が前面のときのみ Esc を横取り）、アクティブ化後はウィンドウのキーハンドラ。Space はトグル（PoC 実装・実操作で確認済み） |
-| 全画面 / ズーム / 回転 | 共通ビューアコントロール（App と共有） |
+| 表示サイズ | **実装済み**: 既定は「拡大しない」（画像領域の物理ピクセルに合わせてデコードし 1:1 表示、小さい画像は元のサイズ）。設定 `imageScale=ActualSize` で 1 画素 = 画面の 1 画素 + スクロール（5,000 万画素まで）。設定は `%LOCALAPPDATA%\Mavue\QuickView\settings.json`（`DisplaySizing` / `QuickViewSettings`）で、Quick View を開くたびに更新時刻を見て読み直す（ホストの再起動不要）。ウィンドウ内の切替ボタンはユーザー要望で廃止し、将来の設定画面（F23.03）で切り替える。画像領域はウィンドウの実際のクライアントサイズと `GetDpiForWindow` から計算し、表示中のリサイズ・別モニターへの移動で変わったら作り直す（QUICKVIEW-POC §10.6, §10.8） |
+| 先読み | **実装済み**: 表示中の前後の項目をバックグラウンドでデコードし LRU キャッシュ（192 MB）に保持（QUICKVIEW-POC §10.2） |
+| タブ切替の追従 | **実装済み**: 持ち主の Explorer に限定した `EVENT_OBJECT_FOCUS` でタブの切替を検知（QUICKVIEW-POC §10.1） |
+| 全画面 / ズーム / 回転 | 共通ビューアコントロール（App と共有）。Quick View のズーム・パンは未実装 |
 | インデックスシート | 複数選択時のグリッド表示（サムネイルは Windows サムネイルキャッシュ + Mavue キャッシュ） |
 | 他アプリで開く | `SHAssocEnumHandlers` / `IAssocHandler::Invoke`（「プログラムから開く」相当） |
 | コピー / ドラッグ | `IDataObject`（CF_HDROP + 画像形式）|
@@ -387,3 +391,9 @@ Windows 11 で以下を実現するには**パッケージ ID**が必要:
 | ADR-10 | Quick View は「パネル」表示（非アクティブ、表示中のみ Topmost、他アプリ前面化で自動クローズ） | 実ユーザー入力でフック経由の前面化・z 順引き上げが不安定（QUICKVIEW-POC §3.2）。Topmost は権利不要の正規の仕組み | 採用（**ユーザーの最終承認待ち**: 「強制 Topmost は避ける」要件との関係） |
 | ADR-11 | Shell COM（選択取得・サムネイル）は専用 STA スレッド | MTA では RPC_E_CANTCALLOUT_ININPUTSYNCCALL（実測） | 採用 |
 | ADR-12 | E2E はホストを独立起動して計測し、最終判断はユーザー実操作で行う | ハーネスの子プロセスとして起動すると前面化が有利に歪む（実測） | 採用 |
+| ADR-13 | 選択追従は Shell のイベント（DShellFolderViewEvents / DWebBrowserEvents2）を、メッセージループ付き専用 STA で受信 | ポーリング不要、Explorer 発行後 約 2 ms で切替（実測）。STA がメッセージを処理しないと Explorer を待たせるため専用ループ | 採用 |
+| ADR-15 | Quick View の JPEG は WIC を直接使ってデコード（Mavue.Image）。ICC プロファイル付き・非 sRGB は WinRT の色管理付き経路 | WinRT 経路より 192 MP で 449 → 251 ms（実測）。EXIF 回転は Windows のデコーダーと画素一致をテストで保証 | 採用 |
+| ADR-16 | Quick View は画像を拡大しない（既定）。表示領域の物理ピクセルでデコードし 1:1 表示。原寸表示は設定で選択 | 拡大表示で画質が悪いとのユーザー報告。デコードを画面ピクセルに合わせると縮小以外の再サンプリングが発生しない | 採用（ユーザー要望） |
+| ADR-17 | 表示する画像は常に専用の複製（キャッシュの画像を XAML に直接渡さない） | XAML の画像ソース破棄でキャッシュ側の画像まで閉じられ、再表示で失敗（実測、ユーザー報告の不具合） | 採用 |
+| ADR-18 | Quick View の画像領域は XAML のレイアウトではなく `AppWindow.ClientSize` と `GetDpiForWindow` から計算。表示サイズの設定は開くたびに設定ファイルを読み直す（その場の切替 UI は置かない） | 拡大率の違うモニターへ移るとき、配置後に Windows が DPI 変更でウィンドウを再リサイズし、レイアウトが古いままの値でデコードしていた（3 モニターで実測）。切替 UI はユーザー要望で設定画面に移す | 採用 |
+| ADR-14 | 他の Space プレビューツールとの共存: 既定は Mavue 優先（フック再設置で先頭を維持）、設定で譲る | QuickLook は Space を流すため、後から起動した側が先に呼ばれ二重表示（実測 3/3） | 採用（既定値はユーザー確認事項） |

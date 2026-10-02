@@ -16,6 +16,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Mavue.Core.Tests/Mavue.Core.Tests.csproj" />
+    <Project Path="tests/Mavue.Image.Tests/Mavue.Image.Tests.csproj" />
     <Project Path="tests/Mavue.QuickView.Tests/Mavue.QuickView.Tests.csproj" />
     <Project Path="tests/Mavue.Repository.Tests/Mavue.Repository.Tests.csproj" />
   </Folder>

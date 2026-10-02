@@ -4,7 +4,7 @@
 > 本表は SPEC から機械抽出した項目に状態を付与したもの。**SPEC の項目は削除しない**。
 > 「Implemented」は中核動作が機能する場合のみ、「Tested」は SPEC §31 の Definition of Done を満たす場合のみ使用する。
 
-最終更新: 2026-10-02（Quick View 最小 PoC 時点）
+最終更新: 2026-10-02（Quick View 第 3 工程: タブ追従・先読み・WIC デコード・表示サイズ）
 
 状態: **Planned** / **Investigating** / **In Progress** / **Implemented** / **Tested** / **Blocked** / **Excluded (SPEC §29)** / **Backlog (SPEC §16)**
 
@@ -16,9 +16,9 @@
 
 | ID | 機能 | 状態 | 備考 |
 |---|---|---|---|
-| F03.01 | Explorer file selected + Space → instant preview | In Progress | PoC: 常駐ホスト + LL フック + Shell COM（STA）+ panel 表示。単一選択の画像/PDF で Space→表示→Esc を E2E 27/27・ユーザー実操作（リモート）で確認。物理キーでの panel 方式・QuickLook 共存は未確認 |
-| F03.02 | Multiple selected files | Planned | PoC は先頭の選択項目のみ表示（選択数は取得済み） |
-| F03.03 | Previous/next file navigation | Planned | panel 表示では矢印キーが Explorer に届くため、Explorer の選択変更に追従する設計（ARCHITECTURE §4.6） |
+| F03.01 | Explorer file selected + Space → instant preview | In Progress | PoC: 常駐ホスト + LL フック + Shell COM（STA）+ panel 表示。画像/PDF で Space→表示→Esc を E2E・ユーザー実操作（リモート・**物理キー**）で確認。QuickLook 共存対策済み |
+| F03.02 | Multiple selected files | In Progress | PoC: 複数選択は ←/→ で選択内を移動（Explorer の選択は維持）、位置表示「i / N」。E2E・物理キーで確認 |
+| F03.03 | Previous/next file navigation | In Progress | PoC: Explorer の選択変更イベントに追従（ポーリングなし、イベント後 約 2 ms で切替）。E2E・物理キーで確認。Explorer のタブ切替にも追従（E2E・物理キーで確認）。前後の項目を先読み |
 | F03.04 | Escape to close | In Progress | PoC: Esc（フック経由）・Space トグル・他アプリ切替で自動クローズを実操作で確認 |
 | F03.05 | Fullscreen | Planned |  |
 | F03.06 | Zoom | Planned |  |
@@ -72,8 +72,8 @@
 |---|---|---|---|
 | F05.01 | Zoom | Planned |  |
 | F05.02 | Pan | Planned |  |
-| F05.03 | Fit to Window | Planned |  |
-| F05.04 | Actual Size | Planned |  |
+| F05.03 | Fit to Window | In Progress | Quick View のみ: ウィンドウに収める（拡大はしない）。物理ピクセルでデコードし 1:1 表示（E2E で画面上の寸法を確認）。メインビューアは未実装 |
+| F05.04 | Actual Size | In Progress | Quick View のみ: 設定ファイルの `imageScale` を `ActualSize` にすると原寸（5,000 万画素まで、はみ出す場合はスクロール）。設定は Quick View を開くたびに読み直す。ウィンドウ内の切替ボタンはユーザー要望で廃止し、設定画面（F23.03）で切り替える予定。メインビューアは未実装 |
 | F05.05 | Rotate | Planned |  |
 | F05.06 | Flip horizontal | Planned |  |
 | F05.07 | Flip vertical | Planned |  |
@@ -169,7 +169,7 @@
 | F09.10 | Zoom | Planned |  |
 | F09.11 | Fit Width | Planned |  |
 | F09.12 | Fit Page | Planned |  |
-| F09.13 | Actual Size | Planned |  |
+| F09.13 | Actual Size | In Progress | Quick View の 1 ページ目のみ: 設定 `imageScale=ActualSize` で 100 %（96 dpi × ウィンドウのあるモニターの倍率）描画（150 %・100 % のモニターで E2E 確認）。PDF ビューアは未実装 |
 | F09.14 | Ctrl+F search | Planned |  |
 | F09.15 | Search result list | Planned |  |
 | F09.16 | Text selection | Planned |  |
@@ -422,10 +422,10 @@
 |---|---|---|---|
 | F23.01 | Dark mode | Planned |  |
 | F23.02 | Light mode | Planned |  |
-| F23.03 | Settings | Planned |  |
+| F23.03 | Settings | Planned | 最初の項目: Quick View の表示サイズ（拡大しない／原寸）。ユーザー要望で、その場の切替ではなく設定画面で切り替える。それまでは `%LOCALAPPDATA%\Mavue\QuickView\settings.json` を直接編集（開くたびに読み直し） |
 | F23.04 | Keyboard shortcuts | Planned |  |
-| F23.05 | High-DPI support | Planned |  |
-| F23.06 | Multi-monitor support | Planned |  |
+| F23.05 | High-DPI support | In Progress | Quick View のみ: ウィンドウのあるモニターの DPI で物理ピクセルに合わせてデコードし 1:1 表示（150 % と 100 % のモニターで E2E 確認）。メインアプリは未実装 |
+| F23.06 | Multi-monitor support | In Progress | Quick View のみ: Explorer のあるモニターに表示。拡大率の異なるモニターへの移動・表示中のリサイズで画像を作り直す（3 台構成で E2E 確認）。メインアプリは未実装 |
 | F23.07 | Accessibility | Planned |  |
 | F23.08 | Touch support | Planned |  |
 | F23.09 | Windows Ink support | Investigating | InkCanvas Experimental。実機ペン検証 Blocked |
@@ -437,9 +437,9 @@
 | ID | 機能 | 状態 | 備考 |
 |---|---|---|---|
 | F24.01 | Fast startup | Planned |  |
-| F24.02 | Fast Quick View | In Progress | PoC 実測: Space→表示呼び出し 7〜12 ms、小画像フル品質 約 21 ms、24MP JPEG 約 103 ms（Debug） |
+| F24.02 | Fast Quick View | In Progress | PoC 実測: Space→表示呼び出し 7〜12 ms、小画像フル品質 約 21 ms、24MP JPEG 約 103 ms（Debug）。Release: 24MP JPEG 約 87 ms（WIC 直接）、先読み済みの次ファイル 約 30 ms、ReadyToRun で起動直後の初回表示 59〜60 ms |
 | F24.03 | Responsive UI | Planned |  |
-| F24.04 | Efficient large-image rendering | In Progress | 画面サイズへの縮小デコード（192 MP JPEG で WS +36 MB を実測）。タイル描画・WIC 直接デコードは未実装 |
+| F24.04 | Efficient large-image rendering | In Progress | 画面サイズへの縮小デコード（192 MP JPEG で WS +36 MB を実測）。JPEG は WIC 直接デコード（192 MP で 449 → 251 ms）。ICC プロファイル付き JPEG（スマートフォン写真に多い）は色管理付きの従来経路のまま（24 MP で約 260 ms、ユーザーの実ファイルで確認）。タイル描画は未実装 |
 | F24.05 | Efficient large-PDF rendering | Planned |  |
 | F24.06 | Efficient multi-page PDF navigation | Planned |  |
 | F24.07 | RAW image handling | Planned |  |
@@ -448,8 +448,8 @@
 | F24.10 | GPU acceleration where appropriate | Planned |  |
 | F24.11 | CPU/software fallback | Planned |  |
 | F24.12 | Thumbnail caching | In Progress | PoC: Windows サムネイルキャッシュを INCACHEONLY で利用。Mavue 独自キャッシュは未実装 |
-| F24.13 | Preview caching | Planned |  |
-| F24.14 | Low unnecessary memory consumption | Planned |  |
+| F24.13 | Preview caching | In Progress | Quick View: 表示中の前後を先読みしてメモリ内 LRU キャッシュ（192 MB）に保持。ディスクキャッシュは未実装 |
+| F24.14 | Low unnecessary memory consumption | In Progress | Quick View: 非表示 1 秒後に GC、先読みの画素数上限、WIC 結果を中間配列なしで書き込み（原寸表示の繰り返しで 1 GB 超 → 約 0.5 GB で横ばい、実測） |
 
 ## SPEC §25. Large Files
 

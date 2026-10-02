@@ -45,9 +45,19 @@ powershell -ExecutionPolicy Bypass -File tools/smoke-test.ps1 -Configuration Deb
 | `Mavue.Core.Tests` | 形式判定（シグネチャ・拡張子フォールバック・Unicode パス・巨大ストリーム）、安全保存（失敗/検証失敗/キャンセル時に元ファイル不変、属性維持、バックアップ、日本語ファイル名） | 45 |
 | `Mavue.QuickView.Tests` | Space トリガー判定（既存 18 件・無変更）、入力追跡（タイプアヘッド・IME 推定・ショートカット除外）、縮小デコードサイズ、ファイル安全ポリシー（属性・寸法・UNC・デバイスパス）、計測タイムライン（JSON Lines） | 73 |
 | `Mavue.Repository.Tests` | ja-JP/en-US リソースのキー一致（App と Quick View Host）、**SPEC の全機能が FEATURES.md に存在すること**、SPEC §29 以外を Excluded にしていないこと、状態語彙 | 6 |
-| **合計** | | **125（124 成功、1 スキップ: シンボリックリンク作成に開発者モードが必要）** |
+| **合計** | | **142（141 成功、1 スキップ: シンボリックリンク作成に開発者モードが必要）** |
+
+第 2 工程で `Mavue.QuickView.Tests` に選択追従ロジック（`PreviewNavigator`）の 17 件を追加（同プロジェクト計 90 件）。
 
 `Mavue.Core.Tests` は 46 件（シンボリックリンク経由の保存テストを追加）。
+
+第 3 工程（2026-10-02）の追加:
+
+| プロジェクト | 追加内容 | 件数（計） |
+|---|---|---|
+| `Mavue.QuickView.Tests` | タブ切替判定（`ShellViewFocus`）6、先読みキャッシュ（`PreviewCache`: LRU・予算超過・置換・破棄）12、表示サイズ（`DisplaySizing`: 拡大しない・原寸・上限・DPI）と設定（`QuickViewSettings`: 既定値・壊れたファイル・未知の値・保存往復） | 125 |
+| `Mavue.Image.Tests`（新規） | WIC 直接デコード: EXIF 回転 1〜8 を Windows のデコーダーと画素比較、縮小・拡大しない・PNG・破損ファイル・画素数上限・寸法読み取り・呼び出し側バッファへの書き込み（行パディングあり）・バッファ不足と破棄後の拒否 | 28 |
+| **全体** | Core 46 + Image 28 + QuickView 125 + Repository 6 | **205（204 成功、1 スキップ: 開発者モードが必要）** |
 | `tools/smoke-test.ps1` | Mavue.exe 起動 → 最初のフレーム描画 → リソース解決確認 → 終了コード 0 | — |
 
 `Mavue.Repository.Tests` は、FEATURES.md から行を削除する・SPEC 非除外項目を Excluded にする変更で失敗することを確認済み（ミューテーション確認）。
@@ -59,10 +69,16 @@ powershell -ExecutionPolicy Bypass -File tools/smoke-test.ps1 -Configuration Deb
 
 ```powershell
 $h = ".\tools\Mavue.QuickView.Harness\bin\Debug\net10.0-windows10.0.26100.0\Mavue.QuickView.Harness.exe"
-& $h                                   # 既定: panel、7 形式 × 3 回 + UX シナリオ 4 件
+& $h                                   # 既定: panel、7 形式 × 3 回 + シナリオ 13 件（fit。actual は 11 件）
 & $h --huge                            # 192 MP JPEG / 100 MP PNG を追加（初回生成に時間がかかる）
 & $h --activation hookgrant --cases small-jpeg --iterations 5 --no-scenarios   # 表示方式の比較
 & $h --attach-host <timing.jsonl>      # 独立に起動済みのホストに接続して計測
+& $h --quicklook-after-host 12         # QuickLook を Mavue の後に起動して共存を検証（二重表示の検出）
+& $h --no-navigation                   # 選択追従シナリオ（nav-single-follow / nav-multi-step）を省略
+& $h --configuration Release           # Release ビルドのホストで計測
+& $h --scale actual                    # 原寸表示モードで計測（既定は fit = 拡大しない）
+& $h --pause 2500                      # 各サンプル後に待つ（ホストの非表示後メモリ記録 idle-memory を取るため）
+& $h --host-args "--no-wic"            # ホストに追加引数を渡す（例: WIC 直接デコードを無効化して比較）
 & $h --list-explorer                   # 診断: Shell COM が見ている Explorer ビューと選択数
 & $h --thumb <file>                    # 診断: サムネイルキャッシュ取得（MTA/STA 比較）
 ```
@@ -72,6 +88,15 @@ $h = ".\tools\Mavue.QuickView.Harness\bin\Debug\net10.0-windows10.0.26100.0\Mavu
   Explorer がフォーカスを保持したか、Quick View が Explorer より上か、デコード時間・サイズ、ホストのピーク WS、Esc で Explorer に戻ったか、
   計測中の**実ユーザー入力の有無**（ハーネス自身の LL フックで注入でない入力を数える）。
 - ホストは既定で **WMI 経由で独立に起動**する（ハーネスの子プロセスにすると前面化の結果が有利に歪むことを実測したため）。
+- ホストには作業フォルダの `settings-e2e.json` を `--settings` で渡す。**利用者の Quick View 設定は読み書きしない**。
+- シナリオ（第 3 工程時点）: `nav-single-follow`、`nav-rapid`（↓×4・↑×4 を 40 ms 間隔、キャッシュ再表示でエラーがないこと）、
+  `nav-multi-step`、`tab-switch-follow`（Ctrl+T・Ctrl+Tab）、`small-image-not-enlarged`（240×180 の画像が画面上で 240×180 物理ピクセルか、
+  ウィンドウを画面キャプチャして測定。キャプチャは `display-capture.bmp` に保存）、`settings-reload`（非表示中に `settings-e2e.json` の
+  `imageScale` を書き換え、次の Space から反映されるか）、`space-then-space`、`activate-explorer-then-space`、`switch-to-other-app`、`alt-tab`。
+- 表示領域のシナリオ（第 3 工程の追加分、fit・actual の両モードで実行）: `monitor-open-each`（Explorer を各モニターへ移して画像と PDF を開き、
+  そのモニターの DPI で配置され、計算した画像領域が XAML のレイアウトと一致し、画像がその領域に収まるか）、`monitor-move-while-shown`
+  （表示中のウィンドウを別モニターへ移し、領域が変われば作り直されるか）、`resize-while-shown`（表示中に縮小・復元して作り直されるか）。
+  **テスト中に Explorer と Quick View のウィンドウを各モニターへ動かす**。モニターが 1 台の環境では monitor 系は不合格（対象外）と表示される。選択追従系は「フル品質の画像が画面に出た」ことまで確認する（エラーを切替完了と数えない）。
 - **注意（実測）**: 注入入力での成功は実ユーザー入力での成功を保証しない（`docs/QUICKVIEW-POC.md` §3.2）。表示方式に関わる変更は、
   必ずユーザーの実操作（物理キーボード / リモート操作）で確認し、ホストの計測ログ（`--timing-log`）で裏付ける。
 
@@ -139,6 +164,12 @@ $h = ".\tools\Mavue.QuickView.Harness\bin\Debug\net10.0-windows10.0.26100.0\Mavu
 | 2026-10-02 | Quick View: 192 MP JPEG / 100 MP PNG のフル品質表示 | 451 ms / 755 ms（その前に 18〜22 ms でサムネイル表示） | 同上 |
 | 2026-10-02 | Quick View 常駐ホスト: 起動 → 準備完了 | 約 160〜170 ms（プリウォーム込み） | Debug |
 | 2026-10-02 | Quick View 常駐ホストのワーキングセット | 約 140 MB（小画像表示後）、192 MP JPEG で 176 MB | Debug, 画像ごとの新規プロセス |
+
+| 2026-10-02 | Quick View: Space → 24MP JPEG フル品質表示 | 約 87 ms（WIC 直接）| Release, 注入入力 |
+| 2026-10-02 | Quick View: ↓ で先読み済みの次ファイル | 約 30 ms（先読みなし 104 ms） | Release |
+| 2026-10-02 | Quick View: Ctrl+Tab で別タブへ追従 | 196〜217 ms（戻り 79〜106 ms） | Release |
+| 2026-10-02 | Quick View: E2E 全形式（巨大画像含む）のピーク WS | 462 MB | Release, fit |
+| 2026-10-02 | Quick View: ReadyToRun で起動直後の初回フル表示 | 59〜60 ms（JIT 74〜84 ms） | Release |
 
 詳細と条件は `docs/QUICKVIEW-POC.md`。
 

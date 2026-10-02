@@ -1,8 +1,11 @@
 using System.Globalization;
 using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.WindowsRuntime;
 using Mavue.Core.Formats;
+using Mavue.Image.Wic;
 using Mavue.QuickView.Diagnostics;
 using Mavue.QuickView.Preview;
+using Mavue.QuickView.Settings;
 using Mavue.QuickView.Shell;
 using Mavue.QuickView.Trigger;
 using Microsoft.UI;
@@ -47,6 +50,9 @@ internal sealed class QuickViewController : IDisposable
     private readonly DispatcherQueue _dispatcher;
     private readonly StaThread _shellThread = new("Mavue.QuickView.ShellItems");
     private CancellationTokenSource? _loading;
+    private readonly PreviewNavigator _navigator = new();
+    private SelectionWorker? _worker;
+    private KeyboardHook? _hook;
     private string? _currentPath;
     private long _currentRequest;
     private bool _visible;
@@ -54,6 +60,41 @@ internal sealed class QuickViewController : IDisposable
     private volatile bool _visibleWithoutActivation;
     private bool _topmost;
     private bool? _lastHookProbe;
+    private nint _followedView;
+    private readonly WinEventWatcher _focusWatcher = new();
+
+    // Decoded neighbors for instant stepping. Cleared when Quick View closes to keep idle memory low.
+    private const long CacheBudgetBytes = 192L * 1024 * 1024;
+    private const long MaxPrefetchFileBytes = 64L * 1024 * 1024;
+
+    // Background decoding of very large neighbors raised the peak working set to ~800 MB (measured);
+    // only modest images are prefetched. The pixel count is checked from the header before decoding.
+    private const long MaxPrefetchSourcePixels = 40_000_000;
+    private readonly PreviewCache<DecodedPreview> _cache = new(
+        CacheBudgetBytes,
+        d => d.Bitmap is { } b ? (long)b.PixelWidth * b.PixelHeight * 4 : 0,
+        d => d.Bitmap?.Dispose());
+    private CancellationTokenSource? _prefetch;
+
+    // The bitmap behind the displayed full image. It is a private copy: cached bitmaps are never handed
+    // to a SoftwareBitmapSource, because disposing a replaced source also closed the cached bitmap and a
+    // later cache hit then failed with E_INVALIDARG (measured with fast arrow-key navigation).
+    private SoftwareBitmap? _displayedBitmap;
+
+    // Request whose own thumbnail or image is on screen (as opposed to the previous item's).
+    private long _contentRequest;
+
+    /// <summary>How long the previous item's image may stay while the next one loads (avoids flicker).</summary>
+    private static readonly TimeSpan StaleImageGrace = TimeSpan.FromMilliseconds(120);
+
+    // Actual-size mode decodes full resolution; only small neighbors are prefetched then.
+    private const long MaxActualSizePrefetchPixels = 16_000_000;
+
+    private readonly string _settingsPath;
+    private ImageScaleMode _scaleMode;
+    private DateTime _settingsStamp;
+    private (uint Width, uint Height) _plannedArea;
+    private DispatcherQueueTimer? _areaTimer;
     private nint _ownerForHook;
 
     public QuickViewController(QuickViewWindow window, QuickViewTimeline timeline, HostOptions options)
@@ -63,12 +104,28 @@ internal sealed class QuickViewController : IDisposable
         _options = options;
         _dispatcher = DispatcherQueue.GetForCurrentThread();
         _window.CloseRequested += () => Hide(_currentRequest, "window-key-or-close", restoreOwner: true);
+        _window.NavigateRequested += delta => Step(delta, "window-arrow");
+        _settingsPath = options.SettingsPath ?? QuickViewSettings.DefaultPath;
+        ReloadSettingsIfChanged(force: true);
+        _window.ImageAreaChanged += OnImageAreaChanged;
+        _focusWatcher.EventRaised += (_, hwnd, _, _) => OnOwnerFocusChanged(hwnd);
     }
 
     private AppWindow AppWindow => _window.AppWindow;
 
+    /// <summary>Connects the Shell worker and the keyboard hook (created after the controller).</summary>
+    public void Attach(SelectionWorker worker, KeyboardHook hook)
+    {
+        _worker = worker;
+        _hook = hook;
+    }
+
     public void Dispose()
     {
+        _prefetch?.Cancel();
+        _prefetch?.Dispose();
+        _cache.Dispose();
+        _focusWatcher.Dispose();
         _loading?.Cancel();
         _loading?.Dispose();
         _loading = null;
@@ -98,22 +155,26 @@ internal sealed class QuickViewController : IDisposable
     }
 
     /// <summary>Handles a Space trigger once its selection is known.</summary>
-    public void OnTrigger(long requestId, SpaceTrigger trigger, ExplorerSelection? selection)
+    public void OnTrigger(long requestId, SpaceTrigger trigger, ViewSelection? selection)
     {
         _timeline.Mark(requestId, "dispatched", QuickViewTimeline.Now);
-        if (selection is null || selection.Paths.Count == 0)
+        if (_visible)
         {
-            _timeline.Mark(requestId, "no-selection", QuickViewTimeline.Now);
-            return;
-        }
-
-        string path = selection.Paths[0];
-        if (_visible && string.Equals(path, _currentPath, StringComparison.OrdinalIgnoreCase))
-        {
-            // Space in Explorer while Quick View shows the same item closes it (Quick Look behavior).
+            // Space in Explorer while Quick View is open closes it (Quick Look behavior). Quick View
+            // already follows the selection, so there is no "switch to another item" case here.
             Hide(requestId, "space-toggle", restoreOwner: false);
             return;
         }
+
+        if (selection is null || selection.Paths.Count == 0)
+        {
+            _timeline.Mark(requestId, "no-selection", QuickViewTimeline.Now);
+            _worker?.CloseSession();
+            return;
+        }
+
+        NavigationResult start = _navigator.Start(selection.Paths, selection.FocusedPath);
+        string path = start.Path!;
 
         _owner = trigger.ForegroundWindow;
         Volatile.Write(ref _ownerForHook, _owner);
@@ -123,7 +184,319 @@ internal sealed class QuickViewController : IDisposable
         }
 
         _lastHookProbe = trigger.HookProbeResult;
+        _followedView = trigger.FocusParentWindow;
+        MarkNavigation(requestId, "space");
         Show(requestId, path);
+        UpdateNavigationKeys();
+        WatchOwnerFocus();
+    }
+
+    /// <summary>
+    /// While Quick View is open, focus changes inside the owning Explorer process are observed
+    /// (EVENT_OBJECT_FOCUS, scoped to that process) to notice when the user switches to another tab.
+    /// </summary>
+    private void WatchOwnerFocus()
+    {
+        _focusWatcher.Stop();
+        NativeMethods.GetWindowThreadProcessId(_owner, out uint explorerProcess);
+        if (explorerProcess == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            _focusWatcher.Start(WinEventWatcher.EventObjectFocus, WinEventWatcher.EventObjectFocus, explorerProcess);
+        }
+        catch (InvalidOperationException)
+        {
+            // Following tab switches is best effort; selection events still work.
+        }
+    }
+
+    private void OnOwnerFocusChanged(nint focus)
+    {
+        if (!_visible || focus == 0)
+        {
+            return;
+        }
+
+        nint parent = NativeMethods.GetAncestor(focus, NativeMethods.GA_PARENT);
+        if (!ShellViewFocus.IsOtherItemView(
+            Interop.WindowClass.Of(focus),
+            Interop.WindowClass.Of(parent),
+            parent,
+            NativeMethods.GetAncestor(focus, NativeMethods.GA_ROOT),
+            _owner,
+            _followedView))
+        {
+            return;
+        }
+
+        // Another tab (or another view in the same window) took the focus: follow its selection.
+        _followedView = parent;
+        _timeline.Mark(_currentRequest, "view-switched", QuickViewTimeline.Now);
+        _worker?.Rebind(_owner, parent);
+    }
+
+    /// <summary>Explorer's selection changed while Quick View is open (DShellFolderViewEvents).</summary>
+    public void OnExplorerSelectionChanged(ViewSelection selection, long eventQpc, long readQpc)
+    {
+        if (!_visible)
+        {
+            return;
+        }
+
+        Apply(_navigator.OnSelectionChanged(selection.Paths, selection.FocusedPath), "explorer-selection", eventQpc, readQpc);
+    }
+
+    /// <summary>The Explorer window or tab Quick View follows was closed.</summary>
+    public void OnExplorerViewClosed() => Hide(_currentRequest, "explorer-closed", restoreOwner: false);
+
+    /// <summary>
+    /// Hook thread: ←/→ while a multi-selection is previewed passively. Steps inside the selection
+    /// and swallows the key so Explorer keeps the selection intact.
+    /// </summary>
+    public bool HandleNavigationKeyFromHook(int virtualKey, nint foreground)
+    {
+        const int VkLeft = 0x25;
+        const int VkRight = 0x27;
+        if (virtualKey is not (VkLeft or VkRight) || foreground != Volatile.Read(ref _ownerForHook))
+        {
+            return false;
+        }
+
+        long qpc = QuickViewTimeline.Now;
+        int delta = virtualKey == VkLeft ? -1 : 1;
+        _dispatcher.TryEnqueue(DispatcherQueuePriority.High, () => Step(delta, "hook-arrow", qpc));
+        return true;
+    }
+
+    private void Step(int delta, string source, long? inputQpc = null)
+    {
+        if (!_visible)
+        {
+            return;
+        }
+
+        Apply(_navigator.Step(delta), source, inputQpc, null);
+    }
+
+    private void Apply(NavigationResult result, string source, long? inputQpc, long? readQpc)
+    {
+        switch (result.Action)
+        {
+            case NavigationAction.Show:
+                long id = SelectionWorker.NextRequestId();
+                if (inputQpc is { } input)
+                {
+                    _timeline.Mark(id, "nav-input", input);
+                }
+
+                if (readQpc is { } read)
+                {
+                    _timeline.Mark(id, "selection-read", read);
+                }
+
+                MarkNavigation(id, source);
+                ShowNext(id, result.Path!);
+                break;
+
+            case NavigationAction.Hide:
+                Hide(_currentRequest, "selection-empty", restoreOwner: false);
+                break;
+
+            case NavigationAction.MoveExplorerSelection:
+                _worker?.MoveExplorerSelection(result.Delta);
+                break;
+        }
+
+        UpdateNavigationKeys();
+    }
+
+    private void MarkNavigation(long requestId, string source) =>
+        _timeline.Mark(requestId, "nav", QuickViewTimeline.Now, new Dictionary<string, object?>
+        {
+            ["source"] = source,
+            ["mode"] = _navigator.Mode.ToString(),
+            ["index"] = _navigator.Index,
+            ["count"] = _navigator.Items.Count,
+        });
+
+    /// <summary>Arms ←/→ interception only while a multi-selection is shown and Explorer has the keyboard.</summary>
+    private void UpdateNavigationKeys()
+    {
+        if (_hook is null)
+        {
+            return;
+        }
+
+        bool armed = _visible && _visibleWithoutActivation && _navigator.Mode == NavigationMode.MultipleItems;
+        _hook.NavigationKeyHandler = armed ? HandleNavigationKeyFromHook : null;
+    }
+
+    /// <summary>Shows another item in the already visible window, keeping the previous image until the new one is ready.</summary>
+    /// <param name="sameItem">Re-showing the current file (e.g. new window size): keep its image until the new one is ready.</param>
+    private void ShowNext(long requestId, string path, bool sameItem = false)
+    {
+        _prefetch?.Cancel();
+        _loading?.Cancel();
+        _loading?.Dispose();
+        _loading = new CancellationTokenSource();
+        _currentPath = path;
+        Interlocked.Exchange(ref _currentRequest, requestId);
+
+        string fileName = Path.GetFileName(path);
+        _window.BeginNextItem(fileName);
+        if (!sameItem)
+        {
+            _ = ClearStaleImageAsync(requestId);
+        }
+
+        _window.Title = string.Format(CultureInfo.CurrentCulture, Strings.GetString("QuickView_WindowTitle"), fileName);
+        _timeline.Mark(requestId, "show-call", QuickViewTimeline.Now);
+        _ = MarkNextFrameAsync(requestId, "first-frame");
+        _ = LoadAsync(requestId, path, _loading.Token);
+    }
+
+    /// <summary>
+    /// If the next item has produced nothing to show shortly after navigation, remove the previous item's
+    /// image and show "loading" so a stale picture is never presented under the new file name.
+    /// </summary>
+    private async Task ClearStaleImageAsync(long requestId)
+    {
+        await Task.Delay(StaleImageGrace);
+        if (_visible && Interlocked.Read(ref _currentRequest) == requestId && _contentRequest != requestId)
+        {
+            _window.ShowStatusOnly(Strings.GetString("QuickView_Loading"));
+            _timeline.Mark(requestId, "stale-cleared", QuickViewTimeline.Now);
+        }
+    }
+
+    /// <summary>Decode/display plan for one item (see <see cref="DisplaySizing"/>).</summary>
+    private readonly record struct Plan(DecodeBox Box, (double Width, double Height)? ExpectedElementSize, bool Scrollable, double? PdfActualScale)
+    {
+        public static Plan Unknown => new(new DecodeBox(1, 1), null, false, null);
+    }
+
+    /// <summary>Physical pixels per device-independent pixel for the window's current monitor.</summary>
+    private double DisplayScale()
+    {
+        uint dpi = NativeMethods.GetDpiForWindow(_window.Handle);
+        return dpi > 0 ? dpi / 96.0 : _window.RasterizationScale;
+    }
+
+    /// <summary>
+    /// Image area in physical pixels, from the window's real client size and DPI. The XAML layout is not
+    /// used: right after the window moves to a monitor with another scale it still describes the old
+    /// size, which made images decode for the wrong area (measured with three monitors).
+    /// </summary>
+    private (uint Width, uint Height) ImageArea()
+    {
+        SizeInt32 client = AppWindow.ClientSize;
+        double scale = DisplayScale();
+        (double chromeWidth, double chromeHeight) = _window.ImageChromeDip();
+        return ((uint)Math.Max(1, Math.Floor(client.Width - (chromeWidth * scale))), (uint)Math.Max(1, Math.Floor(client.Height - (chromeHeight * scale))));
+    }
+
+    /// <summary>The window was resized or changed monitor while visible: re-plan the current item if its area changed.</summary>
+    private void OnImageAreaChanged()
+    {
+        if (!_visible || _currentPath is null)
+        {
+            return;
+        }
+
+        _areaTimer ??= CreateAreaTimer();
+        _areaTimer.Stop();
+        _areaTimer.Start(); // debounce: a drag-resize raises many changes
+    }
+
+    private DispatcherQueueTimer CreateAreaTimer()
+    {
+        DispatcherQueueTimer timer = _dispatcher.CreateTimer();
+        timer.Interval = TimeSpan.FromMilliseconds(150);
+        timer.IsRepeating = false;
+        timer.Tick += (_, _) =>
+        {
+            (uint width, uint height) = ImageArea();
+            if (_visible && _currentPath is { } path &&
+                (Math.Abs((long)width - _plannedArea.Width) > 2 || Math.Abs((long)height - _plannedArea.Height) > 2))
+            {
+                long id = SelectionWorker.NextRequestId();
+                MarkNavigation(id, "area-changed");
+                ShowNext(id, path, sameItem: true);
+            }
+        };
+        return timer;
+    }
+
+    /// <summary>
+    /// Reads the image size from the header (no pixel decoding; never for cloud placeholders, which would
+    /// download) and decides the decode box and the element size for the placeholder.
+    /// </summary>
+    private async Task<Plan> PlanAsync(string path, FileFacts facts, ImageScaleMode mode, uint areaWidth, uint areaHeight, CancellationToken cancellation)
+    {
+        double rasterization = DisplayScale();
+        if (facts.Format == FileFormat.Pdf)
+        {
+            bool actual = mode == ImageScaleMode.ActualSize;
+            return new Plan(new DecodeBox(areaWidth, areaHeight), null, actual, actual ? rasterization : null);
+        }
+
+        (uint Width, uint Height)? source = facts.Access == PreviewAccess.Allowed
+            ? await Task.Run(() => WicPreviewDecoder.TryReadDimensions(path), cancellation)
+            : null;
+        if (source is not { } size)
+        {
+            return new Plan(new DecodeBox(areaWidth, areaHeight), null, false, null);
+        }
+
+        DecodeBox box = DisplaySizing.DecodeBoxFor(mode, areaWidth, areaHeight, size.Width, size.Height);
+        (uint expectedWidth, uint expectedHeight) = DisplaySizing.ExpectedDisplayPixels(mode, areaWidth, areaHeight, size.Width, size.Height);
+        bool scrollable = mode == ImageScaleMode.ActualSize && !box.ActualSizeRefused;
+        return new Plan(box, DisplaySizing.ElementSize(expectedWidth, expectedHeight, rasterization), scrollable, null);
+    }
+
+    /// <summary>
+    /// The image scale is chosen in settings (written by a settings UI or by hand), not in the Quick View
+    /// window. The resident process re-reads the file when Quick View opens and the file has changed,
+    /// so a change applies from the next Space without restarting (one timestamp check per open).
+    /// </summary>
+    private void ReloadSettingsIfChanged(bool force = false)
+    {
+        DateTime stamp;
+        try
+        {
+            stamp = File.GetLastWriteTimeUtc(_settingsPath); // 1601-01-01 when the file does not exist
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            return;
+        }
+
+        if (!force && stamp == _settingsStamp)
+        {
+            return;
+        }
+
+        _settingsStamp = stamp;
+        ImageScaleMode previous = _scaleMode;
+        _scaleMode = QuickViewSettings.Load(_settingsPath).ImageScale;
+        if (!force && previous != _scaleMode)
+        {
+            _cache.Clear(); // decoded for the other mode's box
+        }
+
+        _timeline.Mark(0, "settings-loaded", QuickViewTimeline.Now, new Dictionary<string, object?> { ["imageScale"] = _scaleMode.ToString() });
+    }
+
+    private void SetInfo(string text)
+    {
+        string position = _navigator.Mode == NavigationMode.MultipleItems
+            ? string.Format(CultureInfo.CurrentCulture, Strings.GetString("QuickView_Position"), _navigator.Index + 1, _navigator.Items.Count) + " · "
+            : string.Empty;
+        _window.SetInfo(position + text);
     }
 
     /// <summary>Called on the hook thread for Escape. Only used when the window is shown without activation.</summary>
@@ -153,6 +526,7 @@ internal sealed class QuickViewController : IDisposable
             {
                 _visibleWithoutActivation = false; // user clicked into Quick View: normal window behavior from now on
                 _window.FocusContent();
+                UpdateNavigationKeys();
             }
 
             return;
@@ -181,6 +555,11 @@ internal sealed class QuickViewController : IDisposable
         _loading = new CancellationTokenSource();
         _currentPath = path;
         Interlocked.Exchange(ref _currentRequest, requestId);
+
+        if (!_visible)
+        {
+            ReloadSettingsIfChanged();
+        }
 
         string fileName = Path.GetFileName(path);
         _window.ResetContent(fileName);
@@ -329,6 +708,16 @@ internal sealed class QuickViewController : IDisposable
         _visibleWithoutActivation = false;
         _currentPath = null;
         _window.ClearImages();
+        _displayedBitmap?.Dispose();
+        _displayedBitmap = null;
+        _contentRequest = 0;
+        _navigator.Reset();
+        _worker?.CloseSession();
+        _focusWatcher.Stop();
+        _followedView = 0;
+        _prefetch?.Cancel();
+        _cache.Clear();
+        UpdateNavigationKeys();
 
         _timeline.Mark(requestId, "hidden", QuickViewTimeline.Now, new Dictionary<string, object?>
         {
@@ -337,6 +726,50 @@ internal sealed class QuickViewController : IDisposable
             ["ownerRestored"] = ownerRestored,
             ["ownerIsForegroundAfter"] = NativeMethods.GetForegroundWindow() == _owner,
         });
+        _ = TrimAfterHideAsync(requestId);
+    }
+
+    /// <summary>
+    /// Records (and optionally trims) the resident memory once Quick View has been hidden for a moment.
+    /// Decoding creates large short-lived buffers; while hidden the process should give that memory back.
+    /// </summary>
+    private async Task TrimAfterHideAsync(long requestId)
+    {
+        await Task.Delay(1000);
+        if (_visible)
+        {
+            return;
+        }
+
+        Dictionary<string, object?> before = MemorySnapshot();
+        if (_options.IdleTrim)
+        {
+            System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+            GC.WaitForPendingFinalizers();
+        }
+
+        Dictionary<string, object?> after = MemorySnapshot();
+        foreach ((string k, object? v) in after)
+        {
+            before["after_" + k] = v;
+        }
+
+        before["trimmed"] = _options.IdleTrim;
+        _timeline.Mark(requestId, "idle-memory", QuickViewTimeline.Now, before);
+    }
+
+    internal static Dictionary<string, object?> MemorySnapshot()
+    {
+        GCMemoryInfo gc = GC.GetGCMemoryInfo();
+        using var self = System.Diagnostics.Process.GetCurrentProcess();
+        return new Dictionary<string, object?>
+        {
+            ["managedHeapMb"] = Math.Round(gc.HeapSizeBytes / 1048576.0, 1),
+            ["managedCommittedMb"] = Math.Round(gc.TotalCommittedBytes / 1048576.0, 1),
+            ["workingSetMb"] = Math.Round(self.WorkingSet64 / 1048576.0, 1),
+            ["privateMb"] = Math.Round(self.PrivateMemorySize64 / 1048576.0, 1),
+        };
     }
 
     /// <summary>True if <paramref name="window"/> is above <paramref name="other"/> in the z-order.</summary>
@@ -367,16 +800,30 @@ internal sealed class QuickViewController : IDisposable
         RectInt32 work = area.WorkArea;
         int width = (int)(work.Width * 0.7);
         int height = (int)(work.Height * 0.75);
-        AppWindow.MoveAndResize(new RectInt32(work.X + ((work.Width - width) / 2), work.Y + ((work.Height - height) / 2), width, height));
+        var target = new RectInt32(work.X + ((work.Width - width) / 2), work.Y + ((work.Height - height) / 2), width, height);
+        AppWindow.MoveAndResize(target);
+        if (AppWindow.Size.Width != width || AppWindow.Size.Height != height)
+        {
+            // Moving to a monitor with another scale makes Windows resize the window for the new DPI during
+            // the move (WM_DPICHANGED), overriding the requested size; on the new monitor it sticks.
+            AppWindow.MoveAndResize(target);
+        }
+
+        _timeline.Mark(_currentRequest, "placed", QuickViewTimeline.Now, new Dictionary<string, object?>
+        {
+            ["width"] = AppWindow.Size.Width,
+            ["height"] = AppWindow.Size.Height,
+            ["dpi"] = NativeMethods.GetDpiForWindow(_window.Handle),
+        });
     }
 
     private async Task LoadAsync(long requestId, string path, CancellationToken cancellation)
     {
         try
         {
-            SizeInt32 client = AppWindow.ClientSize;
-            uint viewportWidth = (uint)Math.Max(1, client.Width);
-            uint viewportHeight = (uint)Math.Max(1, client.Height);
+            (uint areaWidth, uint areaHeight) = ImageArea();
+            _plannedArea = (areaWidth, areaHeight);
+            ImageScaleMode mode = _scaleMode;
 
             // 1. File facts (attributes, size, format) without decoding.
             FileFacts facts = await Task.Run(() => FileFacts.Read(path), cancellation);
@@ -387,68 +834,75 @@ internal sealed class QuickViewController : IDisposable
                 ["bytes"] = facts.Length,
                 ["access"] = facts.Access.ToString(),
             });
-            _window.SetInfo(FormatInfo(facts, null));
+            SetInfo(FormatInfo(facts, null));
 
             if (facts.Access == PreviewAccess.NotAFile)
             {
-                _window.SetStatus(Strings.GetString("QuickView_Error_NotFile"));
+                _window.ShowStatusOnly(Strings.GetString("QuickView_Error_NotFile"));
+                return;
+            }
+
+            // Display box: decode exactly the pixels that will be shown (no second resample in the UI),
+            // never enlarging small images; actual-size mode decodes the source size.
+            Plan plan = await PlanAsync(path, facts, mode, areaWidth, areaHeight, cancellation);
+            uint viewportWidth = plan.Box.Width;
+            uint viewportHeight = plan.Box.Height;
+
+            bool cacheable = facts.Access == PreviewAccess.Allowed && _options.Decoder == DecoderMode.WinRt;
+            PreviewKey key = PreviewKey.Create(path, facts.Length, facts.LastWriteUtc, viewportWidth, viewportHeight);
+            if (cacheable && _cache.TryGet(key, out DecodedPreview? cached) && cached?.Bitmap is not null)
+            {
+                await ShowFullAsync(requestId, facts, cached, "cache", plan, cancellation);
+                StartPrefetch(areaWidth, areaHeight);
                 return;
             }
 
             // 2. Cached shell thumbnail (never extracts, never hydrates cloud files).
-            int thumbnailSize = (int)Math.Min(1024, Math.Max(viewportWidth, viewportHeight));
+            int thumbnailSize = (int)Math.Min(1024, Math.Max(areaWidth, areaHeight));
             Task<BgraImage?> thumbnailTask = _shellThread.InvokeAsync(() => ShellThumbnail.TryGetCached(path, thumbnailSize));
 
             if (facts.Access == PreviewAccess.CloudPlaceholder)
             {
-                _window.SetStatus(Strings.GetString("QuickView_Error_CloudPlaceholder"));
-                await ShowThumbnailAsync(requestId, thumbnailTask, cancellation);
+                _window.ShowStatusOnly(Strings.GetString("QuickView_Error_CloudPlaceholder"));
+                await ShowThumbnailAsync(requestId, thumbnailTask, plan, null, cancellation);
                 return;
             }
 
             if (_options.Decoder == DecoderMode.Xaml && facts.Format != FileFormat.Pdf)
             {
-                Task xamlThumbnail = ShowThumbnailAsync(requestId, thumbnailTask, cancellation, () => _window.HasFullImage);
-                await LoadWithXamlDecoderAsync(requestId, path, facts, viewportWidth, viewportHeight, cancellation);
+                _window.SetImageBox(null, scrollable: false); // comparison path keeps the original "fit" layout
+                Task xamlThumbnail = ShowThumbnailAsync(requestId, thumbnailTask, Plan.Unknown, () => _window.HasFullImage, cancellation);
+                await LoadWithXamlDecoderAsync(requestId, path, facts, areaWidth, areaHeight, cancellation);
                 await xamlThumbnail;
                 return;
             }
 
             // 3. Full quality in the background; 4. swap in when ready.
             Task<DecodedPreview> fullTask = facts.Format == FileFormat.Pdf
-                ? RenderPdfAsync(path, viewportWidth, viewportHeight, cancellation)
-                : DecodeImageAsync(path, viewportWidth, viewportHeight, Interpolation(_options.Interpolation), cancellation);
+                ? RenderPdfAsync(path, viewportWidth, viewportHeight, cancellation, plan.PdfActualScale)
+                : DecodeImageAsync(path, viewportWidth, viewportHeight, Interpolation(_options.Interpolation), PreferWic(facts), cancellation);
 
-            Task thumbnailShown = ShowThumbnailAsync(requestId, thumbnailTask, cancellation, () => _window.HasFullImage);
+            Task thumbnailShown = ShowThumbnailAsync(requestId, thumbnailTask, plan, () => _window.HasFullImage, cancellation);
             DecodedPreview full = await fullTask;
+
+            // Keep the work even if the user already moved on: stepping back is then instant.
+            if (full.Reason is null && cacheable)
+            {
+                _cache.Add(key, full);
+            }
+
             cancellation.ThrowIfCancellationRequested();
 
             if (full.Reason is { } reason)
             {
-                _window.SetStatus(Strings.GetString(ReasonToResource(reason)));
+                _window.ShowStatusOnly(Strings.GetString(ReasonToResource(reason)));
                 _timeline.Mark(requestId, "full-skipped", QuickViewTimeline.Now, new Dictionary<string, object?> { ["reason"] = full.Reason });
                 await thumbnailShown;
                 return;
             }
 
-            ImageSource source = await CreateSourceAsync(full.Bitmap!);
-            cancellation.ThrowIfCancellationRequested();
-            _window.SetFullImage(source);
-            _window.SetInfo(FormatInfo(facts, full));
-            _timeline.Mark(requestId, "full-set", QuickViewTimeline.Now, new Dictionary<string, object?>
-            {
-                ["sourceWidth"] = full.SourceWidth,
-                ["sourceHeight"] = full.SourceHeight,
-                ["decodedWidth"] = full.Bitmap!.PixelWidth,
-                ["decodedHeight"] = full.Bitmap.PixelHeight,
-                ["decodeMs"] = full.DecodeMilliseconds,
-                ["decoder"] = full.Decoder,
-            });
-            await NextFrameAsync();
-            if (!cancellation.IsCancellationRequested)
-            {
-                _timeline.Mark(requestId, "full-visible", QuickViewTimeline.Now);
-            }
+            await ShowFullAsync(requestId, facts, full, full.Decoder, plan, cancellation);
+            StartPrefetch(areaWidth, areaHeight);
         }
         catch (OperationCanceledException)
         {
@@ -460,12 +914,128 @@ internal sealed class QuickViewController : IDisposable
             _timeline.Mark(requestId, "error", QuickViewTimeline.Now, new Dictionary<string, object?> { ["type"] = ex.GetType().Name, ["hresult"] = ex.HResult });
             if (!cancellation.IsCancellationRequested)
             {
-                _window.SetStatus(Strings.GetString("QuickView_Error_Failed"));
+                _window.ShowStatusOnly(Strings.GetString("QuickView_Error_Failed"));
             }
         }
     }
 
-    private async Task ShowThumbnailAsync(long requestId, Task<BgraImage?> thumbnailTask, CancellationToken cancellation, Func<bool>? superseded = null)
+    private async Task ShowFullAsync(long requestId, FileFacts facts, DecodedPreview full, string decoder, Plan plan, CancellationToken cancellation)
+    {
+        SoftwareBitmap display = SoftwareBitmap.Copy(full.Bitmap!);
+        ImageSource source;
+        try
+        {
+            source = await CreateSourceAsync(display);
+            cancellation.ThrowIfCancellationRequested();
+        }
+        catch
+        {
+            display.Dispose();
+            throw;
+        }
+
+        _window.SetImageBox(DisplaySizing.ElementSize((uint)display.PixelWidth, (uint)display.PixelHeight, DisplayScale()), plan.Scrollable);
+        _window.SetFullImage(source);
+        SoftwareBitmap? previous = _displayedBitmap;
+        _displayedBitmap = display;
+        previous?.Dispose();
+        _contentRequest = requestId;
+        SetInfo(FormatInfo(facts, full) + (plan.Box.ActualSizeRefused ? " · " + Strings.GetString("QuickView_ActualSizeTooLarge") : string.Empty));
+        _timeline.Mark(requestId, "full-set", QuickViewTimeline.Now, new Dictionary<string, object?>
+        {
+            ["sourceWidth"] = full.SourceWidth,
+            ["sourceHeight"] = full.SourceHeight,
+            ["decodedWidth"] = full.Bitmap!.PixelWidth,
+            ["decodedHeight"] = full.Bitmap.PixelHeight,
+            ["decodeMs"] = decoder == "cache" ? 0 : full.DecodeMilliseconds,
+            ["decoder"] = decoder,
+            ["areaWidth"] = _plannedArea.Width,
+            ["areaHeight"] = _plannedArea.Height,
+            ["layoutAreaWidth"] = _window.LayoutImageAreaPixels().Width,
+            ["layoutAreaHeight"] = _window.LayoutImageAreaPixels().Height,
+            ["dpi"] = NativeMethods.GetDpiForWindow(_window.Handle),
+        });
+        await NextFrameAsync();
+        if (!cancellation.IsCancellationRequested)
+        {
+            _timeline.Mark(requestId, "full-visible", QuickViewTimeline.Now);
+        }
+    }
+
+    /// <summary>
+    /// Decodes the neighbors of the shown item in the background (next first), so the next step is
+    /// instant. Cancelled by any navigation or by closing; never runs while the current item decodes.
+    /// </summary>
+    private async void StartPrefetch(uint areaWidth, uint areaHeight)
+    {
+        _prefetch?.Cancel();
+        _prefetch?.Dispose();
+        _prefetch = new CancellationTokenSource();
+        CancellationToken cancellation = _prefetch.Token;
+        try
+        {
+            (string? previous, string? next) = _navigator.Mode == NavigationMode.MultipleItems
+                ? (Neighbor(-1), Neighbor(+1))
+                : _worker is null ? (null, null) : await _worker.ReadNeighborsAsync();
+
+            foreach (string? path in new[] { next, previous })
+            {
+                if (path is null || cancellation.IsCancellationRequested)
+                {
+                    continue;
+                }
+
+                FileFacts facts = await Task.Run(() => FileFacts.Read(path), cancellation);
+                if (facts.Access != PreviewAccess.Allowed || facts.Length > MaxPrefetchFileBytes)
+                {
+                    continue;
+                }
+
+                Plan plan = await PlanAsync(path, facts, _scaleMode, areaWidth, areaHeight, cancellation);
+                PreviewKey key = PreviewKey.Create(path, facts.Length, facts.LastWriteUtc, plan.Box.Width, plan.Box.Height);
+                long pixelBudget = _scaleMode == ImageScaleMode.ActualSize ? MaxActualSizePrefetchPixels : MaxPrefetchSourcePixels;
+                if (_cache.Contains(key))
+                {
+                    continue;
+                }
+
+                DecodedPreview decoded = facts.Format == FileFormat.Pdf
+                    ? await RenderPdfAsync(path, plan.Box.Width, plan.Box.Height, cancellation, plan.PdfActualScale)
+                    : await DecodeImageAsync(path, plan.Box.Width, plan.Box.Height, Interpolation(_options.Interpolation), PreferWic(facts), cancellation, pixelBudget);
+                if (decoded.Reason is null && _visible)
+                {
+                    _cache.Add(key, decoded);
+                    _timeline.Mark(0, "prefetched", QuickViewTimeline.Now, new Dictionary<string, object?>
+                    {
+                        ["decodeMs"] = decoded.DecodeMilliseconds,
+                        ["cacheBytes"] = _cache.Bytes,
+                        ["cacheCount"] = _cache.Count,
+                    });
+                }
+                else
+                {
+                    decoded.Bitmap?.Dispose();
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by navigation or closing.
+        }
+        catch (Exception ex)
+        {
+            // Prefetch is an optimization; failures (hostile/broken neighbor files) are ignored.
+            _timeline.Mark(0, "prefetch-error", QuickViewTimeline.Now, new Dictionary<string, object?> { ["type"] = ex.GetType().Name });
+        }
+    }
+
+    private string? Neighbor(int delta)
+    {
+        int index = _navigator.Index + delta;
+        return index >= 0 && index < _navigator.Items.Count ? _navigator.Items[index] : null;
+    }
+
+    private async Task ShowThumbnailAsync(long requestId, Task<BgraImage?> thumbnailTask, Plan plan, Func<bool>? superseded, CancellationToken cancellation)
     {
         BgraImage? thumbnail;
         try
@@ -494,7 +1064,9 @@ internal sealed class QuickViewController : IDisposable
             return;
         }
 
+        _window.SetImageBox(plan.ExpectedElementSize, plan.Scrollable);
         _window.SetThumbnail(thumbnail);
+        _contentRequest = requestId;
         await NextFrameAsync();
         if (!cancellation.IsCancellationRequested && superseded?.Invoke() != true)
         {
@@ -529,7 +1101,7 @@ internal sealed class QuickViewController : IDisposable
                 cancellation);
             if (PreviewSafetyPolicy.CheckDimensions(width, height) != PreviewAccess.Allowed)
             {
-                _window.SetStatus(Strings.GetString("QuickView_Error_TooLarge"));
+                _window.ShowStatusOnly(Strings.GetString("QuickView_Error_TooLarge"));
                 return;
             }
 
@@ -550,12 +1122,12 @@ internal sealed class QuickViewController : IDisposable
             cancellation.ThrowIfCancellationRequested();
             if (!ok)
             {
-                _window.SetStatus(Strings.GetString("QuickView_Error_Failed"));
+                _window.ShowStatusOnly(Strings.GetString("QuickView_Error_Failed"));
                 return;
             }
 
             _window.CommitFullImage();
-            _window.SetInfo(FormatInfo(facts, new DecodedPreview(null, width, height, 0, "xaml-bitmapimage", 0, null)));
+            SetInfo(FormatInfo(facts, new DecodedPreview(null, width, height, 0, "xaml-bitmapimage", 0, null)));
             _timeline.Mark(requestId, "full-set", QuickViewTimeline.Now, new Dictionary<string, object?>
             {
                 ["sourceWidth"] = width,
@@ -593,11 +1165,38 @@ internal sealed class QuickViewController : IDisposable
         _ => BitmapInterpolationMode.Fant,
     };
 
-    private static Task<DecodedPreview> DecodeImageAsync(string path, uint viewportWidth, uint viewportHeight, BitmapInterpolationMode interpolation, CancellationToken cancellation) =>
+    /// <summary>JPEG goes through WIC directly (measured faster); other formats were as fast or faster via WinRT.</summary>
+    private bool PreferWic(FileFacts facts) => _options.UseWicForJpeg && facts.Format == FileFormat.Jpeg;
+
+    private static Task<DecodedPreview> DecodeImageAsync(string path, uint viewportWidth, uint viewportHeight, BitmapInterpolationMode interpolation, bool preferWic, CancellationToken cancellation, long maxSourcePixels = PreviewSafetyPolicy.MaxSourcePixels) =>
         Task.Run(
             async () =>
             {
                 long start = QuickViewTimeline.Now;
+                string fallbackReason = string.Empty;
+                if (preferWic)
+                {
+                    try
+                    {
+                        using WicPreparedImage? prepared = WicPreviewDecoder.Prepare(path, viewportWidth, viewportHeight, maxSourcePixels, cancellation);
+                        if (prepared is not null)
+                        {
+                            SoftwareBitmap fast = SoftwareBitmapPixels.FromWic(prepared);
+                            return DecodedPreview.Decoded(fast, prepared.SourceWidth, prepared.SourceHeight, QuickViewTimeline.Now - start, "wic-direct");
+                        }
+
+                        fallbackReason = "-color-managed"; // embedded profile / non-sRGB: use the color-managed path
+                    }
+                    catch (ImageTooLargeException)
+                    {
+                        return DecodedPreview.Skipped("too-large");
+                    }
+                    catch (Exception ex) when (ex is COMException or ArgumentException or OverflowException)
+                    {
+                        fallbackReason = "-after-wic-error";
+                    }
+                }
+
                 using IRandomAccessStream stream = await OpenReadAsync(path);
                 BitmapDecoder decoder;
                 try
@@ -612,7 +1211,7 @@ internal sealed class QuickViewController : IDisposable
 
                 uint width = decoder.OrientedPixelWidth;
                 uint height = decoder.OrientedPixelHeight;
-                if (PreviewSafetyPolicy.CheckDimensions(width, height) != PreviewAccess.Allowed)
+                if (PreviewSafetyPolicy.CheckDimensions(width, height) != PreviewAccess.Allowed || (long)width * height > maxSourcePixels)
                 {
                     return DecodedPreview.Skipped("too-large");
                 }
@@ -633,11 +1232,20 @@ internal sealed class QuickViewController : IDisposable
                     transform,
                     ExifOrientationMode.RespectExifOrientation,
                     ColorManagementMode.ColorManageToSRgb);
-                return DecodedPreview.Decoded(bitmap, width, height, QuickViewTimeline.Now - start, "winrt-bitmapdecoder-" + interpolation);
+                return DecodedPreview.Decoded(bitmap, width, height, QuickViewTimeline.Now - start, "winrt-bitmapdecoder-" + interpolation + fallbackReason);
             },
             cancellation);
 
-    private static Task<DecodedPreview> RenderPdfAsync(string path, uint viewportWidth, uint viewportHeight, CancellationToken cancellation) =>
+    /// <summary>
+    /// Bitmap pixels Windows.Data.Pdf produces per unit of <see cref="PdfPageRenderOptions.DestinationWidth"/>.
+    /// Measured: 1.5 on a PC whose primary monitor is at 150 %, also for a window on a 100 % monitor, so the
+    /// planned size came out 1.5 times too large (the page was cut off in the fit mode). Starts from the system
+    /// DPI and is corrected from the first render.
+    /// </summary>
+    private static double s_pdfOutputScale = Math.Max(1, NativeMethods.GetDpiForSystem()) / 96.0;
+
+    /// <param name="actualScale">Render at 100 % (page size × this rasterization scale) instead of fitting.</param>
+    private static Task<DecodedPreview> RenderPdfAsync(string path, uint viewportWidth, uint viewportHeight, CancellationToken cancellation, double? actualScale = null) =>
         Task.Run(
             async () =>
             {
@@ -654,20 +1262,34 @@ internal sealed class QuickViewController : IDisposable
                 }
 
                 using PdfPage page = document.GetPage(0);
-                double scale = Math.Min(viewportWidth / page.Size.Width, viewportHeight / page.Size.Height);
-                var options = new PdfPageRenderOptions
+                double scale = actualScale is { } s && page.Size.Width * page.Size.Height * s * s <= DisplaySizing.MaxActualSizePixels
+                    ? s
+                    : Math.Min(viewportWidth / page.Size.Width, viewportHeight / page.Size.Height);
+                double wantWidth = Math.Max(1, Math.Floor(page.Size.Width * scale));
+                double wantHeight = Math.Max(1, Math.Floor(page.Size.Height * scale));
+                for (int attempt = 0; ; attempt++)
                 {
-                    DestinationWidth = (uint)Math.Max(1, page.Size.Width * scale),
-                    DestinationHeight = (uint)Math.Max(1, page.Size.Height * scale),
-                    BitmapEncoderId = BitmapEncoder.BmpEncoderId,
-                };
-                cancellation.ThrowIfCancellationRequested();
-                using var rendered = new InMemoryRandomAccessStream();
-                await page.RenderToStreamAsync(rendered, options);
-                rendered.Seek(0);
-                BitmapDecoder decoder = await BitmapDecoder.CreateAsync(rendered);
-                SoftwareBitmap bitmap = await decoder.GetSoftwareBitmapAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
-                return DecodedPreview.Decoded(bitmap, (uint)page.Size.Width, (uint)page.Size.Height, QuickViewTimeline.Now - start, "windows-data-pdf", (int)document.PageCount);
+                    double outputScale = Volatile.Read(ref s_pdfOutputScale);
+                    var options = new PdfPageRenderOptions
+                    {
+                        DestinationWidth = (uint)Math.Max(1, Math.Floor(wantWidth / outputScale)),
+                        DestinationHeight = (uint)Math.Max(1, Math.Floor(wantHeight / outputScale)),
+                        BitmapEncoderId = BitmapEncoder.BmpEncoderId,
+                    };
+                    cancellation.ThrowIfCancellationRequested();
+                    using var rendered = new InMemoryRandomAccessStream();
+                    await page.RenderToStreamAsync(rendered, options);
+                    rendered.Seek(0);
+                    BitmapDecoder decoder = await BitmapDecoder.CreateAsync(rendered);
+                    if (Math.Abs(decoder.PixelWidth - wantWidth) > 2 && attempt == 0)
+                    {
+                        Volatile.Write(ref s_pdfOutputScale, decoder.PixelWidth / (double)options.DestinationWidth);
+                        continue; // learned the real factor: render once more at the planned size
+                    }
+
+                    SoftwareBitmap bitmap = await decoder.GetSoftwareBitmapAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
+                    return DecodedPreview.Decoded(bitmap, (uint)page.Size.Width, (uint)page.Size.Height, QuickViewTimeline.Now - start, "windows-data-pdf", (int)document.PageCount);
+                }
             },
             cancellation);
 
@@ -738,7 +1360,7 @@ internal sealed record DecodedPreview(SoftwareBitmap? Bitmap, uint SourceWidth, 
 }
 
 /// <summary>File metadata gathered before any decoding.</summary>
-internal sealed record FileFacts(System.IO.FileAttributes Attributes, long Length, FileFormat Format, PreviewAccess Access)
+internal sealed record FileFacts(System.IO.FileAttributes Attributes, long Length, FileFormat Format, PreviewAccess Access, DateTime LastWriteUtc = default)
 {
     public static FileFacts Read(string path)
     {
@@ -759,6 +1381,6 @@ internal sealed record FileFacts(System.IO.FileAttributes Attributes, long Lengt
         FileFormat format = access == PreviewAccess.Allowed
             ? FileFormatDetector.Detect(path)
             : FileFormatDetector.FromExtension(info.Extension);
-        return new FileFacts(info.Attributes, info.Length, format, access);
+        return new FileFacts(info.Attributes, info.Length, format, access, info.LastWriteTimeUtc);
     }
 }

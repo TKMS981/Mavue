@@ -19,6 +19,7 @@ public partial class App : Application
     private SelectionWorker? _selectionWorker;
     private QuickViewController? _controller;
     private QuickViewWindow? _window;
+    private HookMaintenance? _hookMaintenance;
 
     public App()
     {
@@ -93,6 +94,7 @@ public partial class App : Application
             }
         };
         _hook.EscapeHandler = _controller.HandleEscapeFromHook;
+        _controller.Attach(_selectionWorker, _hook);
         if (options.Activation is ActivationMode.HookGrant or ActivationMode.Auto)
         {
             uint self = (uint)System.Environment.ProcessId;
@@ -100,6 +102,7 @@ public partial class App : Application
         }
 
         _hook.Start();
+        _hookMaintenance = new HookMaintenance(_hook, _timeline, options.OtherQuickLook);
 
         _foregroundWatcher = new ForegroundWatcher();
         _foregroundWatcher.ForegroundChanged += _controller.OnForegroundChanged;
@@ -108,11 +111,14 @@ public partial class App : Application
         _shutdownEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShutdownEventName);
         ThreadPool.RegisterWaitForSingleObject(_shutdownEvent, (_, _) => dispatcher.TryEnqueue(Shutdown), null, Timeout.Infinite, executeOnlyOnce: true);
 
-        _timeline.Mark(0, "ready", QuickViewTimeline.Now, new Dictionary<string, object?> { ["hookInstalled"] = _hook.IsInstalled });
+        Dictionary<string, object?> ready = QuickViewController.MemorySnapshot();
+        ready["hookInstalled"] = _hook.IsInstalled;
+        _timeline.Mark(0, "ready", QuickViewTimeline.Now, ready);
     }
 
     private async void Shutdown()
     {
+        _hookMaintenance?.Dispose();
         _hook?.Dispose();
         _foregroundWatcher?.Dispose();
         _selectionWorker?.Dispose();
