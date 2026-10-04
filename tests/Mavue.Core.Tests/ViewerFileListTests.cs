@@ -97,7 +97,9 @@ public sealed class ViewerFileListTests
         Assert.Contains(FileFormat.Heif, ViewerFormats.All);
         Assert.Contains(".jpg", ViewerFormats.Extensions);
         Assert.Contains(".mkv", ViewerFormats.Extensions);
-        Assert.DoesNotContain(".svg", ViewerFormats.Extensions); // no decoder yet
+        Assert.Contains(".svg", ViewerFormats.Extensions);
+        Assert.Contains(".nef", ViewerFormats.Extensions);
+        Assert.DoesNotContain(".jp2", ViewerFormats.Extensions); // no decoder yet
         Assert.True(ViewerFormats.HasViewableExtension(@"C:\a\B.JPG"));
         Assert.False(ViewerFormats.HasViewableExtension(@"C:\a\b.txt"));
         Assert.Equal(ViewerFormats.Extensions.Count, ViewerFormats.Extensions.Distinct(StringComparer.OrdinalIgnoreCase).Count());

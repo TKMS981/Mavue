@@ -75,6 +75,7 @@ internal enum RegistrationCommand
     RegisterModernMenu,
     UnregisterModernMenu,
     WriteIdentityManifest,
+    WritePackageManifest,
 }
 
 /// <summary>Command-line options. Unknown arguments are ignored.</summary>
@@ -110,6 +111,9 @@ internal sealed record HostOptions
     /// <summary>Write Shell COM HRESULT traces to the timing log (diagnostics).</summary>
     public bool TraceShell { get; init; }
 
+    /// <summary>Tests: web links in documents are logged, never opened in the browser.</summary>
+    public bool NoLaunch { get; init; }
+
     /// <summary>Ask a running instance to exit, then exit.</summary>
     public bool Shutdown { get; init; }
 
@@ -137,6 +141,9 @@ internal sealed record HostOptions
 
     /// <summary>Publisher of the identity package (the signing certificate's subject).</summary>
     public string Publisher { get; init; } = "CN=Mavue Dev";
+
+    /// <summary>Processor architecture of the full MSIX package (x64 or arm64).</summary>
+    public string PackageArchitecture { get; init; } = "x64";
 
     /// <summary>Version of the identity package (default: from the current date and hour).</summary>
     public Version? PackageVersion { get; init; }
@@ -197,6 +204,9 @@ internal sealed record HostOptions
                 case "--include-dialogs":
                     options = options with { IncludeFileDialogs = true };
                     break;
+                case "--no-launch":
+                    options = options with { NoLaunch = true };
+                    break;
                 case "--trace-shell":
                     options = options with { TraceShell = true };
                     break;
@@ -228,6 +238,14 @@ internal sealed record HostOptions
                     break;
                 case "--write-identity-manifest" when next is not null:
                     options = options with { Registration = RegistrationCommand.WriteIdentityManifest, RegistrationPath = next };
+                    i++;
+                    break;
+                case "--write-package-manifest" when next is not null:
+                    options = options with { Registration = RegistrationCommand.WritePackageManifest, RegistrationPath = next };
+                    i++;
+                    break;
+                case "--architecture" when next is not null:
+                    options = options with { PackageArchitecture = next.ToLowerInvariant() };
                     i++;
                     break;
                 case "--publisher" when next is not null:

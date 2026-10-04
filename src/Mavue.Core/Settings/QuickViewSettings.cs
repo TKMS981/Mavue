@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 using Mavue.Core.IO;
 using Mavue.Core.Viewing;
 
-namespace Mavue.QuickView.Settings;
+namespace Mavue.Core.Settings;
 
 /// <summary>
 /// Persisted Quick View preferences (%LOCALAPPDATA%\Mavue\QuickView\settings.json). Unknown or
@@ -12,13 +12,22 @@ namespace Mavue.QuickView.Settings;
 /// </summary>
 public sealed record QuickViewSettings
 {
+    // Settable rather than init-only: System.Text.Json source generation assigns every init-only property, so a
+    // property missing from the file would become default(T) instead of keeping its initializer below.
     /// <summary>Current file format version.</summary>
     public const int CurrentVersion = 1;
 
-    public int Version { get; init; } = CurrentVersion;
+    public int Version { get; set; } = CurrentVersion;
 
     [JsonConverter(typeof(JsonStringEnumConverter<ImageScaleMode>))]
-    public ImageScaleMode ImageScale { get; init; } = ImageScaleMode.FitNoUpscale;
+    public ImageScaleMode ImageScale { get; set; } = ImageScaleMode.FitNoUpscale;
+
+    /// <summary>How PDF pages are arranged in Quick View (the last choice is kept).</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter<PdfLayoutMode>))]
+    public PdfLayoutMode PdfLayout { get; set; } = PdfLayoutMode.Continuous;
+
+    /// <summary>The PDF sidebar (pages, contents, results) is open.</summary>
+    public bool ShowPdfSidebar { get; set; }
 
     /// <summary>Default location for the current user.</summary>
     public static string DefaultPath { get; } = Path.Combine(
@@ -37,7 +46,12 @@ public sealed record QuickViewSettings
 
             using FileStream stream = File.OpenRead(path);
             QuickViewSettings? loaded = JsonSerializer.Deserialize(stream, QuickViewSettingsJson.Default.QuickViewSettings);
-            return loaded is null || !Enum.IsDefined(loaded.ImageScale) ? new QuickViewSettings() : loaded;
+            if (loaded is null || !Enum.IsDefined(loaded.ImageScale))
+            {
+                return new QuickViewSettings();
+            }
+
+            return Enum.IsDefined(loaded.PdfLayout) ? loaded : loaded with { PdfLayout = PdfLayoutMode.Continuous };
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)
         {

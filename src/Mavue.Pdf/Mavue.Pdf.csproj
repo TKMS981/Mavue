@@ -1,9 +1,22 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- PDF engine abstraction. Implementations: PDFium (render/text/forms/annotations/pages) + QPDF (encryption/linearization). See docs/DEPENDENCIES.md section 3. -->
+  <!-- PDF engine: PDFium (render, text, search, links, outline) through its C API; QPDF (encryption/linearization)
+       later. See docs/DEPENDENCIES.md section 3. Platform-neutral .NET: no WinRT here, so the engine can be tested
+       and reused without UI. -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Mavue.Pdf</RootNamespace>
+    <!-- LibraryImport, function pointers for PDFium's file-access callback. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- pdfium.dll for win-x64/win-arm64/win-x86 (runtimes/<rid>/native); byte-identical to the release .tgz whose
+         license files are in licenses/pdfium (tools/update-pdfium-licenses.ps1 checks this). -->
+    <PackageReference Include="bblanchon.PDFium.Win32" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- PDFium's and its components' license texts travel with pdfium.dll into every program that uses it. -->
+    <None Include="..\..\licenses\pdfium\*.*" Link="licenses\pdfium\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Mavue.Core\Mavue.Core.csproj" />
   </ItemGroup>

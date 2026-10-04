@@ -7,7 +7,10 @@ using Windows.Storage.Streams;
 
 namespace Mavue.Viewer.Rendering;
 
-/// <summary>Renders one PDF page with Windows.Data.Pdf, off the UI thread, at the size it will be shown at.</summary>
+/// <summary>
+/// Renders one PDF page off the UI thread at the size it will be shown at: with PDFium (<see cref="PdfiumRendering"/>),
+/// or with Windows.Data.Pdf when pdfium.dll is unavailable.
+/// </summary>
 public static class PdfRendering
 {
     /// <summary>
@@ -21,6 +24,12 @@ public static class PdfRendering
     /// <param name="actualScale">Render at 100 % (page size × this rasterization scale) instead of fitting.</param>
     /// <param name="pageIndex">Zero-based page; clamped to the document.</param>
     public static Task<DecodedImage> RenderAsync(string path, uint viewportWidth, uint viewportHeight, CancellationToken cancellation, double? actualScale = null, int pageIndex = 0) =>
+        Mavue.Pdf.Pdfium.PdfiumLibrary.IsAvailable
+            ? PdfiumRendering.RenderPageAsync(path, viewportWidth, viewportHeight, actualScale, pageIndex, cancellation)
+            : RenderWithWindowsAsync(path, viewportWidth, viewportHeight, actualScale, pageIndex, cancellation);
+
+    /// <summary>Fallback when pdfium.dll cannot be loaded: Windows.Data.Pdf (display only).</summary>
+    private static Task<DecodedImage> RenderWithWindowsAsync(string path, uint viewportWidth, uint viewportHeight, double? actualScale, int pageIndex, CancellationToken cancellation) =>
         Task.Run(
             async () =>
             {
@@ -43,29 +52,38 @@ public static class PdfRendering
                     : Math.Min(viewportWidth / page.Size.Width, viewportHeight / page.Size.Height);
                 double wantWidth = Math.Max(1, Math.Floor(page.Size.Width * scale));
                 double wantHeight = Math.Max(1, Math.Floor(page.Size.Height * scale));
-                for (int attempt = 0; ; attempt++)
-                {
-                    double outputScale = Volatile.Read(ref s_outputScale);
-                    var options = new PdfPageRenderOptions
-                    {
-                        DestinationWidth = (uint)Math.Max(1, Math.Floor(wantWidth / outputScale)),
-                        DestinationHeight = (uint)Math.Max(1, Math.Floor(wantHeight / outputScale)),
-                        BitmapEncoderId = BitmapEncoder.BmpEncoderId,
-                    };
-                    cancellation.ThrowIfCancellationRequested();
-                    using var rendered = new InMemoryRandomAccessStream();
-                    await page.RenderToStreamAsync(rendered, options);
-                    rendered.Seek(0);
-                    BitmapDecoder decoder = await BitmapDecoder.CreateAsync(rendered);
-                    if (Math.Abs(decoder.PixelWidth - wantWidth) > 2 && attempt == 0)
-                    {
-                        Volatile.Write(ref s_outputScale, decoder.PixelWidth / (double)options.DestinationWidth);
-                        continue; // learned the real factor: render once more at the planned size
-                    }
-
-                    SoftwareBitmap bitmap = await decoder.GetSoftwareBitmapAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
-                    return DecodedImage.Decoded(bitmap, (uint)page.Size.Width, (uint)page.Size.Height, Stopwatch.GetTimestamp() - start, "windows-data-pdf", (int)document.PageCount, (int)index);
-                }
+                SoftwareBitmap bitmap = await RenderPageAsync(page, (uint)wantWidth, (uint)wantHeight, cancellation);
+                return DecodedImage.Decoded(bitmap, (uint)page.Size.Width, (uint)page.Size.Height, Stopwatch.GetTimestamp() - start, "windows-data-pdf", (int)document.PageCount, (int)index);
             },
             cancellation);
+
+    /// <summary>
+    /// Renders <paramref name="page"/> to <paramref name="width"/> × <paramref name="height"/> pixels (BGRA,
+    /// premultiplied). Corrects the renderer's output scale from the first result (see <see cref="s_outputScale"/>).
+    /// </summary>
+    internal static async Task<SoftwareBitmap> RenderPageAsync(PdfPage page, uint width, uint height, CancellationToken cancellation)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            double outputScale = Volatile.Read(ref s_outputScale);
+            var options = new PdfPageRenderOptions
+            {
+                DestinationWidth = (uint)Math.Max(1, Math.Floor(width / outputScale)),
+                DestinationHeight = (uint)Math.Max(1, Math.Floor(height / outputScale)),
+                BitmapEncoderId = BitmapEncoder.BmpEncoderId,
+            };
+            cancellation.ThrowIfCancellationRequested();
+            using var rendered = new InMemoryRandomAccessStream();
+            await page.RenderToStreamAsync(rendered, options);
+            rendered.Seek(0);
+            BitmapDecoder decoder = await BitmapDecoder.CreateAsync(rendered);
+            if (Math.Abs(decoder.PixelWidth - (double)width) > 2 && attempt == 0)
+            {
+                Volatile.Write(ref s_outputScale, decoder.PixelWidth / (double)options.DestinationWidth);
+                continue; // learned the real factor: render once more at the planned size
+            }
+
+            return await decoder.GetSoftwareBitmapAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
+        }
+    }
 }

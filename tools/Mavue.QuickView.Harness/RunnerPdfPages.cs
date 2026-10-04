@@ -26,8 +26,10 @@ internal sealed partial class Runner
             Task.Run(() => TestAssets.EncodeAsync(image, BitmapEncoder.JpegEncoderId, 640, 480, 0.9)).GetAwaiter().GetResult();
         }
 
+        WriteHostSettings("SinglePage"); // page turns by the wheel are a single-page behavior (continuous: quickview-pdf)
         Guarded("pdf-pages", () => PdfPages(pdf, image),
             "3-page PDF: PageDown/PageUp (Explorer in front) and the mouse wheel turn pages, Explorer's selection is unchanged, nothing happens past the last page; ↓/↑ still move between files and a PDF opens at page 1 again");
+        WriteHostSettings();
     }
 
     private (bool, string) PdfPages(string pdf, string image)

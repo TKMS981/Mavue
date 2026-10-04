@@ -49,7 +49,7 @@
     <value>This image is too large to preview.</value>
   </data>
   <data name="QuickView_Error_PdfPassword" xml:space="preserve">
-    <value>This PDF is password-protected.</value>
+    <value>This PDF is password-protected. Open it in Mavue to enter the password.</value>
   </data>
   <data name="QuickView_Error_Failed" xml:space="preserve">
     <value>This file could not be previewed. It may be damaged or in an unsupported format.</value>
@@ -77,5 +77,104 @@
   </data>
   <data name="QuickView_Error_Media" xml:space="preserve">
     <value>This file can't be played. It may be damaged, or Windows has no decoder for its format.</value>
+  </data>
+  <data name="QuickView_ZoomIn" xml:space="preserve">
+    <value>Zoom in (Ctrl++ / Ctrl+wheel)</value>
+  </data>
+  <data name="QuickView_ZoomOut" xml:space="preserve">
+    <value>Zoom out (Ctrl+-)</value>
+  </data>
+  <data name="QuickView_ZoomFit" xml:space="preserve">
+    <value>Fit (Ctrl+0)</value>
+  </data>
+  <data name="QuickView_Rotate" xml:space="preserve">
+    <value>Rotate right (Ctrl+R)</value>
+  </data>
+  <data name="QuickView_OpenWith" xml:space="preserve">
+    <value>Open with…</value>
+  </data>
+  <data name="QuickView_OpenInMavue" xml:space="preserve">
+    <value>Open in Mavue</value>
+  </data>
+  <data name="QuickView_AnimationPaused" xml:space="preserve">
+    <value>Paused</value>
+  </data>
+  <data name="Pdf_SearchPlaceholder" xml:space="preserve">
+    <value>Find in document</value>
+  </data>
+  <data name="Pdf_SearchNext" xml:space="preserve">
+    <value>Next result</value>
+  </data>
+  <data name="Pdf_SearchPrevious" xml:space="preserve">
+    <value>Previous result</value>
+  </data>
+  <data name="Pdf_MatchCase" xml:space="preserve">
+    <value>Match case</value>
+  </data>
+  <data name="Pdf_Searching" xml:space="preserve">
+    <value>Searching…</value>
+  </data>
+  <data name="Pdf_SearchProgress" xml:space="preserve">
+    <value>Searching… {0} / {1} pages, {2} found</value>
+  </data>
+  <data name="Pdf_NoMatches" xml:space="preserve">
+    <value>No results</value>
+  </data>
+  <data name="Pdf_MatchPosition" xml:space="preserve">
+    <value>{0} / {1}</value>
+  </data>
+  <data name="Pdf_ResultPage" xml:space="preserve">
+    <value>p. {0}</value>
+  </data>
+  <data name="Pdf_PageItem" xml:space="preserve">
+    <value>Page {0}</value>
+  </data>
+  <data name="Pdf_TabPages" xml:space="preserve">
+    <value>Pages</value>
+  </data>
+  <data name="Pdf_TabOutline" xml:space="preserve">
+    <value>Contents</value>
+  </data>
+  <data name="Pdf_TabResults" xml:space="preserve">
+    <value>Results</value>
+  </data>
+  <data name="Pdf_NoOutline" xml:space="preserve">
+    <value>This document has no table of contents or bookmarks.</value>
+  </data>
+  <data name="Pdf_Close" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="Pdf_PresentationHint" xml:space="preserve">
+    <value>→ / click: next page · ← : previous · Esc: end</value>
+  </data>
+  <data name="QuickView_Search" xml:space="preserve">
+    <value>Find in document (Ctrl+F)</value>
+  </data>
+  <data name="QuickView_Sidebar" xml:space="preserve">
+    <value>Pages, contents and results</value>
+  </data>
+  <data name="QuickView_Layout" xml:space="preserve">
+    <value>Page layout</value>
+  </data>
+  <data name="QuickView_LayoutSingle" xml:space="preserve">
+    <value>Single page</value>
+  </data>
+  <data name="QuickView_LayoutContinuous" xml:space="preserve">
+    <value>Continuous</value>
+  </data>
+  <data name="QuickView_LayoutTwoPages" xml:space="preserve">
+    <value>Two pages</value>
+  </data>
+  <data name="QuickView_LayoutTwoPagesCover" xml:space="preserve">
+    <value>Two pages, cover alone</value>
+  </data>
+  <data name="QuickView_Presentation" xml:space="preserve">
+    <value>Presentation (F5)</value>
+  </data>
+  <data name="QuickView_PageBox" xml:space="preserve">
+    <value>Page number</value>
+  </data>
+  <data name="QuickView_PageCount" xml:space="preserve">
+    <value>/ {0}</value>
   </data>
 </root>

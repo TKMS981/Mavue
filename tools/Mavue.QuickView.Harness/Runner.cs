@@ -180,7 +180,9 @@ internal sealed partial class Runner(HarnessOptions options, Action<string> log)
                 RunDisplayScenarios(assets);
                 RunContextMenuScenarios(assets);
                 RunPdfPageScenario(assets);
+                RunQuickViewPdfScenario(assets);
                 RunGifScenario(assets);
+                RunViewScenario(assets);
                 RunMediaScenario(assets);
             }
 
@@ -251,7 +253,7 @@ internal sealed partial class Runner(HarnessOptions options, Action<string> log)
         string settingsPath = Path.Combine(options.WorkDirectory, "settings-e2e.json");
         File.WriteAllText(settingsPath, $"{{\"version\": 1, \"imageScale\": \"{(options.ScaleMode == "actual" ? "ActualSize" : "FitNoUpscale")}\"}}");
         Environment["scaleMode"] = options.ScaleMode;
-        string args = $"--activation {options.Activation} --decoder {options.Decoder} --interpolation {options.Interpolation} --timing-log \"{logPath}\" --settings \"{settingsPath}\"" + (options.Prewarm ? string.Empty : " --no-prewarm") + " --trace-shell " + options.HostExtraArgs;
+        string args = $"--activation {options.Activation} --decoder {options.Decoder} --interpolation {options.Interpolation} --timing-log \"{logPath}\" --settings \"{settingsPath}\"" + (options.Prewarm ? string.Empty : " --no-prewarm") + " --trace-shell --no-launch " + options.HostExtraArgs;
         long start = Stopwatch.GetTimestamp();
         if (options.ChildHost)
         {

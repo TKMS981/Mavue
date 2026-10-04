@@ -49,7 +49,7 @@
     <value>この画像は大きすぎるためプレビューできません。</value>
   </data>
   <data name="QuickView_Error_PdfPassword" xml:space="preserve">
-    <value>この PDF はパスワードで保護されています。</value>
+    <value>この PDF はパスワードで保護されています。Mavue で開くとパスワードを入力して表示できます。</value>
   </data>
   <data name="QuickView_Error_Failed" xml:space="preserve">
     <value>このファイルをプレビューできませんでした。破損しているか、対応していない形式の可能性があります。</value>
@@ -77,5 +77,104 @@
   </data>
   <data name="QuickView_Error_Media" xml:space="preserve">
     <value>このファイルは再生できません。破損しているか、この形式のデコーダーが Windows にありません。</value>
+  </data>
+  <data name="QuickView_ZoomIn" xml:space="preserve">
+    <value>拡大 (Ctrl++ / Ctrl+ホイール)</value>
+  </data>
+  <data name="QuickView_ZoomOut" xml:space="preserve">
+    <value>縮小 (Ctrl+-)</value>
+  </data>
+  <data name="QuickView_ZoomFit" xml:space="preserve">
+    <value>元のサイズに戻す (Ctrl+0)</value>
+  </data>
+  <data name="QuickView_Rotate" xml:space="preserve">
+    <value>右に回転 (Ctrl+R)</value>
+  </data>
+  <data name="QuickView_OpenWith" xml:space="preserve">
+    <value>プログラムから開く…</value>
+  </data>
+  <data name="QuickView_OpenInMavue" xml:space="preserve">
+    <value>Mavue で開く</value>
+  </data>
+  <data name="QuickView_AnimationPaused" xml:space="preserve">
+    <value>一時停止</value>
+  </data>
+  <data name="Pdf_SearchPlaceholder" xml:space="preserve">
+    <value>文書内を検索</value>
+  </data>
+  <data name="Pdf_SearchNext" xml:space="preserve">
+    <value>次の結果</value>
+  </data>
+  <data name="Pdf_SearchPrevious" xml:space="preserve">
+    <value>前の結果</value>
+  </data>
+  <data name="Pdf_MatchCase" xml:space="preserve">
+    <value>大文字と小文字を区別</value>
+  </data>
+  <data name="Pdf_Searching" xml:space="preserve">
+    <value>検索しています…</value>
+  </data>
+  <data name="Pdf_SearchProgress" xml:space="preserve">
+    <value>検索しています… {0} / {1} ページ、{2} 件</value>
+  </data>
+  <data name="Pdf_NoMatches" xml:space="preserve">
+    <value>見つかりません</value>
+  </data>
+  <data name="Pdf_MatchPosition" xml:space="preserve">
+    <value>{0} / {1} 件</value>
+  </data>
+  <data name="Pdf_ResultPage" xml:space="preserve">
+    <value>{0} ページ</value>
+  </data>
+  <data name="Pdf_PageItem" xml:space="preserve">
+    <value>{0} ページ</value>
+  </data>
+  <data name="Pdf_TabPages" xml:space="preserve">
+    <value>ページ</value>
+  </data>
+  <data name="Pdf_TabOutline" xml:space="preserve">
+    <value>目次・しおり</value>
+  </data>
+  <data name="Pdf_TabResults" xml:space="preserve">
+    <value>検索結果</value>
+  </data>
+  <data name="Pdf_NoOutline" xml:space="preserve">
+    <value>この文書には目次・しおりがありません。</value>
+  </data>
+  <data name="Pdf_Close" xml:space="preserve">
+    <value>閉じる</value>
+  </data>
+  <data name="Pdf_PresentationHint" xml:space="preserve">
+    <value>→ / クリック: 次のページ · ←: 前 · Esc: 終了</value>
+  </data>
+  <data name="QuickView_Search" xml:space="preserve">
+    <value>文書内を検索 (Ctrl+F)</value>
+  </data>
+  <data name="QuickView_Sidebar" xml:space="preserve">
+    <value>ページ・目次・検索結果</value>
+  </data>
+  <data name="QuickView_Layout" xml:space="preserve">
+    <value>ページの表示方法</value>
+  </data>
+  <data name="QuickView_LayoutSingle" xml:space="preserve">
+    <value>単一ページ</value>
+  </data>
+  <data name="QuickView_LayoutContinuous" xml:space="preserve">
+    <value>連続スクロール</value>
+  </data>
+  <data name="QuickView_LayoutTwoPages" xml:space="preserve">
+    <value>見開き</value>
+  </data>
+  <data name="QuickView_LayoutTwoPagesCover" xml:space="preserve">
+    <value>見開き（表紙を単独）</value>
+  </data>
+  <data name="QuickView_Presentation" xml:space="preserve">
+    <value>プレゼンテーション (F5)</value>
+  </data>
+  <data name="QuickView_PageBox" xml:space="preserve">
+    <value>ページ番号</value>
+  </data>
+  <data name="QuickView_PageCount" xml:space="preserve">
+    <value>/ {0}</value>
   </data>
 </root>

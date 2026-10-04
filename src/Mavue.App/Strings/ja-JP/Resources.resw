@@ -36,9 +36,6 @@
   <data name="MainWindow_NextPage" xml:space="preserve">
     <value>次のページ</value>
   </data>
-  <data name="MainWindow_PageNumber" xml:space="preserve">
-    <value>{0} / {1}</value>
-  </data>
   <data name="MainWindow_Position" xml:space="preserve">
     <value>{0} / {1}</value>
   </data>
@@ -89,5 +86,467 @@
   </data>
   <data name="Viewer_InfoBasic" xml:space="preserve">
     <value>{0} · {1}</value>
+  </data>
+  <data name="MainWindow_Recent" xml:space="preserve">
+    <value>最近使ったファイル</value>
+  </data>
+  <data name="MainWindow_RecentFiles" xml:space="preserve">
+    <value>最近使ったファイル</value>
+  </data>
+  <data name="MainWindow_NoRecentFiles" xml:space="preserve">
+    <value>最近使ったファイルはありません</value>
+  </data>
+  <data name="MainWindow_ClearRecent" xml:space="preserve">
+    <value>最近使ったファイルの一覧を消去</value>
+  </data>
+  <data name="MainWindow_OpenEllipsis" xml:space="preserve">
+    <value>開く…</value>
+  </data>
+  <data name="MainWindow_Thumbnails" xml:space="preserve">
+    <value>ページのサムネイル</value>
+  </data>
+  <data name="MainWindow_PageCount" xml:space="preserve">
+    <value>/ {0}</value>
+  </data>
+  <data name="MainWindow_PageBox" xml:space="preserve">
+    <value>ページ番号</value>
+  </data>
+  <data name="MainWindow_Zoom" xml:space="preserve">
+    <value>表示倍率</value>
+  </data>
+  <data name="MainWindow_ZoomIn" xml:space="preserve">
+    <value>拡大</value>
+  </data>
+  <data name="MainWindow_ZoomOut" xml:space="preserve">
+    <value>縮小</value>
+  </data>
+  <data name="MainWindow_ZoomFit" xml:space="preserve">
+    <value>ウィンドウに合わせる</value>
+  </data>
+  <data name="MainWindow_ZoomFitWidth" xml:space="preserve">
+    <value>幅に合わせる</value>
+  </data>
+  <data name="MainWindow_ZoomActual" xml:space="preserve">
+    <value>実際のサイズ</value>
+  </data>
+  <data name="MainWindow_RotateLeft" xml:space="preserve">
+    <value>左に回転</value>
+  </data>
+  <data name="MainWindow_RotateRight" xml:space="preserve">
+    <value>右に回転</value>
+  </data>
+  <data name="MainWindow_FlipHorizontal" xml:space="preserve">
+    <value>左右反転</value>
+  </data>
+  <data name="MainWindow_FlipVertical" xml:space="preserve">
+    <value>上下反転</value>
+  </data>
+  <data name="MainWindow_Info" xml:space="preserve">
+    <value>ファイル情報</value>
+  </data>
+  <data name="MainWindow_Copy" xml:space="preserve">
+    <value>コピー</value>
+  </data>
+  <data name="MainWindow_OpenWith" xml:space="preserve">
+    <value>プログラムから開く…</value>
+  </data>
+  <data name="MainWindow_ShowInFolder" xml:space="preserve">
+    <value>フォルダーに表示</value>
+  </data>
+  <data name="MainWindow_Properties" xml:space="preserve">
+    <value>プロパティ</value>
+  </data>
+  <data name="MainWindow_NewWindow" xml:space="preserve">
+    <value>新しいウィンドウ</value>
+  </data>
+  <data name="MainWindow_Settings" xml:space="preserve">
+    <value>設定</value>
+  </data>
+  <data name="MainWindow_Shortcuts" xml:space="preserve">
+    <value>キーボード ショートカット</value>
+  </data>
+  <data name="Viewer_InfoAnimation" xml:space="preserve">
+    <value>{0} · {1} × {2} · {3} · コマ {4} / {5}</value>
+  </data>
+  <data name="Viewer_AnimationPaused" xml:space="preserve">
+    <value>一時停止</value>
+  </data>
+  <data name="Dialog_Close" xml:space="preserve">
+    <value>閉じる</value>
+  </data>
+  <data name="Info_Name" xml:space="preserve">
+    <value>名前</value>
+  </data>
+  <data name="Info_Folder" xml:space="preserve">
+    <value>フォルダー</value>
+  </data>
+  <data name="Info_Type" xml:space="preserve">
+    <value>種類</value>
+  </data>
+  <data name="Info_Size" xml:space="preserve">
+    <value>サイズ</value>
+  </data>
+  <data name="Info_Created" xml:space="preserve">
+    <value>作成日時</value>
+  </data>
+  <data name="Info_Modified" xml:space="preserve">
+    <value>更新日時</value>
+  </data>
+  <data name="Info_Dimensions" xml:space="preserve">
+    <value>大きさ</value>
+  </data>
+  <data name="Info_Resolution" xml:space="preserve">
+    <value>解像度</value>
+  </data>
+  <data name="Info_BitDepth" xml:space="preserve">
+    <value>ビットの深さ</value>
+  </data>
+  <data name="Info_DateTaken" xml:space="preserve">
+    <value>撮影日時</value>
+  </data>
+  <data name="Info_Camera" xml:space="preserve">
+    <value>カメラ</value>
+  </data>
+  <data name="Info_Lens" xml:space="preserve">
+    <value>レンズ</value>
+  </data>
+  <data name="Info_Exposure" xml:space="preserve">
+    <value>露出時間</value>
+  </data>
+  <data name="Info_Aperture" xml:space="preserve">
+    <value>絞り値</value>
+  </data>
+  <data name="Info_Iso" xml:space="preserve">
+    <value>ISO 感度</value>
+  </data>
+  <data name="Info_FocalLength" xml:space="preserve">
+    <value>焦点距離</value>
+  </data>
+  <data name="Info_Location" xml:space="preserve">
+    <value>位置 (緯度, 経度)</value>
+  </data>
+  <data name="Info_Altitude" xml:space="preserve">
+    <value>高度</value>
+  </data>
+  <data name="Info_Title" xml:space="preserve">
+    <value>タイトル</value>
+  </data>
+  <data name="Info_Authors" xml:space="preserve">
+    <value>作成者</value>
+  </data>
+  <data name="Info_Keywords" xml:space="preserve">
+    <value>キーワード</value>
+  </data>
+  <data name="Info_Comment" xml:space="preserve">
+    <value>コメント</value>
+  </data>
+  <data name="Info_Copyright" xml:space="preserve">
+    <value>著作権</value>
+  </data>
+  <data name="Info_Duration" xml:space="preserve">
+    <value>長さ</value>
+  </data>
+  <data name="Info_FrameRate" xml:space="preserve">
+    <value>フレーム率</value>
+  </data>
+  <data name="Info_Bitrate" xml:space="preserve">
+    <value>ビット レート</value>
+  </data>
+  <data name="Info_SampleRate" xml:space="preserve">
+    <value>サンプル レート</value>
+  </data>
+  <data name="Info_Channels" xml:space="preserve">
+    <value>チャンネル数</value>
+  </data>
+  <data name="Info_Artist" xml:space="preserve">
+    <value>アーティスト</value>
+  </data>
+  <data name="Info_Album" xml:space="preserve">
+    <value>アルバム</value>
+  </data>
+  <data name="Info_Year" xml:space="preserve">
+    <value>年</value>
+  </data>
+  <data name="Info_Genre" xml:space="preserve">
+    <value>ジャンル</value>
+  </data>
+  <data name="Info_Pages" xml:space="preserve">
+    <value>ページ数</value>
+  </data>
+  <data name="Shortcut_Open" xml:space="preserve">
+    <value>ファイルを開く</value>
+  </data>
+  <data name="Shortcut_Files" xml:space="preserve">
+    <value>前 / 次のファイル</value>
+  </data>
+  <data name="Shortcut_FirstLast" xml:space="preserve">
+    <value>最初 / 最後のページまたはファイル</value>
+  </data>
+  <data name="Shortcut_Pages" xml:space="preserve">
+    <value>前 / 次のページ</value>
+  </data>
+  <data name="Shortcut_GoToPage" xml:space="preserve">
+    <value>ページを指定して移動</value>
+  </data>
+  <data name="Shortcut_Zoom" xml:space="preserve">
+    <value>拡大 / 縮小</value>
+  </data>
+  <data name="Shortcut_Fit" xml:space="preserve">
+    <value>ウィンドウに合わせる</value>
+  </data>
+  <data name="Shortcut_ActualSize" xml:space="preserve">
+    <value>実際のサイズ</value>
+  </data>
+  <data name="Shortcut_FitWidth" xml:space="preserve">
+    <value>幅に合わせる</value>
+  </data>
+  <data name="Shortcut_Pan" xml:space="preserve">
+    <value>拡大した画像の表示位置を動かす</value>
+  </data>
+  <data name="Shortcut_Rotate" xml:space="preserve">
+    <value>右 / 左に回転</value>
+  </data>
+  <data name="Shortcut_Play" xml:space="preserve">
+    <value>再生 / 一時停止（動画・音声・GIF）</value>
+  </data>
+  <data name="Shortcut_Frames" xml:space="preserve">
+    <value>GIF の前 / 次のコマ</value>
+  </data>
+  <data name="Shortcut_Seek" xml:space="preserve">
+    <value>10 秒戻る / 進む</value>
+  </data>
+  <data name="Shortcut_Volume" xml:space="preserve">
+    <value>音量を上げる / 下げる</value>
+  </data>
+  <data name="Shortcut_Copy" xml:space="preserve">
+    <value>ファイル（PDF で文字を選択中はその文字）をコピー</value>
+  </data>
+  <data name="Shortcut_Paste" xml:space="preserve">
+    <value>クリップボードのファイルを開く</value>
+  </data>
+  <data name="Shortcut_Info" xml:space="preserve">
+    <value>ファイル情報の表示 / 非表示</value>
+  </data>
+  <data name="Shortcut_Properties" xml:space="preserve">
+    <value>Windows のファイルのプロパティ</value>
+  </data>
+  <data name="Shortcut_NewWindow" xml:space="preserve">
+    <value>新しいウィンドウ</value>
+  </data>
+  <data name="Shortcut_Close" xml:space="preserve">
+    <value>ウィンドウを閉じる</value>
+  </data>
+  <data name="Shortcut_Settings" xml:space="preserve">
+    <value>設定</value>
+  </data>
+  <data name="Shortcut_Help" xml:space="preserve">
+    <value>この一覧</value>
+  </data>
+  <data name="Settings_Theme" xml:space="preserve">
+    <value>外観</value>
+  </data>
+  <data name="Settings_ThemeSystem" xml:space="preserve">
+    <value>Windows の設定に従う</value>
+  </data>
+  <data name="Settings_ThemeLight" xml:space="preserve">
+    <value>ライト</value>
+  </data>
+  <data name="Settings_ThemeDark" xml:space="preserve">
+    <value>ダーク</value>
+  </data>
+  <data name="Settings_DefaultScale" xml:space="preserve">
+    <value>Mavue でファイルを開いたときの表示サイズ</value>
+  </data>
+  <data name="Settings_ScaleFit" xml:space="preserve">
+    <value>ウィンドウに合わせる（小さい画像は拡大しない）</value>
+  </data>
+  <data name="Settings_ScaleActual" xml:space="preserve">
+    <value>実際のサイズ</value>
+  </data>
+  <data name="Settings_QuickViewScale" xml:space="preserve">
+    <value>Quick View の表示サイズ</value>
+  </data>
+  <data name="Settings_Integration" xml:space="preserve">
+    <value>Windows との統合</value>
+  </data>
+  <data name="Settings_IntegrationHint" xml:space="preserve">
+    <value>Mavue を「プログラムから開く」と「設定 › 既定のアプリ」（Mavue を既定のアプリにできます）に追加し、エクスプローラーの右クリックメニューに「Mavue で開く」を追加します（このユーザーのみ）。既定のアプリは変更しません。</value>
+  </data>
+  <data name="Settings_Register" xml:space="preserve">
+    <value>Windows に追加</value>
+  </data>
+  <data name="Settings_RegisterAgain" xml:space="preserve">
+    <value>更新</value>
+  </data>
+  <data name="Settings_Unregister" xml:space="preserve">
+    <value>削除</value>
+  </data>
+  <data name="Settings_DefaultApps" xml:space="preserve">
+    <value>既定のアプリ…</value>
+  </data>
+  <data name="Settings_RecentFiles" xml:space="preserve">
+    <value>最近使ったファイル</value>
+  </data>
+  <data name="Settings_NotRegistered" xml:space="preserve">
+    <value>まだ Windows に追加されていません。</value>
+  </data>
+  <data name="Settings_Registered" xml:space="preserve">
+    <value>{0} 種類のファイルに追加済みです（{1}）。</value>
+  </data>
+  <data name="Settings_RegisteredElsewhere" xml:space="preserve">
+    <value>{0} 種類のファイルに追加済みですが、別の場所の Mavue です（{1}）。「更新」でこの Mavue を登録します。</value>
+  </data>
+  <data name="Registration_OpenCommand" xml:space="preserve">
+    <value>Mavue で開く</value>
+  </data>
+  <data name="Registration_Description" xml:space="preserve">
+    <value>画像・PDF・動画・音声を表示します。</value>
+  </data>
+  <data name="Registration_ImageType" xml:space="preserve">
+    <value>画像 (Mavue)</value>
+  </data>
+  <data name="Registration_PdfType" xml:space="preserve">
+    <value>PDF ドキュメント (Mavue)</value>
+  </data>
+  <data name="Registration_VideoType" xml:space="preserve">
+    <value>動画 (Mavue)</value>
+  </data>
+  <data name="Registration_AudioType" xml:space="preserve">
+    <value>音声 (Mavue)</value>
+  </data>
+  <data name="MainWindow_Sidebar" xml:space="preserve">
+    <value>サイドバー（サムネイル・目次・検索結果）</value>
+  </data>
+  <data name="MainWindow_Search" xml:space="preserve">
+    <value>文書内を検索</value>
+  </data>
+  <data name="MainWindow_Layout" xml:space="preserve">
+    <value>ページの表示方法</value>
+  </data>
+  <data name="MainWindow_LayoutSingle" xml:space="preserve">
+    <value>単一ページ</value>
+  </data>
+  <data name="MainWindow_LayoutContinuous" xml:space="preserve">
+    <value>連続スクロール</value>
+  </data>
+  <data name="MainWindow_LayoutTwoPages" xml:space="preserve">
+    <value>見開き</value>
+  </data>
+  <data name="Shortcut_Find" xml:space="preserve">
+    <value>PDF 内を検索、次 / 前の結果</value>
+  </data>
+  <data name="Shortcut_SelectAll" xml:space="preserve">
+    <value>PDF の文字をすべて選択</value>
+  </data>
+  <data name="Shortcut_Layout" xml:space="preserve">
+    <value>単一ページ / 連続スクロール / 見開き</value>
+  </data>
+  <data name="Pdf_SearchPlaceholder" xml:space="preserve">
+    <value>文書内を検索</value>
+  </data>
+  <data name="Pdf_SearchNext" xml:space="preserve">
+    <value>次の結果</value>
+  </data>
+  <data name="Pdf_SearchPrevious" xml:space="preserve">
+    <value>前の結果</value>
+  </data>
+  <data name="Pdf_MatchCase" xml:space="preserve">
+    <value>大文字と小文字を区別</value>
+  </data>
+  <data name="Pdf_Searching" xml:space="preserve">
+    <value>検索しています…</value>
+  </data>
+  <data name="Pdf_SearchProgress" xml:space="preserve">
+    <value>検索しています… {0} / {1} ページ、{2} 件</value>
+  </data>
+  <data name="Pdf_NoMatches" xml:space="preserve">
+    <value>見つかりません</value>
+  </data>
+  <data name="Pdf_MatchPosition" xml:space="preserve">
+    <value>{0} / {1} 件</value>
+  </data>
+  <data name="Pdf_ResultPage" xml:space="preserve">
+    <value>{0} ページ</value>
+  </data>
+  <data name="Pdf_PageItem" xml:space="preserve">
+    <value>{0} ページ</value>
+  </data>
+  <data name="Pdf_TabPages" xml:space="preserve">
+    <value>ページ</value>
+  </data>
+  <data name="Pdf_TabOutline" xml:space="preserve">
+    <value>目次・しおり</value>
+  </data>
+  <data name="Pdf_TabResults" xml:space="preserve">
+    <value>検索結果</value>
+  </data>
+  <data name="Pdf_NoOutline" xml:space="preserve">
+    <value>この文書には目次・しおりがありません。</value>
+  </data>
+  <data name="Pdf_Close" xml:space="preserve">
+    <value>閉じる</value>
+  </data>
+  <data name="Pdf_PresentationHint" xml:space="preserve">
+    <value>→ / クリック: 次のページ · ←: 前 · Esc: 終了</value>
+  </data>
+  <data name="MainWindow_LayoutTwoPagesCover" xml:space="preserve">
+    <value>見開き（表紙を単独）</value>
+  </data>
+  <data name="MainWindow_Presentation" xml:space="preserve">
+    <value>プレゼンテーション</value>
+  </data>
+  <data name="Shortcut_Presentation" xml:space="preserve">
+    <value>PDF を全画面でプレゼンテーション</value>
+  </data>
+  <data name="Password_Title" xml:space="preserve">
+    <value>パスワードが必要です</value>
+  </data>
+  <data name="Password_Prompt" xml:space="preserve">
+    <value>「{0}」はパスワードで保護されています。</value>
+  </data>
+  <data name="Password_Placeholder" xml:space="preserve">
+    <value>パスワード</value>
+  </data>
+  <data name="Password_Wrong" xml:space="preserve">
+    <value>パスワードが違います。もう一度入力してください。</value>
+  </data>
+  <data name="Password_Open" xml:space="preserve">
+    <value>開く</value>
+  </data>
+  <data name="Dialog_Cancel" xml:space="preserve">
+    <value>キャンセル</value>
+  </data>
+  <data name="Settings_PdfPreview" xml:space="preserve">
+    <value>エクスプローラーのプレビュー ウィンドウでの PDF</value>
+  </data>
+  <data name="Settings_PdfPreviewMavue" xml:space="preserve">
+    <value>Mavue で表示</value>
+  </data>
+  <data name="Settings_PdfPreviewOther" xml:space="preserve">
+    <value>既存のプレビュー（Microsoft Edge など）</value>
+  </data>
+  <data name="Settings_PdfPreviewHint" xml:space="preserve">
+    <value>Mavue が他のアプリのプレビューを勝手に置き換えることはありません。オフにすると以前のプレビューに戻ります。</value>
+  </data>
+  <data name="Settings_PdfPreviewNotPossible" xml:space="preserve">
+    <value>この環境では Mavue の PDF プレビューを使えません（既定の PDF アプリが独自のプレビューを持っています）。</value>
+  </data>
+  <data name="Settings_ShellHandlers" xml:space="preserve">
+    <value>プレビュー: {0} 種類、サムネイル: {1}。</value>
+  </data>
+  <data name="Settings_IntegrationPackaged" xml:space="preserve">
+    <value>パッケージ版としてインストールされています。「プログラムから開く」「既定のアプリ」への追加と右クリックの「Mavue Quick View」はパッケージが設定します。エクスプローラーのプレビュー ウィンドウとサムネイルは、ほかのアプリのパッケージ（フォトやメディア プレーヤーなど）も登録している種類では使われないことがあります。ZIP 版の Mavue は対応するすべての種類で提供します。既定のアプリは Windows の設定で選んでください。</value>
+  </data>
+  <data name="Settings_About" xml:space="preserve">
+    <value>Mavue について</value>
+  </data>
+  <data name="Settings_Version" xml:space="preserve">
+    <value>バージョン {0}</value>
+  </data>
+  <data name="Settings_LicenseHint" xml:space="preserve">
+    <value>Mavue は Apache License 2.0 で提供されます。第三者のコンポーネント（PDFium、.NET、Windows App SDK など）はそれぞれのライセンスに従って含まれています。</value>
+  </data>
+  <data name="Settings_Licenses" xml:space="preserve">
+    <value>ライセンス情報</value>
   </data>
 </root>

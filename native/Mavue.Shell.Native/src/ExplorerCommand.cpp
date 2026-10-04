@@ -3,7 +3,8 @@
 // Deliberately minimal (docs/WINDOWS-INTEGRATION.md §15): the command does not show anything itself and never
 // starts the Quick View host directly. Invoke asks File Explorer to run
 //     Mavue.QuickView.Host.exe --quickview "<path>" ...
-// through the desktop's Shell automation object (IShellDispatch2::ShellExecute). The process is then created
+// through the desktop's Shell automation object (IShellDispatch2::ShellExecute; an open Explorer window's while the
+// desktop is not registered yet after Explorer starts). The process is then created
 // by explorer.exe, which (measured) gives it the right to take the foreground and keeps it out of this package's
 // desktop app container; it forwards the request to the resident host over the existing named pipe, or becomes
 // the resident host itself. Quick View reads the Explorer selection itself, so the first path is enough there.
@@ -61,32 +62,12 @@ namespace mavue
             arguments += L'"';
         }
 
-        /// <summary>Asks the running File Explorer (not this surrogate) to start a program.</summary>
-        HRESULT ShellExecuteThroughExplorer(const std::wstring& file, const std::wstring& arguments, const std::wstring& directory)
+        /// <summary>The Shell automation object (IShellDispatch2) of an Explorer window or of the desktop.</summary>
+        HRESULT ShellDispatchOf(IDispatch* window, IShellDispatch2** result)
         {
-            IShellWindows* windows = nullptr;
-            HRESULT hr = CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_LOCAL_SERVER, IID_PPV_ARGS(&windows));
-            if (FAILED(hr))
-            {
-                return hr;
-            }
-
-            VARIANT location{};
-            location.vt = VT_I4;
-            location.lVal = CSIDL_DESKTOP;
-            VARIANT empty{};
-            long hwnd = 0;
-            IDispatch* desktopDispatch = nullptr;
-            hr = windows->FindWindowSW(&location, &empty, SWC_DESKTOP, &hwnd, SWFO_NEEDDISPATCH, &desktopDispatch);
-            windows->Release();
-            if (hr != S_OK || desktopDispatch == nullptr)
-            {
-                return FAILED(hr) ? hr : E_FAIL;
-            }
-
+            *result = nullptr;
             IServiceProvider* services = nullptr;
-            hr = desktopDispatch->QueryInterface(IID_PPV_ARGS(&services));
-            desktopDispatch->Release();
+            HRESULT hr = window->QueryInterface(IID_PPV_ARGS(&services));
             if (FAILED(hr))
             {
                 return hr;
@@ -132,12 +113,64 @@ namespace mavue
                 return hr;
             }
 
-            IShellDispatch2* shell = nullptr;
-            hr = applicationDispatch->QueryInterface(IID_PPV_ARGS(&shell));
+            hr = applicationDispatch->QueryInterface(IID_PPV_ARGS(result));
             applicationDispatch->Release();
+            return hr;
+        }
+
+        /// <summary>
+        /// Asks the running File Explorer (not this surrogate) to start a program: through the desktop's automation
+        /// object, or, while the desktop is not registered in ShellWindows yet (for several seconds after Explorer
+        /// starts or restarts; the first command then failed, measured 2026-10-04), through an open Explorer window.
+        /// </summary>
+        HRESULT ShellExecuteThroughExplorer(const std::wstring& file, const std::wstring& arguments, const std::wstring& directory)
+        {
+            IShellWindows* windows = nullptr;
+            HRESULT hr = CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_LOCAL_SERVER, IID_PPV_ARGS(&windows));
             if (FAILED(hr))
             {
                 return hr;
+            }
+
+            IShellDispatch2* shell = nullptr;
+            VARIANT location{};
+            location.vt = VT_I4;
+            location.lVal = CSIDL_DESKTOP;
+            VARIANT empty{};
+            long hwnd = 0;
+            IDispatch* desktopDispatch = nullptr;
+            hr = windows->FindWindowSW(&location, &empty, SWC_DESKTOP, &hwnd, SWFO_NEEDDISPATCH, &desktopDispatch);
+            if (hr == S_OK && desktopDispatch != nullptr)
+            {
+                hr = ShellDispatchOf(desktopDispatch, &shell);
+                desktopDispatch->Release();
+            }
+            else
+            {
+                hr = FAILED(hr) ? hr : E_FAIL;
+            }
+
+            long count = 0;
+            if (shell == nullptr && SUCCEEDED(windows->get_Count(&count)))
+            {
+                for (long i = 0; i < count && shell == nullptr; ++i)
+                {
+                    VARIANT index{};
+                    index.vt = VT_I4;
+                    index.lVal = i;
+                    IDispatch* window = nullptr;
+                    if (windows->Item(index, &window) == S_OK && window != nullptr)
+                    {
+                        hr = ShellDispatchOf(window, &shell);
+                        window->Release();
+                    }
+                }
+            }
+
+            windows->Release();
+            if (shell == nullptr)
+            {
+                return FAILED(hr) ? hr : E_FAIL;
             }
 
             BSTR fileBstr = SysAllocString(file.c_str());
@@ -302,6 +335,15 @@ namespace mavue
 
         std::wstring host = directory + L"\\" + HostExecutable;
         HRESULT hr = ShellExecuteThroughExplorer(host, arguments, directory);
+        if (FAILED(hr))
+        {
+            // Seen twice as the first command shortly after an update of the ZIP install (E_FAIL from Explorer, not
+            // reproduced since). One retry is harmless: a repeated request for the selection Quick View already
+            // shows changes nothing.
+            Sleep(250);
+            hr = ShellExecuteThroughExplorer(host, arguments, directory);
+        }
+
         if (FAILED(hr))
         {
             wchar_t message[128];

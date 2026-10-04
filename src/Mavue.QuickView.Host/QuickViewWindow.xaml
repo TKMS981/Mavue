@@ -5,20 +5,32 @@
 
   <!-- Solid background (no Mica) keeps the first frame cheap; the harness also uses it as the
        reference color when checking that image pixels are actually on screen. -->
-  <Grid x:Name="Root" Background="#FF1E1E1E" IsTabStop="True" KeyDown="OnRootKeyDown">
+  <!-- Follows the Windows app theme (QuickViewWindow.ApplyTheme): #1E1E1E when dark, Windows' light background when light. -->
+  <Grid x:Name="Root" Background="#FF1E1E1E" IsTabStop="True" KeyDown="OnRootKeyDown" RequestedTheme="Dark">
     <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />
       <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
 
+    <!-- PDF: find (shared PdfSearchBar) on top and the sidebar (shared PdfSidebar) on the left, added in code. -->
+    <Grid x:Name="SearchHost" Padding="0,8,0,0" Visibility="Collapsed" />
+
     <!-- Image, video/audio and messages: the viewer surface shared with Mavue.App (Mavue.Viewer.Controls.ViewerSurface),
          added in code. Images are sized explicitly (one decoded pixel per screen pixel); the file of a video or audio
          is streamed by the player, never read into memory by Quick View. -->
-    <Grid x:Name="SurfaceHost" />
+    <Grid Grid.Row="1">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="*" />
+      </Grid.ColumnDefinitions>
+      <Grid x:Name="SidebarHost" Width="232" Visibility="Collapsed" Background="#FF202020" />
+      <Grid x:Name="SurfaceHost" Grid.Column="1" />
+    </Grid>
 
     <!-- The image scale (fit without enlarging / actual size) is a setting, not an in-window control
          (user decision): it is read from settings.json each time Quick View opens. -->
-    <Grid x:Name="InfoBar" Grid.Row="1" Padding="16,8,16,12" ColumnSpacing="12" Background="#FF181818">
+    <Grid x:Name="InfoBar" Grid.Row="2" Padding="16,8,16,12" ColumnSpacing="12" Background="#FF181818">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="*" />
         <ColumnDefinition Width="Auto" />
@@ -27,11 +39,42 @@
         <TextBlock x:Name="NameText" Foreground="#FFF2F2F2" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
         <TextBlock x:Name="InfoText" Foreground="#FFB0B0B0" FontSize="12" TextTrimming="CharacterEllipsis" />
       </StackPanel>
-      <!-- Previous/next page of a multi-page PDF (also PageUp/PageDown and the mouse wheel). Not tab stops,
-           so keyboard focus stays on the window and Space/Esc keep closing Quick View. -->
-      <StackPanel x:Name="PageButtons" Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Visibility="Collapsed">
-        <Button x:Name="PreviousPageButton" IsTabStop="False" Click="OnPreviousPageClick" Padding="10,6" FontFamily="Segoe Fluent Icons,Segoe MDL2 Assets" Content="&#xE76B;" />
-        <Button x:Name="NextPageButton" IsTabStop="False" Click="OnNextPageClick" Padding="10,6" FontFamily="Segoe Fluent Icons,Segoe MDL2 Assets" Content="&#xE76C;" />
+      <!-- Previous/next page of a multi-page PDF (also PageUp/PageDown and the mouse wheel), zoom, rotation and file
+           commands. Not tab stops, so keyboard focus stays on the window and Space/Esc keep closing Quick View. -->
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+        <!-- PDF with PDFium: sidebar, find, layout, presentation. -->
+        <StackPanel x:Name="PdfTools" Orientation="Horizontal" Spacing="4" Visibility="Collapsed" Margin="0,0,8,0">
+          <ToggleButton x:Name="SidebarButton" IsTabStop="False" Click="OnSidebarClick" Padding="10,6" FontFamily="Segoe Fluent Icons,Segoe MDL2 Assets" Content="&#xE8A9;" />
+          <Button x:Name="SearchButton" IsTabStop="False" Click="OnSearchClick" Padding="10,6" FontFamily="Segoe Fluent Icons,Segoe MDL2 Assets" Content="&#xE721;" />
+          <DropDownButton x:Name="LayoutButton" IsTabStop="False" Padding="10,6" AutomationProperties.AutomationId="QuickViewLayoutButton">
+            <DropDownButton.Content>
+              <FontIcon Glyph="&#xE8A1;" FontSize="14" />
+            </DropDownButton.Content>
+            <DropDownButton.Flyout>
+              <MenuFlyout Placement="Top">
+                <RadioMenuFlyoutItem x:Name="LayoutSingleItem" GroupName="QvPdfLayout" Tag="SinglePage" Click="OnLayoutClick" />
+                <RadioMenuFlyoutItem x:Name="LayoutContinuousItem" GroupName="QvPdfLayout" Tag="Continuous" Click="OnLayoutClick" />
+                <RadioMenuFlyoutItem x:Name="LayoutTwoPagesItem" GroupName="QvPdfLayout" Tag="TwoPages" Click="OnLayoutClick" />
+                <RadioMenuFlyoutItem x:Name="LayoutTwoPagesCoverItem" GroupName="QvPdfLayout" Tag="TwoPagesCover" Click="OnLayoutClick" />
+              </MenuFlyout>
+            </DropDownButton.Flyout>
+          </DropDownButton>
+          <Button x:Name="PresentationButton" IsTabStop="False" Click="OnPresentationClick" Padding="10,6" FontFamily="Segoe Fluent Icons,Segoe MDL2 Assets" Content="&#xE7F4;" />
+        </StackPanel>
+        <StackPanel x:Name="PageButtons" Orientation="Horizontal" Spacing="4" Visibility="Collapsed" Margin="0,0,8,0">
+          <Button x:Name="PreviousPageButton" IsTabStop="False" Click="OnPreviousPageClick" Padding="10,6" FontFamily="Segoe Fluent Icons,Segoe MDL2 Assets" Content="&#xE76B;" />
+          <TextBox x:Name="PageBox" Width="56" MinWidth="0" TextAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" KeyDown="OnPageBoxKeyDown" AutomationProperties.AutomationId="QuickViewPageBox" />
+          <TextBlock x:Name="PageCountText" VerticalAlignment="Center" Foreground="#FFB0B0B0" Margin="2,0,4,0" Visibility="Collapsed" />
+          <Button x:Name="NextPageButton" IsTabStop="False" Click="OnNextPageClick" Padding="10,6" FontFamily="Segoe Fluent Icons,Segoe MDL2 Assets" Content="&#xE76C;" />
+        </StackPanel>
+        <StackPanel x:Name="ViewButtons" Orientation="Horizontal" Spacing="4" Visibility="Collapsed">
+          <Button x:Name="ZoomOutButton" IsTabStop="False" Click="OnZoomOutClick" Padding="10,6" FontFamily="Segoe Fluent Icons,Segoe MDL2 Assets" Content="&#xE71F;" />
+          <Button x:Name="ZoomFitButton" IsTabStop="False" Click="OnZoomFitClick" Padding="10,6" MinWidth="64" FontSize="12" Foreground="#FFE0E0E0" />
+          <Button x:Name="ZoomInButton" IsTabStop="False" Click="OnZoomInClick" Padding="10,6" FontFamily="Segoe Fluent Icons,Segoe MDL2 Assets" Content="&#xE710;" />
+          <Button x:Name="RotateButton" IsTabStop="False" Click="OnRotateClick" Padding="10,6" FontFamily="Segoe Fluent Icons,Segoe MDL2 Assets" Content="&#xE7AD;" Margin="0,0,8,0" />
+        </StackPanel>
+        <Button x:Name="OpenWithButton" IsTabStop="False" Click="OnOpenWithClick" Padding="10,6" FontFamily="Segoe Fluent Icons,Segoe MDL2 Assets" Content="&#xE7AC;" />
+        <Button x:Name="OpenInMavueButton" IsTabStop="False" Click="OnOpenInMavueClick" Padding="12,6" FontSize="12" Foreground="#FFE0E0E0" Visibility="Collapsed" />
       </StackPanel>
     </Grid>
   </Grid>

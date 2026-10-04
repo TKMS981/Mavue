@@ -112,6 +112,13 @@ internal static partial class Program
         try
         {
             string host = Environment.ProcessPath ?? throw new InvalidOperationException("Unknown process path.");
+            if (PackageInfo.IsPackaged && options.Registration is RegistrationCommand.Register or RegistrationCommand.Unregister or RegistrationCommand.RegisterModernMenu or RegistrationCommand.UnregisterModernMenu)
+            {
+                // The MSIX package declares the context menu and the start at sign-in (StartupTask, Settings › Apps › Startup).
+                Console.WriteLine("Mavue Quick View is installed as a package: its Windows integration comes from the package (nothing to register).");
+                return 0;
+            }
+
             switch (options.Registration)
             {
                 case RegistrationCommand.Register:
@@ -146,6 +153,15 @@ internal static partial class Program
                     int removed = registration.Unregister();
                     int removedPackages = options.VerbName is null ? Task.Run(modern.UnregisterAsync).GetAwaiter().GetResult() : 0;
                     Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"Removed {removed} registry entries and {removedPackages} identity package(s)."));
+                    break;
+
+                case RegistrationCommand.WritePackageManifest:
+                    Version packageVersion = options.PackageVersion ?? IdentityPackageManifest.VersionFor(DateTime.UtcNow);
+                    string full = MsixPackageManifest.Create(options.Publisher, packageVersion, options.PackageArchitecture);
+                    string fullTarget = Path.GetFullPath(options.RegistrationPath!);
+                    Directory.CreateDirectory(Path.GetDirectoryName(fullTarget)!);
+                    File.WriteAllText(fullTarget, full, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                    Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"Wrote {fullTarget} (full package, publisher {options.Publisher}, version {packageVersion.ToString(4)}, {options.PackageArchitecture})."));
                     break;
 
                 case RegistrationCommand.WriteIdentityManifest:

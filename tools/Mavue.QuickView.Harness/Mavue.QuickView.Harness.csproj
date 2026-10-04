@@ -16,5 +16,9 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\tests\assets\quickview\*.*" Link="assets\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <!-- PowerShell helpers run in other processes: 32-bit callers of the shell handlers, screenshots. -->
+    <None Include="scripts\*.ps1" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The same test PDFs as the PDF engine's unit tests (text, outline, links). -->
+    <Compile Include="..\..\tests\Mavue.Pdf.Tests\TestPdf.cs" Link="TestPdf.cs" />
   </ItemGroup>
 </Project>

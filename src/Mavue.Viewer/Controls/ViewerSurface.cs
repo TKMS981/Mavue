@@ -33,7 +33,14 @@ public sealed partial class ViewerSurface : UserControl
     private readonly TextBlock _audioState;
     private readonly MediaPlayerElement _media;
     private readonly TextBlock _status;
+    private readonly Grid _root;
+    private UIElement? _document;
     private int _wheelAccumulated;
+
+    // Panning with the mouse: where the drag started and the scroll offsets at that moment.
+    private uint? _panPointer;
+    private Windows.Foundation.Point _panStart;
+    private (double X, double Y) _panOffsets;
 
     public ViewerSurface()
     {
@@ -98,13 +105,18 @@ public sealed partial class ViewerSurface : UserControl
             TextAlignment = TextAlignment.Center,
         };
 
-        var root = new Grid();
-        root.Children.Add(_scroller);
-        root.Children.Add(_mediaHost);
-        root.Children.Add(_status);
-        Content = root;
+        _root = new Grid();
+        _root.Children.Add(_scroller);
+        _root.Children.Add(_mediaHost);
+        _root.Children.Add(_status);
+        Content = _root;
         IsTabStop = false;
 
+        // Dragging a zoomed image with the mouse or pen moves it (touch pans through the ScrollViewer itself).
+        _scroller.AddHandler(PointerPressedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler(OnPanPressed), handledEventsToo: true);
+        _scroller.AddHandler(PointerMovedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler(OnPanMoved), handledEventsToo: true);
+        _scroller.AddHandler(PointerReleasedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler(OnPanEnded), handledEventsToo: true);
+        _scroller.PointerCaptureLost += OnPanEnded;
         SizeChanged += (_, _) => AreaChanged?.Invoke(); // the surface itself: the image area is collapsed while a video plays
         Loaded += (_, _) =>
         {
@@ -195,6 +207,63 @@ public sealed partial class ViewerSurface : UserControl
         }
     }
 
+    /// <summary>True when the image is larger than the area and can be moved (scroll bars, drag, arrow keys).</summary>
+    public bool IsPannable => _scroller.VerticalScrollMode != ScrollMode.Disabled && (_scroller.ScrollableWidth > 0 || _scroller.ScrollableHeight > 0);
+
+    /// <summary>Center of the visible area in surface coordinates (the anchor of keyboard zoom).</summary>
+    public Windows.Foundation.Point ViewportCenter => new(ActualWidth / 2, ActualHeight / 2);
+
+    /// <summary>
+    /// Changes the size of the shown image to <paramref name="size"/> (device-independent pixels) at once, stretching
+    /// the current bitmap until a sharper one replaces it, and keeps the point at <paramref name="anchor"/> (surface
+    /// coordinates) where it is. Scrolling is enabled when the image becomes larger than the area.
+    /// </summary>
+    public void ZoomImage((double Width, double Height) size, Windows.Foundation.Point anchor)
+    {
+        double oldWidth = double.IsNaN(_full.Width) ? _full.ActualWidth : _full.Width;
+        double oldHeight = double.IsNaN(_full.Height) ? _full.ActualHeight : _full.Height;
+        double offsetX = _scroller.HorizontalOffset;
+        double offsetY = _scroller.VerticalOffset;
+        SetImageBox(size, scrollable: true);
+        _scroller.UpdateLayout();
+        if (oldWidth <= 0 || oldHeight <= 0)
+        {
+            return;
+        }
+
+        // Content coordinates exclude the padding around the image.
+        double pointerX = anchor.X - ContentPadding;
+        double pointerY = anchor.Y - ContentPadding;
+        double x = Core.Viewing.ViewerZoom.AnchoredOffset(offsetX, pointerX, size.Width / oldWidth, _scroller.ExtentWidth - (2 * ContentPadding), _scroller.ViewportWidth - (2 * ContentPadding));
+        double y = Core.Viewing.ViewerZoom.AnchoredOffset(offsetY, pointerY, size.Height / oldHeight, _scroller.ExtentHeight - (2 * ContentPadding), _scroller.ViewportHeight - (2 * ContentPadding));
+        _scroller.ChangeView(Math.Min(x, _scroller.ScrollableWidth), Math.Min(y, _scroller.ScrollableHeight), null, disableAnimation: true);
+    }
+
+    /// <summary>Moves a zoomed image by (<paramref name="dx"/>, <paramref name="dy"/>) device-independent pixels; false when it cannot move that way.</summary>
+    public bool ScrollBy(double dx, double dy)
+    {
+        if (!IsPannable)
+        {
+            return false;
+        }
+
+        double x = Math.Clamp(_scroller.HorizontalOffset + dx, 0, _scroller.ScrollableWidth);
+        double y = Math.Clamp(_scroller.VerticalOffset + dy, 0, _scroller.ScrollableHeight);
+        if (Math.Abs(x - _scroller.HorizontalOffset) < 0.5 && Math.Abs(y - _scroller.VerticalOffset) < 0.5)
+        {
+            return false;
+        }
+
+        _scroller.ChangeView(x, y, null, disableAnimation: true);
+        return true;
+    }
+
+    /// <summary>Current scroll offsets (diagnostics and tests).</summary>
+    public (double X, double Y) ScrollOffsets => (_scroller.HorizontalOffset, _scroller.VerticalOffset);
+
+    /// <summary>Size of the shown image element in device-independent pixels (diagnostics and tests).</summary>
+    public (double Width, double Height) ImageElementSize => (_full.ActualWidth, _full.ActualHeight);
+
     public void SetStatus(string status) => _status.Text = status;
 
     /// <summary>
@@ -274,6 +343,42 @@ public sealed partial class ViewerSurface : UserControl
 
     public void SetAudioState(string text) => _audioState.Text = text;
 
+    /// <summary>True while a document view (e.g. <see cref="PdfDocumentView"/>) is shown instead of an image.</summary>
+    public bool ShowsDocument => _document is not null;
+
+    /// <summary>
+    /// Shows <paramref name="view"/> (a control that scrolls and draws by itself, such as <see cref="PdfDocumentView"/>)
+    /// in place of the image area; images and media are cleared.
+    /// </summary>
+    public void ShowDocument(UIElement view)
+    {
+        ArgumentNullException.ThrowIfNull(view);
+        if (ReferenceEquals(_document, view))
+        {
+            return;
+        }
+
+        ClearDocument();
+        ClearImages();
+        _status.Text = string.Empty;
+        _scroller.Visibility = Visibility.Collapsed;
+        _document = view;
+        _root.Children.Insert(_root.Children.IndexOf(_status), view);
+    }
+
+    /// <summary>Removes the document view and returns to the image area.</summary>
+    public void ClearDocument()
+    {
+        if (_document is null)
+        {
+            return;
+        }
+
+        _root.Children.Remove(_document);
+        _document = null;
+        _scroller.Visibility = _mediaHost.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+    }
+
     /// <summary>Detaches the player and returns to the image area.</summary>
     public void ClearMedia()
     {
@@ -319,6 +424,44 @@ public sealed partial class ViewerSurface : UserControl
 
     /// <summary>Forgets a partial wheel notch (another document or page set).</summary>
     public void ResetWheel() => _wheelAccumulated = 0;
+
+    private void OnPanPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        Microsoft.UI.Input.PointerPoint point = e.GetCurrentPoint(this);
+        if (!IsPannable || e.Pointer.PointerDeviceType == Microsoft.UI.Input.PointerDeviceType.Touch || !point.Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
+        if (_scroller.CapturePointer(e.Pointer))
+        {
+            _panPointer = e.Pointer.PointerId;
+            _panStart = point.Position;
+            _panOffsets = (_scroller.HorizontalOffset, _scroller.VerticalOffset);
+            e.Handled = true;
+        }
+    }
+
+    private void OnPanMoved(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        if (_panPointer != e.Pointer.PointerId)
+        {
+            return;
+        }
+
+        Windows.Foundation.Point position = e.GetCurrentPoint(this).Position;
+        _scroller.ChangeView(_panOffsets.X - (position.X - _panStart.X), _panOffsets.Y - (position.Y - _panStart.Y), null, disableAnimation: true);
+        e.Handled = true;
+    }
+
+    private void OnPanEnded(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        if (_panPointer == e.Pointer.PointerId)
+        {
+            _panPointer = null;
+            _scroller.ReleasePointerCapture(e.Pointer);
+        }
+    }
 
     private void OnXamlRootChanged(XamlRoot sender, XamlRootChangedEventArgs args) => AreaChanged?.Invoke();
 

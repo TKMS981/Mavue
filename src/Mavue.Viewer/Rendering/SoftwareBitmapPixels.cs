@@ -1,4 +1,6 @@
 using System.Runtime.InteropServices;
+using Mavue.Core.Viewing;
+using Mavue.Image;
 using Mavue.Image.Wic;
 using Windows.Foundation;
 using Windows.Graphics.Imaging;
@@ -31,6 +33,42 @@ public static unsafe class SoftwareBitmapPixels
         catch
         {
             bitmap.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// A new BGRA bitmap with <paramref name="bitmap"/> turned and mirrored as <paramref name="orientation"/> says
+    /// (the input is left as is). Returns a plain copy for the identity orientation.
+    /// </summary>
+    public static SoftwareBitmap Orient(SoftwareBitmap bitmap, ViewOrientation orientation)
+    {
+        ArgumentNullException.ThrowIfNull(bitmap);
+        if (orientation.IsIdentity)
+        {
+            return SoftwareBitmap.Copy(bitmap);
+        }
+
+        (int width, int height) = orientation.Oriented(bitmap.PixelWidth, bitmap.PixelHeight);
+        var result = new SoftwareBitmap(BitmapPixelFormat.Bgra8, width, height, bitmap.BitmapAlphaMode);
+        try
+        {
+            using BitmapBuffer input = bitmap.LockBuffer(BitmapBufferAccessMode.Read);
+            using IMemoryBufferReference inputReference = input.CreateReference();
+            using BitmapBuffer output = result.LockBuffer(BitmapBufferAccessMode.Write);
+            using IMemoryBufferReference outputReference = output.CreateReference();
+            BitmapPlaneDescription inPlane = input.GetPlaneDescription(0);
+            BitmapPlaneDescription outPlane = output.GetPlaneDescription(0);
+            (nint inData, uint inCapacity) = Bytes(inputReference);
+            (nint outData, uint outCapacity) = Bytes(outputReference);
+            var source = new ReadOnlySpan<byte>((byte*)inData + inPlane.StartIndex, checked((int)(inCapacity - (uint)inPlane.StartIndex)));
+            var destination = new Span<byte>((byte*)outData + outPlane.StartIndex, checked((int)(outCapacity - (uint)outPlane.StartIndex)));
+            PixelOrientation.Apply(source, bitmap.PixelWidth, bitmap.PixelHeight, inPlane.Stride, destination, outPlane.Stride, orientation);
+            return result;
+        }
+        catch
+        {
+            result.Dispose();
             throw;
         }
     }

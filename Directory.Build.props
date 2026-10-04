@@ -10,6 +10,8 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <Company>Mavue</Company>
     <Product>Mavue</Product>
+    <!-- Product version; tools/build-release.ps1 -Version overrides it (-p:Version). -->
+    <Version>0.1.0</Version>
     <NeutralLanguage>en-US</NeutralLanguage>
     <SatelliteResourceLanguages>en-US;ja-JP</SatelliteResourceLanguages>
     <!-- Windows-specific modules target this TFM; pure-logic modules use net10.0. -->

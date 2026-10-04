@@ -352,13 +352,40 @@ internal sealed partial class Runner
         }
 
         bool ok = true;
+        using var focusRecorder = new FocusRecorder();
         for (int i = 0; i < ready.Count; i++)
         {
             if (i > 0)
             {
                 t = Stopwatch.GetTimestamp();
-                SendKeyIfForeground(Native.VK_DOWN, explorer, out _);
-                WaitForNavigation(t, "explorer-selection");
+                if (!SendKeyIfForeground(Native.VK_DOWN, explorer, out long sentAt))
+                {
+                    observed.Add($"(↓ not sent: foreground {Native.Describe(Native.GetForegroundWindow())})");
+                }
+
+                long returned = Stopwatch.GetTimestamp();
+                (_, double explorerMax) = WhileTimingExplorer(explorer, () => WaitForNavigation(t, "explorer-selection"));
+                observed.Add($"(Explorer max {explorerMax:0} ms)");
+                Mark? input = _log.Marks.FirstOrDefault(m => m.Name == "nav-input" && m.Qpc >= t);
+                if (input is null || Ms(t, input.Qpc) > 1000)
+                {
+                    (nint focus, string focusClass) = Native.Focus(explorer);
+                    string selectedNow = "?";
+                    try
+                    {
+                        foreach (dynamic item in window.Document.SelectedItems())
+                        {
+                            selectedNow = Path.GetFileName((string)item.Path);
+                        }
+                    }
+                    catch (System.Runtime.InteropServices.COMException)
+                    {
+                    }
+
+                    observed.Add($"(Explorer selection now {selectedNow}; ↓ at qpc {t})");
+                    observed.Add("(focus events since ↓: " + string.Join(" | ", FocusRecorder.Events.Where(e => long.Parse(e.Split(' ')[0], System.Globalization.CultureInfo.InvariantCulture) >= t - (Stopwatch.Frequency * 3)).Select(e => $"{Ms(t, long.Parse(e.Split(' ')[0], System.Globalization.CultureInfo.InvariantCulture)):0}ms {e[(e.IndexOf(' ', StringComparison.Ordinal) + 1)..]}")) + ")");
+                    observed.Add($"(↓ SendInput returned after {Ms(t, returned):0} ms, the hook saw it after {(input is null ? "never" : $"{Ms(t, input.Qpc):0} ms")}; focus {focusClass} {Native.Describe(focus)})");
+                }
             }
 
             _log.Poll();

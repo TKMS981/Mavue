@@ -20,6 +20,10 @@
     <!-- Bundle the Windows App SDK runtime so the app does not depend on a machine-wide framework package. -->
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <DefaultLanguage>en-US</DefaultLanguage>
+    <!-- LibraryImport (console attach for the registration switches). -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- File Explorer preview handler / thumbnail provider built by tools/build-native.ps1 (artifacts is git-ignored). -->
+    <MavueNativePreviewDll>$(MSBuildThisFileDirectory)..\..\artifacts\native\$(RuntimeIdentifier)\Mavue.Shell.Preview.dll</MavueNativePreviewDll>
   </PropertyGroup>
 
   <ItemGroup>
@@ -33,8 +37,22 @@
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
   </ItemGroup>
 
+  <!-- Preview pane and thumbnails (docs/WINDOWS-INTEGRATION.md §4–5): registered from this folder by Mavue.exe with
+       its register switch, next to the pdfium.dll it uses. Without the DLL the app builds and works as before. While Explorer
+       has it loaded (prevhost.exe / the thumbnail process) a changed DLL cannot be copied: unregister or end those first. -->
+  <ItemGroup>
+    <None Include="$(MavueNativePreviewDll)" Condition="Exists('$(MavueNativePreviewDll)')"
+          Link="Mavue.Shell.Preview.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <!-- 32-bit applications (their file dialogs) use the x86 build with the x86 pdfium.dll, registered in the 32-bit view. -->
+    <None Include="$(MSBuildThisFileDirectory)..\..\artifacts\native\win-x86\Mavue.Shell.Preview.dll" Condition="Exists('$(MSBuildThisFileDirectory)..\..\artifacts\native\win-x86\Mavue.Shell.Preview.dll')"
+          Link="x86\Mavue.Shell.Preview.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)..\..\artifacts\native\win-x86\pdfium.dll" Condition="Exists('$(MSBuildThisFileDirectory)..\..\artifacts\native\win-x86\pdfium.dll')"
+          Link="x86\pdfium.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Mavue.Core\Mavue.Core.csproj" />
     <ProjectReference Include="..\Mavue.Viewer\Mavue.Viewer.csproj" />
+    <ProjectReference Include="..\Mavue.Shell\Mavue.Shell.csproj" />
   </ItemGroup>
 </Project>

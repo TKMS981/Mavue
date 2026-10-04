@@ -49,6 +49,15 @@ var options = new HarnessOptions
     OnlyScenarios = args.Contains("--only") ? Arg("--only", "").Split(',', StringSplitOptions.RemoveEmptyEntries) : null,
 };
 
+if (args.Contains("--write-test-pdf"))
+{
+    // Writes a test PDF (text, outline, links): --write-test-pdf <path> [pages]
+    int at = Array.IndexOf(args, "--write-test-pdf");
+    int count = at + 2 < args.Length && int.TryParse(args[at + 2], out int n) ? n : 3;
+    File.WriteAllBytes(args[at + 1], Mavue.Pdf.Tests.TestPdf.Create(count));
+    return 0;
+}
+
 if (args.Contains("--thumb"))
 {
     // Diagnostics: cached shell thumbnail from MTA vs STA threads.
@@ -118,6 +127,11 @@ var runThread = new Thread(() =>
         if (args.Contains("--app"))
         {
             runner.RunApp(assets); // Mavue.App scenarios only (no Quick View host)
+        }
+        else if (args.Contains("--explorer"))
+        {
+            // File Explorer preview pane / thumbnails of Mavue.exe (registers it; --explorer-restart restarts Explorer).
+            runner.RunExplorer(assets, args.Contains("--explorer-restart"), args.Contains("--light-theme"));
         }
         else
         {

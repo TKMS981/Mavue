@@ -64,6 +64,14 @@ internal sealed partial class Runner
             return dw == sw && dh == sh ? string.Empty : $"actual size expected {sw}x{sh}, decoded {dw}x{dh}";
         }
 
+        if (full.Text("decoder") == "pdfium-view")
+        {
+            // The PDFium view fits the page to its own viewport (the laid-out area): a pixel of rounding against the plan.
+            aw = Math.Max(aw, lw) + 1;
+            ah = Math.Max(ah, lh) + 1;
+            sw = sh = double.MaxValue;
+        }
+
         bool fits = dw <= aw && dh <= ah;
         bool fills = dw >= aw - 2 || dh >= ah - 2 || (dw == sw && dh == sh);
         return fits && fills ? string.Empty : $"decoded {dw}x{dh} does not fit area {aw}x{ah}";

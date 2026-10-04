@@ -33,7 +33,9 @@ public sealed class QuickViewShellRegistrationTests : IDisposable
         Assert.Contains(".jpg", QuickViewShellRegistration.Extensions);
         Assert.Contains(".pdf", QuickViewShellRegistration.Extensions);
         Assert.Contains(".heic", QuickViewShellRegistration.Extensions);
-        Assert.DoesNotContain(".svg", QuickViewShellRegistration.Extensions); // no decoder yet
+        Assert.Contains(".svg", QuickViewShellRegistration.Extensions);
+        Assert.Contains(".mp4", QuickViewShellRegistration.Extensions); // Quick View plays video and audio
+        Assert.DoesNotContain(".jp2", QuickViewShellRegistration.Extensions); // no decoder yet
         Assert.DoesNotContain(".jp2", QuickViewShellRegistration.Extensions);
     }
 

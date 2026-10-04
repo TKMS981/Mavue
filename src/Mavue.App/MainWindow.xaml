@@ -6,18 +6,19 @@
     <MicaBackdrop />
   </Window.SystemBackdrop>
 
-  <!-- Files can be dropped anywhere on the window. Keys (arrows, PageUp/PageDown, media shortcuts) are handled here
-       after the focused element had its chance, so the toolbar keeps its own keyboard navigation. -->
+  <!-- Files can be dropped anywhere on the window. Keys (arrows, PageUp/PageDown, zoom, media shortcuts) are handled
+       here after the focused element had its chance, so the toolbar and the page box keep their own keys. -->
   <!-- Transparent (not null) background: an element without a background is not hit-tested, so drops on empty
        areas would be missed. Mica still shows through. -->
   <Grid x:Name="RootGrid" Background="Transparent" AllowDrop="True" DragOver="OnDragOver" Drop="OnDrop" KeyDown="OnRootKeyDown">
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />
       <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
 
-    <CommandBar x:Name="Toolbar" HorizontalAlignment="Left" DefaultLabelPosition="Right" IsDynamicOverflowEnabled="True">
+    <CommandBar x:Name="Toolbar" HorizontalAlignment="Left" DefaultLabelPosition="Right" IsDynamicOverflowEnabled="True" Background="Transparent">
       <AppBarButton x:Name="OpenButton" Click="OnOpenClick">
         <AppBarButton.Icon>
           <FontIcon Glyph="&#xE8E5;" />
@@ -26,51 +27,223 @@
           <KeyboardAccelerator Modifiers="Control" Key="O" />
         </AppBarButton.KeyboardAccelerators>
       </AppBarButton>
+      <AppBarButton LabelPosition="Collapsed" x:Name="RecentButton">
+        <AppBarButton.Icon>
+          <FontIcon Glyph="&#xE81C;" />
+        </AppBarButton.Icon>
+        <AppBarButton.Flyout>
+          <MenuFlyout x:Name="RecentMenu" Placement="BottomEdgeAlignedLeft" Opening="OnRecentMenuOpening" />
+        </AppBarButton.Flyout>
+      </AppBarButton>
       <AppBarSeparator />
-      <AppBarButton x:Name="PreviousFileButton" LabelPosition="Collapsed" IsEnabled="False" Click="OnPreviousFileClick">
+      <AppBarButton LabelPosition="Collapsed" x:Name="PreviousFileButton" IsEnabled="False" Click="OnPreviousFileClick">
         <AppBarButton.Icon>
           <FontIcon Glyph="&#xE76B;" />
         </AppBarButton.Icon>
       </AppBarButton>
-      <AppBarButton x:Name="NextFileButton" LabelPosition="Collapsed" IsEnabled="False" Click="OnNextFileClick">
+      <AppBarButton LabelPosition="Collapsed" x:Name="NextFileButton" IsEnabled="False" Click="OnNextFileClick">
         <AppBarButton.Icon>
           <FontIcon Glyph="&#xE76C;" />
         </AppBarButton.Icon>
       </AppBarButton>
       <AppBarSeparator x:Name="PageSeparator" Visibility="Collapsed" />
-      <AppBarButton x:Name="PreviousPageButton" LabelPosition="Collapsed" Visibility="Collapsed" Click="OnPreviousPageClick">
+      <AppBarToggleButton LabelPosition="Collapsed" x:Name="ThumbnailsButton" Visibility="Collapsed" Click="OnThumbnailsClick">
+        <AppBarToggleButton.Icon>
+          <FontIcon Glyph="&#xE8A9;" />
+        </AppBarToggleButton.Icon>
+      </AppBarToggleButton>
+      <AppBarButton LabelPosition="Collapsed" x:Name="PreviousPageButton" Visibility="Collapsed" Click="OnPreviousPageClick">
         <AppBarButton.Icon>
           <FontIcon Glyph="&#xE70E;" />
         </AppBarButton.Icon>
       </AppBarButton>
-      <AppBarElementContainer x:Name="PageNumberContainer" VerticalContentAlignment="Center" Visibility="Collapsed">
-        <TextBlock x:Name="PageNumberText" Margin="8,0" VerticalAlignment="Center" />
+      <AppBarElementContainer x:Name="PageNumberContainer" VerticalContentAlignment="Center" Visibility="Collapsed" IsTabStop="False">
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="6" Margin="4,0">
+          <TextBox x:Name="PageBox" Width="56" MinWidth="0" TextAlignment="Center" VerticalAlignment="Center" InputScope="Number"
+                   KeyDown="OnPageBoxKeyDown" LostFocus="OnPageBoxLostFocus" AutomationProperties.AutomationId="PageBox" />
+          <TextBlock x:Name="PageCountText" VerticalAlignment="Center" />
+        </StackPanel>
       </AppBarElementContainer>
-      <AppBarButton x:Name="NextPageButton" LabelPosition="Collapsed" Visibility="Collapsed" Click="OnNextPageClick">
+      <AppBarButton LabelPosition="Collapsed" x:Name="NextPageButton" Visibility="Collapsed" Click="OnNextPageClick">
         <AppBarButton.Icon>
           <FontIcon Glyph="&#xE70D;" />
         </AppBarButton.Icon>
       </AppBarButton>
+      <AppBarElementContainer x:Name="LayoutContainer" VerticalContentAlignment="Center" IsTabStop="False" Visibility="Collapsed">
+        <DropDownButton x:Name="LayoutMenuButton" VerticalAlignment="Center" Background="Transparent" BorderThickness="0" AutomationProperties.AutomationId="LayoutMenuButton">
+          <DropDownButton.Content>
+            <FontIcon Glyph="&#xE8A1;" FontSize="16" />
+          </DropDownButton.Content>
+          <DropDownButton.Flyout>
+            <MenuFlyout Placement="Bottom">
+              <RadioMenuFlyoutItem x:Name="LayoutSingleItem" GroupName="PdfLayout" Click="OnLayoutClick" Tag="SinglePage" />
+              <RadioMenuFlyoutItem x:Name="LayoutContinuousItem" GroupName="PdfLayout" Click="OnLayoutClick" Tag="Continuous" />
+              <RadioMenuFlyoutItem x:Name="LayoutTwoPagesItem" GroupName="PdfLayout" Click="OnLayoutClick" Tag="TwoPages" />
+              <RadioMenuFlyoutItem x:Name="LayoutTwoPagesCoverItem" GroupName="PdfLayout" Click="OnLayoutClick" Tag="TwoPagesCover" />
+              <MenuFlyoutSeparator />
+              <MenuFlyoutItem x:Name="PresentationItem" Click="OnPresentationClick" />
+            </MenuFlyout>
+          </DropDownButton.Flyout>
+        </DropDownButton>
+      </AppBarElementContainer>
+      <AppBarButton LabelPosition="Collapsed" x:Name="SearchButton" Visibility="Collapsed" Click="OnSearchClick">
+        <AppBarButton.Icon>
+          <FontIcon Glyph="&#xE721;" />
+        </AppBarButton.Icon>
+      </AppBarButton>
+      <AppBarSeparator x:Name="ZoomSeparator" />
+      <AppBarButton LabelPosition="Collapsed" x:Name="ZoomOutButton" IsEnabled="False" Click="OnZoomOutClick">
+        <AppBarButton.Icon>
+          <FontIcon Glyph="&#xE71F;" />
+        </AppBarButton.Icon>
+      </AppBarButton>
+      <AppBarElementContainer x:Name="ZoomContainer" VerticalContentAlignment="Center" IsTabStop="False">
+        <DropDownButton x:Name="ZoomMenuButton" MinWidth="76" IsEnabled="False" VerticalAlignment="Center" Background="Transparent" BorderThickness="0"
+                        AutomationProperties.AutomationId="ZoomMenuButton">
+          <DropDownButton.Flyout>
+            <MenuFlyout Placement="Bottom">
+              <MenuFlyoutItem x:Name="ZoomFitItem" Click="OnZoomFitClick" />
+              <MenuFlyoutItem x:Name="ZoomFitWidthItem" Click="OnZoomFitWidthClick" />
+              <MenuFlyoutItem x:Name="ZoomActualItem" Click="OnZoomActualClick" />
+              <MenuFlyoutSeparator />
+              <MenuFlyoutItem Text="25%" Tag="0.25" Click="OnZoomPresetClick" />
+              <MenuFlyoutItem Text="50%" Tag="0.5" Click="OnZoomPresetClick" />
+              <MenuFlyoutItem Text="200%" Tag="2" Click="OnZoomPresetClick" />
+              <MenuFlyoutItem Text="400%" Tag="4" Click="OnZoomPresetClick" />
+            </MenuFlyout>
+          </DropDownButton.Flyout>
+        </DropDownButton>
+      </AppBarElementContainer>
+      <AppBarButton LabelPosition="Collapsed" x:Name="ZoomInButton" IsEnabled="False" Click="OnZoomInClick">
+        <AppBarButton.Icon>
+          <FontIcon Glyph="&#xE710;" />
+        </AppBarButton.Icon>
+      </AppBarButton>
+      <AppBarSeparator />
+      <AppBarButton LabelPosition="Collapsed" x:Name="RotateLeftButton" IsEnabled="False" Click="OnRotateLeftClick">
+        <AppBarButton.Icon>
+          <FontIcon Glyph="&#xE7AD;" />
+        </AppBarButton.Icon>
+      </AppBarButton>
+      <AppBarButton LabelPosition="Collapsed" x:Name="RotateRightButton" IsEnabled="False" Click="OnRotateRightClick">
+        <AppBarButton.Icon>
+          <FontIcon Glyph="&#xE7AD;" RenderTransformOrigin="0.5,0.5">
+            <FontIcon.RenderTransform>
+              <ScaleTransform ScaleX="-1" />
+            </FontIcon.RenderTransform>
+          </FontIcon>
+        </AppBarButton.Icon>
+      </AppBarButton>
+      <AppBarToggleButton LabelPosition="Collapsed" x:Name="InfoButton" Click="OnInfoClick">
+        <AppBarToggleButton.Icon>
+          <FontIcon Glyph="&#xE946;" />
+        </AppBarToggleButton.Icon>
+      </AppBarToggleButton>
+
+      <CommandBar.SecondaryCommands>
+        <AppBarButton x:Name="FlipHorizontalButton" IsEnabled="False" Click="OnFlipHorizontalClick">
+          <AppBarButton.Icon>
+            <FontIcon Glyph="&#xE8AB;" />
+          </AppBarButton.Icon>
+        </AppBarButton>
+        <AppBarButton x:Name="FlipVerticalButton" IsEnabled="False" Click="OnFlipVerticalClick">
+          <AppBarButton.Icon>
+            <FontIcon Glyph="&#xE8AB;" RenderTransformOrigin="0.5,0.5">
+              <FontIcon.RenderTransform>
+                <RotateTransform Angle="90" />
+              </FontIcon.RenderTransform>
+            </FontIcon>
+          </AppBarButton.Icon>
+        </AppBarButton>
+        <AppBarSeparator />
+        <AppBarButton x:Name="CopyButton" IsEnabled="False" Click="OnCopyClick">
+          <AppBarButton.Icon>
+            <FontIcon Glyph="&#xE8C8;" />
+          </AppBarButton.Icon>
+        </AppBarButton>
+        <AppBarButton x:Name="OpenWithButton" IsEnabled="False" Click="OnOpenWithClick">
+          <AppBarButton.Icon>
+            <FontIcon Glyph="&#xE7AC;" />
+          </AppBarButton.Icon>
+        </AppBarButton>
+        <AppBarButton x:Name="ShowInFolderButton" IsEnabled="False" Click="OnShowInFolderClick">
+          <AppBarButton.Icon>
+            <FontIcon Glyph="&#xEC50;" />
+          </AppBarButton.Icon>
+        </AppBarButton>
+        <AppBarButton x:Name="PropertiesButton" IsEnabled="False" Click="OnPropertiesClick">
+          <AppBarButton.Icon>
+            <FontIcon Glyph="&#xE90F;" />
+          </AppBarButton.Icon>
+        </AppBarButton>
+        <AppBarSeparator />
+        <AppBarButton x:Name="NewWindowButton" Click="OnNewWindowClick">
+          <AppBarButton.Icon>
+            <FontIcon Glyph="&#xE78B;" />
+          </AppBarButton.Icon>
+        </AppBarButton>
+        <AppBarButton x:Name="SettingsButton" Click="OnSettingsClick">
+          <AppBarButton.Icon>
+            <FontIcon Glyph="&#xE713;" />
+          </AppBarButton.Icon>
+        </AppBarButton>
+        <AppBarButton x:Name="ShortcutsButton" Click="OnShortcutsClick">
+          <AppBarButton.Icon>
+            <FontIcon Glyph="&#xE765;" />
+          </AppBarButton.Icon>
+        </AppBarButton>
+      </CommandBar.SecondaryCommands>
     </CommandBar>
 
-    <!-- The shared viewer surface (Mavue.Viewer) is added here in code. The grid takes the keyboard focus while a
-         file is shown, so the transport controls of a video never keep it. -->
-    <Grid x:Name="ViewerHost" Grid.Row="1" Background="Transparent" IsTabStop="True" UseSystemFocusVisuals="False" PointerPressed="OnViewerPointerPressed" />
+    <!-- Find in the PDF (Ctrl+F): the shared PdfSearchBar (Mavue.Viewer) is added here in code. -->
+    <Grid x:Name="SearchHost" Grid.Row="1" />
 
-    <StackPanel x:Name="EmptyState" Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
-      <TextBlock x:Name="WelcomeText" x:Uid="MainWindow_Welcome" Style="{StaticResource TitleTextBlockStyle}" HorizontalAlignment="Center" />
-      <TextBlock x:Uid="MainWindow_DropHint" Style="{StaticResource BodyTextBlockStyle}" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Opacity="0.7" />
-    </StackPanel>
-
-    <Grid x:Name="StatusBar" Grid.Row="2" Padding="16,6,16,8" ColumnSpacing="16" Visibility="Collapsed">
+    <Grid Grid.Row="2">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="Auto" />
         <ColumnDefinition Width="*" />
         <ColumnDefinition Width="Auto" />
       </Grid.ColumnDefinitions>
+
+      <!-- Sidebar of a PDF (page thumbnails, contents, search results): the shared PdfSidebar is added in code. -->
+      <Grid x:Name="Sidebar" Width="232" Visibility="Collapsed" BorderThickness="0,0,1,0" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+      <!-- The shared viewer surface (Mavue.Viewer) is added here in code. The grid takes the keyboard focus while a
+           file is shown, so the transport controls of a video never keep it. -->
+      <Grid x:Name="ViewerHost" Grid.Column="1" Background="Transparent" IsTabStop="True" UseSystemFocusVisuals="False" PointerPressed="OnViewerPointerPressed" />
+
+      <ScrollViewer x:Name="EmptyState" Grid.Column="1" VerticalScrollBarVisibility="Auto">
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" Padding="24" MaxWidth="560">
+          <TextBlock x:Name="WelcomeText" x:Uid="MainWindow_Welcome" Style="{StaticResource TitleTextBlockStyle}" HorizontalAlignment="Center" />
+          <TextBlock x:Uid="MainWindow_DropHint" Style="{StaticResource BodyTextBlockStyle}" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Opacity="0.7" />
+          <Button x:Name="WelcomeOpenButton" HorizontalAlignment="Center" Style="{StaticResource AccentButtonStyle}" Click="OnOpenClick" />
+          <TextBlock x:Name="RecentHeader" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,16,0,0" Visibility="Collapsed" />
+          <StackPanel x:Name="RecentList" Spacing="2" />
+        </StackPanel>
+      </ScrollViewer>
+
+      <!-- File information (name, folder, size, dates, dimensions, camera, location, media details). -->
+      <Grid x:Name="InfoPane" Grid.Column="2" Width="300" Visibility="Collapsed" BorderThickness="1,0,0,0" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,8,16,16">
+          <StackPanel Spacing="12">
+            <TextBlock x:Name="InfoTitle" Style="{StaticResource SubtitleTextBlockStyle}" />
+            <StackPanel x:Name="InfoRows" Spacing="10" AutomationProperties.AutomationId="InfoRows" />
+          </StackPanel>
+        </ScrollViewer>
+      </Grid>
+    </Grid>
+
+    <Grid x:Name="StatusBar" Grid.Row="3" Padding="16,6,16,8" ColumnSpacing="16" Visibility="Collapsed">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="Auto" />
+      </Grid.ColumnDefinitions>
       <TextBlock x:Name="NameText" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" MaxWidth="480" AutomationProperties.AutomationId="NameText" />
       <TextBlock x:Name="InfoText" Grid.Column="1" Opacity="0.75" TextTrimming="CharacterEllipsis" AutomationProperties.AutomationId="InfoText" />
-      <TextBlock x:Name="PositionText" Grid.Column="2" Opacity="0.75" AutomationProperties.AutomationId="PositionText" />
+      <TextBlock x:Name="ZoomText" Grid.Column="2" Opacity="0.75" AutomationProperties.AutomationId="ZoomText" />
+      <TextBlock x:Name="PositionText" Grid.Column="3" Opacity="0.75" AutomationProperties.AutomationId="PositionText" />
     </Grid>
   </Grid>
 </Window>

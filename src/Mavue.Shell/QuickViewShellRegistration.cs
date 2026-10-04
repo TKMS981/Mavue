@@ -24,12 +24,8 @@ public sealed partial class QuickViewShellRegistration
     /// <summary>Menu text. "Mavue Quick View" is the feature's product name, the same in every language.</summary>
     public const string MenuText = "Mavue Quick View";
 
-    /// <summary>Formats Quick View can display (JPEG 2000 and SVG have no decoder yet, so they are not offered).</summary>
-    public static readonly IReadOnlyList<FileFormat> SupportedFormats =
-    [
-        FileFormat.Pdf, FileFormat.Jpeg, FileFormat.Png, FileFormat.Gif, FileFormat.Bmp, FileFormat.Tiff,
-        FileFormat.WebP, FileFormat.Ico, FileFormat.Heif, FileFormat.Avif, FileFormat.JpegXl,
-    ];
+    /// <summary>Formats Quick View can display: the viewer's formats (images, SVG, PDF, video and audio; not JPEG 2000 yet).</summary>
+    public static readonly IReadOnlyList<FileFormat> SupportedFormats = Core.Viewing.ViewerFormats.All;
 
     private const string RunSubPath = @"Microsoft\Windows\CurrentVersion\Run";
 

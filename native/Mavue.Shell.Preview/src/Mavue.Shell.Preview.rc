@@ -1,0 +1,63 @@
+#pragma code_page(65001)
+#include <winver.h>
+#include <winres.h>
+#include "Resources.h"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 0,1,0,0
+ PRODUCTVERSION 0,1,0,0
+ FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+ FILEFLAGS 0x0L
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_DLL
+ FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "Mavue"
+            VALUE "FileDescription", "Mavue preview handler and thumbnail provider for File Explorer"
+            VALUE "FileVersion", "0.1.0.0"
+            VALUE "InternalName", "Mavue.Shell.Preview"
+            VALUE "LegalCopyright", "Copyright 2026 TKMS981. Licensed under the Apache License 2.0."
+            VALUE "OriginalFilename", "Mavue.Shell.Preview.dll"
+            VALUE "ProductName", "Mavue"
+            VALUE "ProductVersion", "0.1.0.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
+
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+STRINGTABLE
+BEGIN
+    IDS_CANNOT_PREVIEW "This file can't be previewed."
+    IDS_PASSWORD "This PDF is protected with a password. Open it in Mavue to enter the password."
+    IDS_TOO_LARGE "This image is too large to preview."
+    IDS_LOADING "Loading…"
+    IDS_PDF_UNAVAILABLE "PDF preview is not available (pdfium.dll is missing)."
+    IDS_MEDIA_FAILED "This media file can't be played."
+    IDS_EMPTY "This file is empty."
+    IDS_PLAY "Play"
+    IDS_PAUSE "Pause"
+    IDS_MUTE "Mute"
+END
+
+LANGUAGE LANG_JAPANESE, SUBLANG_JAPANESE_JAPAN
+STRINGTABLE
+BEGIN
+    IDS_CANNOT_PREVIEW "このファイルはプレビューできません。"
+    IDS_PASSWORD "この PDF はパスワードで保護されています。Mavue で開くとパスワードを入力できます。"
+    IDS_TOO_LARGE "画像が大きすぎるためプレビューできません。"
+    IDS_LOADING "読み込んでいます…"
+    IDS_PDF_UNAVAILABLE "PDF のプレビューを利用できません（pdfium.dll がありません）。"
+    IDS_MEDIA_FAILED "このメディア ファイルは再生できません。"
+    IDS_EMPTY "このファイルは空です。"
+    IDS_PLAY "再生"
+    IDS_PAUSE "一時停止"
+    IDS_MUTE "ミュート"
+END

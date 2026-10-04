@@ -1,6 +1,6 @@
 using Mavue.Core.Viewing;
 using Mavue.QuickView.Preview;
-using Mavue.QuickView.Settings;
+using Mavue.Core.Settings;
 
 namespace Mavue.QuickView.Tests;
 
@@ -100,5 +100,27 @@ public sealed class QuickViewSettingsTests : IDisposable
         await File.WriteAllTextAsync(path, "{\"version\": 2, \"imageScale\": \"ActualSize\", \"somethingNew\": true}", TestContext.Current.CancellationToken);
 
         Assert.Equal(ImageScaleMode.ActualSize, QuickViewSettings.Load(path).ImageScale);
+    }
+
+    [Fact]
+    public async Task MissingPdfLayout_IsContinuous()
+    {
+        string path = Path.Combine(_dir, "older.json");
+        await File.WriteAllTextAsync(path, "{\"version\": 1, \"imageScale\": \"FitNoUpscale\"}", TestContext.Current.CancellationToken);
+
+        QuickViewSettings settings = QuickViewSettings.Load(path);
+        Assert.Equal(PdfLayoutMode.Continuous, settings.PdfLayout);
+        Assert.False(settings.ShowPdfSidebar);
+    }
+
+    [Fact]
+    public async Task PdfLayout_RoundTrips()
+    {
+        string path = Path.Combine(_dir, "layout.json");
+        await new QuickViewSettings { PdfLayout = PdfLayoutMode.TwoPagesCover, ShowPdfSidebar = true }.SaveAsync(path, TestContext.Current.CancellationToken);
+
+        QuickViewSettings settings = QuickViewSettings.Load(path);
+        Assert.Equal(PdfLayoutMode.TwoPagesCover, settings.PdfLayout);
+        Assert.True(settings.ShowPdfSidebar);
     }
 }

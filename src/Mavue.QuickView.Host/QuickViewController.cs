@@ -6,9 +6,12 @@ using Mavue.Core.Viewing;
 using Mavue.Image.Wic;
 using Mavue.QuickView.Diagnostics;
 using Mavue.QuickView.Preview;
-using Mavue.QuickView.Settings;
+using Mavue.Core.Settings;
 using Mavue.QuickView.Shell;
 using Mavue.QuickView.Trigger;
+using Mavue.Shell;
+using Mavue.Viewer;
+using Mavue.Viewer.Controls;
 using Mavue.Viewer.Playback;
 using Mavue.Viewer.Rendering;
 using Microsoft.UI;
@@ -121,6 +124,39 @@ internal sealed class QuickViewController : IDisposable
     // Every content change (another file, a page, closing) stops and disposes it; events of a replaced session are ignored.
     private MediaSession? _media;
     private long _lastExternalShowQpc = long.MinValue / 2;
+
+    // Zoom and rotation chosen in the window for the current item (reset for every other item). _viewZoom null:
+    // the size from the settings. What is shown is described by its size at 100 % (upright, physical pixels) and
+    // the factor it is shown at, so a zoom step is applied at once by resizing the element and refined shortly after.
+    private ZoomSetting? _viewZoom;
+    private ViewOrientation _orientation;
+    private (double Width, double Height) _shownSource;
+    private double _shownFactor;
+    private ShownContent _shown;
+    private DispatcherQueueTimer? _zoomTimer;
+    private FileFacts? _currentFacts;
+
+    // PDF with PDFium: the session shared with Mavue.App (continuous / two-page / single layouts, find, selection,
+    // outline, links, presentation) and the shared PDF controls. Without pdfium.dll PDFs stay single page images.
+    private readonly PdfSession _pdf = new();
+    private readonly PdfSearchBar _pdfSearch;
+    private readonly PdfSidebar _pdfSidebar;
+    private PdfLayoutMode _pdfLayout = PdfLayoutMode.Continuous;
+    private bool _pdfSidebarOpen;
+    private long _pdfRequest;
+    private bool _pdfFirstFrameMarked;
+    private PdfPresentationWindow? _presentation;
+    private IRandomAccessStream? _svgStream;
+
+    /// <summary>What the window shows (for zoom and rotation).</summary>
+    private enum ShownContent
+    {
+        None,
+        Raster,
+        Pdf,
+        Gif,
+        Svg,
+    }
     private static readonly long ExternalMergeWindowTicks = System.Diagnostics.Stopwatch.Frequency * 2;
 
     public QuickViewController(QuickViewWindow window, QuickViewTimeline timeline, HostOptions options)
@@ -133,6 +169,26 @@ internal sealed class QuickViewController : IDisposable
         _window.NavigateRequested += delta => Step(delta, "window-arrow");
         _window.PageRequested += (delta, source) => StepPage(delta, source);
         _window.MediaCommandRequested += OnMediaCommand;
+        _window.ZoomRequested += OnZoomRequested;
+        _window.RotateRequested += OnRotateRequested;
+        _window.FileCommandRequested += OnFileCommand;
+        _pdfSearch = new PdfSearchBar(Strings.GetString) { Session = _pdf, Trace = PdfTrace };
+        _pdfSidebar = new PdfSidebar(Strings.GetString) { Session = _pdf, Trace = PdfTrace };
+        _pdfSearch.Closed += () =>
+        {
+            _window.SetSearchVisible(false);
+            _window.FocusContent();
+        };
+        _window.AttachPdfControls(_pdfSearch, _pdfSidebar);
+        _window.PdfCommandRequested += OnPdfCommand;
+        _window.DocumentWheelHandler = OnDocumentWheel;
+        _pdf.Trace = PdfTrace;
+        _pdf.ViewChanged += OnPdfViewChanged;
+        _pdf.UriRequested += uri =>
+        {
+            bool opened = !_options.NoLaunch && ShellActions.OpenUri(uri);
+            _timeline.Mark(_currentRequest, "uri-opened", QuickViewTimeline.Now, new Dictionary<string, object?> { ["uri"] = uri, ["opened"] = opened });
+        };
         _window.KeyReceived += key => _timeline.Mark(_currentRequest, "window-key", QuickViewTimeline.Now, new Dictionary<string, object?>
         {
             ["key"] = key.ToString(),
@@ -155,6 +211,7 @@ internal sealed class QuickViewController : IDisposable
 
     public void Dispose()
     {
+        ReplaceSvgStream(null);
         StopGif();
         StopMedia("exit");
         _prefetch?.Cancel();
@@ -394,6 +451,12 @@ internal sealed class QuickViewController : IDisposable
             return;
         }
 
+        if (_pdf.IsOpen)
+        {
+            StepPdfPage(delta, source, inputQpc, target: null);
+            return;
+        }
+
         if (!_pdfPages.TryStep(delta))
         {
             _timeline.Mark(_currentRequest, "pdf-page-edge", QuickViewTimeline.Now, new Dictionary<string, object?>
@@ -504,6 +567,7 @@ internal sealed class QuickViewController : IDisposable
         {
             _pdfPages.Reset(); // another file starts at its first page
             UpdatePageControls();
+            ResetView();
         }
 
         _prefetch?.Cancel();
@@ -541,7 +605,8 @@ internal sealed class QuickViewController : IDisposable
     }
 
     /// <summary>Decode/display plan for one item (see <see cref="DisplaySizing"/>).</summary>
-    private readonly record struct Plan(DecodeBox Box, (double Width, double Height)? ExpectedElementSize, bool Scrollable, double? PdfActualScale)
+    /// <param name="DisplayElementSize">Element size for a zoomed item (the bitmap may be smaller and stretched); null: the bitmap's own size.</param>
+    private readonly record struct Plan(DecodeBox Box, (double Width, double Height)? ExpectedElementSize, bool Scrollable, double? PdfActualScale, (double Width, double Height)? DisplayElementSize = null)
     {
         public static Plan Unknown => new(new DecodeBox(1, 1), null, false, null);
     }
@@ -592,6 +657,11 @@ internal sealed class QuickViewController : IDisposable
                 return;
             }
 
+            if (_pdf.IsOpen)
+            {
+                return; // the PDF view lays itself out
+            }
+
             (uint width, uint height) = ImageArea();
             if (_visible && _currentPath is { } path &&
                 (Math.Abs((long)width - _plannedArea.Width) > 2 || Math.Abs((long)height - _plannedArea.Height) > 2))
@@ -610,6 +680,11 @@ internal sealed class QuickViewController : IDisposable
     /// </summary>
     private async Task<Plan> PlanAsync(string path, FileFacts facts, ImageScaleMode mode, uint areaWidth, uint areaHeight, CancellationToken cancellation)
     {
+        if (_viewZoom is not null || !_orientation.IsIdentity)
+        {
+            return await PlanViewAsync(path, facts, mode, areaWidth, areaHeight, cancellation);
+        }
+
         double rasterization = DisplayScale();
         if (facts.Format == FileFormat.Pdf)
         {
@@ -629,6 +704,47 @@ internal sealed class QuickViewController : IDisposable
         (uint expectedWidth, uint expectedHeight) = DisplaySizing.ExpectedDisplayPixels(mode, areaWidth, areaHeight, size.Width, size.Height);
         bool scrollable = mode == ImageScaleMode.ActualSize && !box.ActualSizeRefused;
         return new Plan(box, DisplaySizing.ElementSize(expectedWidth, expectedHeight, rasterization), scrollable, null);
+    }
+
+    /// <summary>
+    /// Plan for an item the user zoomed or turned in the window: the factor comes from <see cref="_viewZoom"/> (or the
+    /// setting), the decode box is the displayed size (the source size when enlarged), and the element gets the
+    /// displayed size even when the bitmap is smaller (the screen stretches it).
+    /// </summary>
+    private async Task<Plan> PlanViewAsync(string path, FileFacts facts, ImageScaleMode mode, uint areaWidth, uint areaHeight, CancellationToken cancellation)
+    {
+        double rasterization = DisplayScale();
+        ZoomSetting zoom = _viewZoom ?? ZoomSetting.For(mode);
+        (uint swappedWidth, uint swappedHeight) = _orientation.Oriented(areaWidth, areaHeight);
+        if (facts.Format == FileFormat.Pdf)
+        {
+            if (_shown != ShownContent.Pdf || _shownSource.Width <= 0)
+            {
+                return new Plan(new DecodeBox(swappedWidth, swappedHeight), null, false, null);
+            }
+
+            (double ow, double oh) = _orientation.Oriented(_shownSource.Width, _shownSource.Height);
+            double pdfFactor = ViewerZoom.FactorFor(zoom, ow, oh, areaWidth, areaHeight, allowEnlarge: true);
+            (uint pw, uint ph) = ViewerZoom.DisplaySize(ow, oh, pdfFactor);
+            (double, double) pdfElement = DisplaySizing.ElementSize(pw, ph, rasterization);
+            return new Plan(new DecodeBox(swappedWidth, swappedHeight), pdfElement, pw > areaWidth + 1 || ph > areaHeight + 1, rasterization * pdfFactor, pdfElement);
+        }
+
+        (uint Width, uint Height)? source = facts.Access == PreviewAccess.Allowed
+            ? await Task.Run(() => WicPreviewDecoder.TryReadDimensions(path), cancellation)
+            : null;
+        if (source is not { } size)
+        {
+            return new Plan(new DecodeBox(swappedWidth, swappedHeight), null, false, null);
+        }
+
+        (uint sw, uint sh) = _orientation.Oriented(size.Width, size.Height);
+        double factor = ViewerZoom.FactorFor(zoom, sw, sh, areaWidth, areaHeight);
+        (uint dw, uint dh) = ViewerZoom.DisplaySize(size.Width, size.Height, factor);
+        (uint decodeWidth, uint decodeHeight) = ViewerZoom.DecodeSize(size.Width, size.Height, dw, dh, DisplaySizing.MaxActualSizePixels);
+        (uint displayWidth, uint displayHeight) = _orientation.Oriented(dw, dh);
+        (double, double) element = DisplaySizing.ElementSize(displayWidth, displayHeight, rasterization);
+        return new Plan(new DecodeBox(decodeWidth, decodeHeight), element, displayWidth > areaWidth + 1 || displayHeight > areaHeight + 1, null, element);
     }
 
     /// <summary>
@@ -655,13 +771,16 @@ internal sealed class QuickViewController : IDisposable
 
         _settingsStamp = stamp;
         ImageScaleMode previous = _scaleMode;
-        _scaleMode = QuickViewSettings.Load(_settingsPath).ImageScale;
+        QuickViewSettings settings = QuickViewSettings.Load(_settingsPath);
+        _scaleMode = settings.ImageScale;
+        _pdfLayout = settings.PdfLayout;
+        _pdfSidebarOpen = settings.ShowPdfSidebar;
         if (!force && previous != _scaleMode)
         {
             _cache.Clear(); // decoded for the other mode's box
         }
 
-        _timeline.Mark(0, "settings-loaded", QuickViewTimeline.Now, new Dictionary<string, object?> { ["imageScale"] = _scaleMode.ToString() });
+        _timeline.Mark(0, "settings-loaded", QuickViewTimeline.Now, new Dictionary<string, object?> { ["imageScale"] = _scaleMode.ToString(), ["pdfLayout"] = _pdfLayout.ToString() });
     }
 
     private void SetInfo(string text)
@@ -716,6 +835,11 @@ internal sealed class QuickViewController : IDisposable
             return; // back to the Explorer window Quick View belongs to: stay open
         }
 
+        if (_presentation is not null && ProcessIdOf(root) == Environment.ProcessId)
+        {
+            return; // Quick View's own presentation window
+        }
+
         string windowClass = Interop.WindowClass.Of(root);
         if (TransientForegroundClasses.Contains(windowClass))
         {
@@ -757,6 +881,7 @@ internal sealed class QuickViewController : IDisposable
         StopGif();
         StopMedia("show");
         _pdfPages.Reset();
+        ResetView();
         _loading?.Cancel();
         _loading?.Dispose();
         _loading = new CancellationTokenSource();
@@ -774,6 +899,7 @@ internal sealed class QuickViewController : IDisposable
         if (!_visible)
         {
             PlaceWindow(_owner != 0 ? _owner : _placeNear);
+            _window.SetOpenInMavueAvailable(ShellActions.FindMavueExecutable() is not null);
         }
 
         _timeline.Mark(requestId, "show-call", QuickViewTimeline.Now);
@@ -956,6 +1082,7 @@ internal sealed class QuickViewController : IDisposable
         StopMedia("hidden");
         _pdfPages.Reset();
         UpdatePageControls();
+        ResetView();
         _focusWatcher.Stop();
         _followedView = 0;
         _prefetch?.Cancel();
@@ -1078,6 +1205,7 @@ internal sealed class QuickViewController : IDisposable
                 ["access"] = facts.Access.ToString(),
             });
             SetInfo(FormatInfo(facts, null));
+            _currentFacts = facts;
 
             if (facts.Access == PreviewAccess.NotAFile)
             {
@@ -1097,13 +1225,26 @@ internal sealed class QuickViewController : IDisposable
                 return;
             }
 
+            if (facts.Format == FileFormat.Svg)
+            {
+                await ShowSvgAsync(requestId, path, facts, areaWidth, areaHeight, cancellation);
+                return;
+            }
+
+            if (facts.Format == FileFormat.Pdf && facts.Access == PreviewAccess.Allowed && PdfSession.IsAvailable && _options.Decoder == DecoderMode.WinRt)
+            {
+                await ShowPdfSessionAsync(requestId, path, facts, areaWidth, areaHeight, cancellation);
+                return;
+            }
+
             // Display box: decode exactly the pixels that will be shown (no second resample in the UI),
             // never enlarging small images; actual-size mode decodes the source size.
             Plan plan = await PlanAsync(path, facts, mode, areaWidth, areaHeight, cancellation);
             uint viewportWidth = plan.Box.Width;
             uint viewportHeight = plan.Box.Height;
 
-            bool cacheable = facts.Access == PreviewAccess.Allowed && _options.Decoder == DecoderMode.WinRt;
+            // A zoomed item is decoded for its zoom only (the cache holds the sizes navigation needs).
+            bool cacheable = facts.Access == PreviewAccess.Allowed && _options.Decoder == DecoderMode.WinRt && _viewZoom is null;
             int page = facts.Format == FileFormat.Pdf ? _pdfPages.Index : 0;
             PreviewKey key = PreviewKey.Create(path, facts.Length, facts.LastWriteUtc, viewportWidth, viewportHeight, page);
             if (cacheable && _cache.TryGet(key, out DecodedImage? cached) && cached?.Bitmap is not null)
@@ -1182,7 +1323,7 @@ internal sealed class QuickViewController : IDisposable
 
     private async Task ShowFullAsync(long requestId, FileFacts facts, DecodedImage full, string decoder, Plan plan, CancellationToken cancellation)
     {
-        SoftwareBitmap display = SoftwareBitmap.Copy(full.Bitmap!);
+        SoftwareBitmap display = SoftwareBitmapPixels.Orient(full.Bitmap!, _orientation); // a private copy (see _displayedBitmap)
         ImageSource source;
         try
         {
@@ -1195,8 +1336,14 @@ internal sealed class QuickViewController : IDisposable
             throw;
         }
 
-        _window.Surface.SetImageBox(DisplaySizing.ElementSize((uint)display.PixelWidth, (uint)display.PixelHeight, DisplayScale()), plan.Scrollable);
+        (double Width, double Height) element = plan.DisplayElementSize ?? DisplaySizing.ElementSize((uint)display.PixelWidth, (uint)display.PixelHeight, DisplayScale());
+        _window.Surface.SetImageBox(element, plan.Scrollable);
         _window.Surface.SetFullImage(source);
+        bool pdf = full.PageCount > 0;
+        RecordShown(
+            pdf ? ShownContent.Pdf : ShownContent.Raster,
+            pdf ? (full.SourceWidth * DisplayScale(), full.SourceHeight * DisplayScale()) : (full.SourceWidth, full.SourceHeight),
+            element.Width);
         SoftwareBitmap? previous = _displayedBitmap;
         _displayedBitmap = display;
         previous?.Dispose();
@@ -1266,7 +1413,8 @@ internal sealed class QuickViewController : IDisposable
                 }
 
                 FileFacts facts = await Task.Run(() => FileFacts.Read(path), cancellation);
-                if (facts.Access != PreviewAccess.Allowed || facts.Length > MaxPrefetchFileBytes || FileFormatKinds.IsMedia(facts.Format))
+                if (facts.Access != PreviewAccess.Allowed || facts.Length > MaxPrefetchFileBytes || FileFormatKinds.IsMedia(facts.Format) ||
+                    (facts.Format == FileFormat.Pdf && PdfSession.IsAvailable))
                 {
                     continue;
                 }
@@ -1334,12 +1482,23 @@ internal sealed class QuickViewController : IDisposable
         }
 
         StopGif();
-        var player = new GifPlayer(reader, Trace(requestId));
+        var player = new GifPlayer(reader, Trace(requestId), _orientation);
         _gif = player;
 
         // The animation is sized from the logical screen (the first frame may cover only part of it).
         (uint displayWidth, uint displayHeight) = DisplaySizing.ExpectedDisplayPixels(_scaleMode, areaWidth, areaHeight, (uint)reader.Width, (uint)reader.Height);
-        _window.Surface.SetImageBox(DisplaySizing.ElementSize(displayWidth, displayHeight, DisplayScale()), plan.Scrollable);
+        bool scrollable = plan.Scrollable;
+        if (_viewZoom is not null || !_orientation.IsIdentity)
+        {
+            (int ow, int oh) = _orientation.Oriented(reader.Width, reader.Height);
+            double factor = ViewerZoom.FactorFor(_viewZoom ?? ZoomSetting.For(_scaleMode), ow, oh, areaWidth, areaHeight);
+            (displayWidth, displayHeight) = ViewerZoom.DisplaySize(ow, oh, factor);
+            scrollable = displayWidth > areaWidth + 1 || displayHeight > areaHeight + 1;
+        }
+
+        (double Width, double Height) element = DisplaySizing.ElementSize(displayWidth, displayHeight, DisplayScale());
+        _window.Surface.SetImageBox(element, scrollable);
+        RecordShown(ShownContent.Gif, (reader.Width, reader.Height), element.Width);
         _window.Surface.SetFullImage(player.Source);
         SoftwareBitmap? still = _displayedBitmap;
         _displayedBitmap = null; // the still frame's source was just replaced; free its pixels too
@@ -1365,6 +1524,7 @@ internal sealed class QuickViewController : IDisposable
         session.StateChanged += (s, state) => OnMediaState(s, requestId, state);
         _timeline.Mark(requestId, "media-open", QuickViewTimeline.Now, new Dictionary<string, object?> { ["kind"] = audio ? "audio" : "video", ["player"] = session.Id });
         _window.Surface.ShowMedia(session.Player);
+        RecordShown(ShownContent.None, default, 0);
         _contentRequest = requestId; // the previous item's picture is gone; no "stale image" clearing needed
         if (audio)
         {
@@ -1477,6 +1637,561 @@ internal sealed class QuickViewController : IDisposable
         (uint width, uint height) = DisplaySizing.ExpectedDisplayPixels(ImageScaleMode.FitNoUpscale, areaWidth, areaHeight, session.NaturalSize.Width, session.NaturalSize.Height);
         (double w, double h) = DisplaySizing.ElementSize(width, height, DisplayScale());
         _window.Surface.SetVideoLayout(w, h);
+    }
+
+    /// <summary>Forgets the zoom and rotation of the previous item; the controls are shown again for what comes next.</summary>
+    private void ResetView()
+    {
+        ClosePdf();
+        _zoomTimer?.Stop();
+        _viewZoom = null;
+        _orientation = ViewOrientation.Identity;
+        _shown = ShownContent.None;
+        _shownSource = default;
+        _shownFactor = 0;
+        ReplaceSvgStream(null);
+    }
+
+    /// <summary>Records what is on screen (size at 100 % and element width) and updates the zoom controls.</summary>
+    private void RecordShown(ShownContent content, (double Width, double Height) source, double elementWidth)
+    {
+        _shown = content;
+        _shownSource = source;
+        (double orientedWidth, _) = (content == ShownContent.Svg ? ViewOrientation.Identity : _orientation).Oriented(source.Width, source.Height);
+        _shownFactor = orientedWidth > 0 ? elementWidth * DisplayScale() / orientedWidth : 0;
+        _window.SetViewControls(content != ShownContent.None, content is ShownContent.Raster or ShownContent.Pdf or ShownContent.Gif, _shownFactor > 0 ? ViewerZoom.Percent(_shownFactor) : string.Empty);
+    }
+
+    /// <summary>
+    /// Zoom from the window. Applied at once by resizing what is shown (around the pointer for the wheel); a raster image
+    /// or PDF page is decoded again at the new size once zooming pauses.
+    /// </summary>
+    private void OnZoomRequested(QuickViewZoomCommand command, int wheelDelta, Windows.Foundation.Point? anchor)
+    {
+        if (_visible && _pdf.IsOpen)
+        {
+            ZoomSetting zoom = command switch
+            {
+                QuickViewZoomCommand.Fit => ZoomSetting.For(_scaleMode),
+                QuickViewZoomCommand.ActualSize => ZoomSetting.ActualSize,
+                QuickViewZoomCommand.In => new ZoomSetting(ZoomMode.Custom, ViewerZoom.StepIn(_pdf.Factor)),
+                QuickViewZoomCommand.Out => new ZoomSetting(ZoomMode.Custom, ViewerZoom.StepOut(_pdf.Factor)),
+                _ => new ZoomSetting(ZoomMode.Custom, ViewerZoom.Wheel(_pdf.Factor, wheelDelta)),
+            };
+            _viewZoom = zoom.Mode == ZoomMode.Custom ? zoom : null;
+            _pdf.SetZoom(zoom.Mode == ZoomMode.Custom ? zoom with { Factor = ViewerZoom.Clamp(zoom.Factor, 10_000, 10_000) } : zoom, anchor);
+            _timeline.Mark(_currentRequest, "zoom", QuickViewTimeline.Now, new Dictionary<string, object?> { ["command"] = command.ToString(), ["factor"] = Math.Round(_pdf.Factor, 4), ["pdf"] = true });
+            return;
+        }
+
+        if (!_visible || _currentPath is null || _shown == ShownContent.None || _shownFactor <= 0)
+        {
+            return;
+        }
+
+        ViewOrientation orientation = _shown == ShownContent.Svg ? ViewOrientation.Identity : _orientation;
+        (double width, double height) = orientation.Oriented(_shownSource.Width, _shownSource.Height);
+        (uint areaWidth, uint areaHeight) = ImageArea();
+        double factor;
+        if (command == QuickViewZoomCommand.Fit)
+        {
+            _viewZoom = null; // back to the size from the settings
+            factor = ViewerZoom.FactorFor(ZoomSetting.For(_scaleMode), width, height, areaWidth, areaHeight, allowEnlarge: _shown == ShownContent.Pdf);
+        }
+        else
+        {
+            double target = command switch
+            {
+                QuickViewZoomCommand.In => ViewerZoom.StepIn(_shownFactor),
+                QuickViewZoomCommand.Out => ViewerZoom.StepOut(_shownFactor),
+                QuickViewZoomCommand.ActualSize => 1,
+                _ => ViewerZoom.Wheel(_shownFactor, wheelDelta),
+            };
+            factor = ViewerZoom.Clamp(target, width, height);
+            _viewZoom = new ZoomSetting(ZoomMode.Custom, factor);
+        }
+
+        (uint displayWidth, uint displayHeight) = ViewerZoom.DisplaySize(width, height, factor);
+        (double, double) element = DisplaySizing.ElementSize(displayWidth, displayHeight, DisplayScale());
+        _window.Surface.ZoomImage(element, anchor ?? _window.Surface.ViewportCenter);
+        _shownFactor = factor;
+        _window.SetViewControls(true, _shown is ShownContent.Raster or ShownContent.Pdf or ShownContent.Gif, ViewerZoom.Percent(factor));
+        _timeline.Mark(_currentRequest, "zoom", QuickViewTimeline.Now, new Dictionary<string, object?>
+        {
+            ["command"] = command.ToString(),
+            ["factor"] = Math.Round(factor, 4),
+            ["width"] = displayWidth,
+            ["height"] = displayHeight,
+        });
+        if (_shown is ShownContent.Raster or ShownContent.Pdf)
+        {
+            _zoomTimer ??= CreateZoomTimer();
+            _zoomTimer.Stop();
+            _zoomTimer.Start();
+        }
+    }
+
+    private DispatcherQueueTimer CreateZoomTimer()
+    {
+        DispatcherQueueTimer timer = _dispatcher.CreateTimer();
+        timer.Interval = TimeSpan.FromMilliseconds(180);
+        timer.IsRepeating = false;
+        timer.Tick += (_, _) =>
+        {
+            if (_visible && _currentPath is { } path && _shown is ShownContent.Raster or ShownContent.Pdf)
+            {
+                long id = SelectionWorker.NextRequestId();
+                MarkNavigation(id, "zoom-refine");
+                ShowNext(id, path, sameItem: true);
+            }
+        };
+        return timer;
+    }
+
+    /// <summary>Turns the image, GIF or PDF page a quarter (the file is not changed) and draws it again.</summary>
+    private void OnRotateRequested(int quarterTurns)
+    {
+        if (_visible && _pdf.IsOpen)
+        {
+            _pdf.Rotate(quarterTurns);
+            _timeline.Mark(_currentRequest, "rotate", QuickViewTimeline.Now, new Dictionary<string, object?> { ["quarterTurns"] = _pdf.QuarterTurns, ["pdf"] = true });
+            return;
+        }
+
+        if (!_visible || _currentPath is not { } path || _shown is not (ShownContent.Raster or ShownContent.Pdf or ShownContent.Gif))
+        {
+            return;
+        }
+
+        _orientation = quarterTurns > 0 ? _orientation.RotateClockwise() : _orientation.RotateCounterClockwise();
+        long id = SelectionWorker.NextRequestId();
+        _timeline.Mark(id, "rotate", QuickViewTimeline.Now, new Dictionary<string, object?> { ["quarterTurns"] = _orientation.QuarterTurns });
+        MarkNavigation(id, "rotate");
+        ShowNext(id, path, sameItem: true);
+    }
+
+    private async void OnFileCommand(QuickViewFileCommand command)
+    {
+        if (!_visible || _currentPath is not { } path)
+        {
+            return;
+        }
+
+        _timeline.Mark(_currentRequest, "file-command", QuickViewTimeline.Now, new Dictionary<string, object?> { ["command"] = command.ToString() });
+        try
+        {
+            switch (command)
+            {
+                case QuickViewFileCommand.OpenInMavue:
+                    // Started while Quick View is the active window, so Mavue may take the foreground; then Quick View closes.
+                    if (ShellActions.LaunchMavue([path]))
+                    {
+                        Hide(_currentRequest, "open-in-mavue", restoreOwner: false);
+                    }
+
+                    break;
+                case QuickViewFileCommand.OpenWith:
+                    if (_media is { IsPlaying: true } playing)
+                    {
+                        playing.Execute(MediaCommand.TogglePlay);
+                    }
+
+                    await ShellActions.OpenWithAsync(_window.Handle, path);
+                    break;
+                case QuickViewFileCommand.Copy when _pdf.HasSelection:
+                    await _pdf.CopySelectionAsync();
+                    break;
+                case QuickViewFileCommand.Copy:
+                    await ShellActions.CopyToClipboardAsync(path, _currentFacts?.Format ?? FileFormat.Unknown);
+                    break;
+                case QuickViewFileCommand.ToggleAnimation:
+                    _gif?.TogglePause();
+                    break;
+            }
+        }
+        catch (Exception ex) when (ex is COMException or UnauthorizedAccessException or FileNotFoundException or IOException)
+        {
+            _timeline.Mark(_currentRequest, "file-command-error", QuickViewTimeline.Now, new Dictionary<string, object?> { ["type"] = ex.GetType().Name, ["hresult"] = ex.HResult });
+        }
+    }
+
+    /// <summary>
+    /// SVG through XAML's SvgImageSource (Direct2D), drawn at the element's size: 100 % is the drawing's own size at
+    /// 96 dpi on this monitor; small drawings are not enlarged. Never for cloud placeholders (reading would download).
+    /// </summary>
+    private async Task ShowSvgAsync(long requestId, string path, FileFacts facts, uint areaWidth, uint areaHeight, CancellationToken cancellation)
+    {
+        if (facts.Access != PreviewAccess.Allowed)
+        {
+            _window.Surface.ShowStatusOnly(Strings.GetString("QuickView_Error_CloudPlaceholder"));
+            return;
+        }
+
+        if (facts.Length > MaxPrefetchFileBytes)
+        {
+            _window.Surface.ShowStatusOnly(Strings.GetString("QuickView_Error_TooLarge"));
+            return;
+        }
+
+        (double Width, double Height)? intrinsic = await Task.Run(() => SvgDimensions.TryRead(path), cancellation);
+        byte[] content = await File.ReadAllBytesAsync(path, cancellation);
+        if (intrinsic is not { } size)
+        {
+            _window.Surface.ShowStatusOnly(Strings.GetString("QuickView_Error_Failed"));
+            _timeline.Mark(requestId, "full-skipped", QuickViewTimeline.Now, new Dictionary<string, object?> { ["reason"] = "svg-invalid" });
+            return;
+        }
+
+        var stream = new InMemoryRandomAccessStream();
+        await stream.WriteAsync(content.AsBuffer());
+        stream.Seek(0);
+        var svg = new SvgImageSource();
+        SvgImageSourceLoadStatus status = await svg.SetSourceAsync(stream);
+        if (cancellation.IsCancellationRequested || status != SvgImageSourceLoadStatus.Success)
+        {
+            stream.Dispose();
+            cancellation.ThrowIfCancellationRequested();
+            _window.Surface.ShowStatusOnly(Strings.GetString("QuickView_Error_Failed"));
+            _timeline.Mark(requestId, "full-skipped", QuickViewTimeline.Now, new Dictionary<string, object?> { ["reason"] = "svg-" + status });
+            return;
+        }
+
+        double scale = DisplayScale();
+        (double sourceWidth, double sourceHeight) = (size.Width * scale, size.Height * scale);
+        double factor = ViewerZoom.FactorFor(_viewZoom ?? ZoomSetting.For(_scaleMode), sourceWidth, sourceHeight, areaWidth, areaHeight);
+        (uint displayWidth, uint displayHeight) = ViewerZoom.DisplaySize(sourceWidth, sourceHeight, factor);
+        (double, double) element = DisplaySizing.ElementSize(displayWidth, displayHeight, scale);
+        _window.Surface.SetImageBox(element, displayWidth > areaWidth + 1 || displayHeight > areaHeight + 1);
+        _window.Surface.SetFullImage(svg);
+        SoftwareBitmap? previous = _displayedBitmap;
+        _displayedBitmap = null;
+        previous?.Dispose();
+        ReplaceSvgStream(stream);
+        _contentRequest = requestId;
+        RecordShown(ShownContent.Svg, (sourceWidth, sourceHeight), element.Item1);
+        SetInfo(string.Format(CultureInfo.CurrentCulture, Strings.GetString("QuickView_InfoImage"), facts.Format, Math.Round(size.Width), Math.Round(size.Height), ByteSizeText.Format(facts.Length)));
+        _timeline.Mark(requestId, "full-set", QuickViewTimeline.Now, new Dictionary<string, object?> { ["decoder"] = "svg", ["sourceWidth"] = size.Width, ["sourceHeight"] = size.Height });
+        await NextFrameAsync();
+        if (!cancellation.IsCancellationRequested)
+        {
+            _timeline.Mark(requestId, "full-visible", QuickViewTimeline.Now);
+        }
+    }
+
+    /// <summary>
+    /// A PDF through the shared <see cref="PdfSession"/>: the document view replaces the image area; pages are drawn
+    /// in the background near the screen only. The timing log gets the same marks as an image (full-set when the
+    /// current page is drawn, then full-visible), so latency and E2E checks apply unchanged.
+    /// </summary>
+    private async Task ShowPdfSessionAsync(long requestId, string path, FileFacts facts, uint areaWidth, uint areaHeight, CancellationToken cancellation)
+    {
+        StopGif();
+        ReplaceSvgStream(null);
+        _window.Surface.ShowDocument(_pdf.View);
+        SoftwareBitmap? previous = _displayedBitmap;
+        _displayedBitmap = null;
+        previous?.Dispose();
+        _pdfRequest = requestId;
+        _pdfFirstFrameMarked = false;
+        ZoomSetting zoom = _viewZoom ?? ZoomSetting.For(_scaleMode);
+        PdfSessionOpenResult result = await _pdf.OpenAsync(path, zoom, _pdfLayout, cancellation);
+        if (result == PdfSessionOpenResult.Cancelled)
+        {
+            cancellation.ThrowIfCancellationRequested();
+            return;
+        }
+
+        if (result != PdfSessionOpenResult.Opened)
+        {
+            ClosePdf();
+            _window.Surface.ShowStatusOnly(Strings.GetString(result == PdfSessionOpenResult.Password ? "QuickView_Error_PdfPassword" : "QuickView_Error_Failed"));
+            _timeline.Mark(requestId, "full-skipped", QuickViewTimeline.Now, new Dictionary<string, object?> { ["reason"] = result.ToString() });
+            return;
+        }
+
+        _contentRequest = requestId;
+        _plannedArea = (areaWidth, areaHeight);
+        _pdfPages.Reset();
+        _pdfPages.SetCount(_pdf.PageCount);
+        UpdatePageControls();
+        _window.SetPdfTools(true, _pdfSidebarOpen, _pdf.Layout);
+        RecordShown(ShownContent.None, default, 0);
+        _window.SetViewControls(true, true, ViewerZoom.Percent(_pdf.Factor));
+        OnPdfViewChanged();
+        StartPrefetch(areaWidth, areaHeight);
+    }
+
+    /// <summary>Page steps of a PDF in the session (keys, hook, buttons, page box), logged like a page render.</summary>
+    private void StepPdfPage(int delta, string source, long? inputQpc, int? target)
+    {
+        int before = _pdf.CurrentPage;
+        bool moved;
+        if (target is { } page)
+        {
+            moved = page >= 0 && page < _pdf.PageCount && page != before;
+            if (moved)
+            {
+                _pdf.GoToPage(page);
+            }
+        }
+        else
+        {
+            moved = _pdf.StepPage(delta);
+        }
+
+        if (!moved)
+        {
+            _timeline.Mark(_currentRequest, "pdf-page-edge", QuickViewTimeline.Now, new Dictionary<string, object?> { ["index"] = before, ["count"] = _pdf.PageCount, ["source"] = source });
+            return;
+        }
+
+        LogPdfPageMove(source, inputQpc);
+    }
+
+    /// <summary>The wheel over the PDF: a page turn in the single-page layout (logged like the page keys).</summary>
+    private bool OnDocumentWheel(int delta)
+    {
+        int before = _pdf.CurrentPage;
+        bool used = _pdf.HandleWheel(delta);
+        if (used && _pdf.CurrentPage != before)
+        {
+            LogPdfPageMove("wheel", null);
+        }
+
+        return used;
+    }
+
+    /// <summary>A page move of the session as a request of its own (nav "pdf-page", full-set, full-visible).</summary>
+    private void LogPdfPageMove(string source, long? inputQpc)
+    {
+        long id = SelectionWorker.NextRequestId();
+        if (inputQpc is { } input)
+        {
+            _timeline.Mark(id, "nav-input", input);
+        }
+
+        _timeline.Mark(id, "pdf-page", QuickViewTimeline.Now, new Dictionary<string, object?> { ["index"] = _pdf.CurrentPage, ["count"] = _pdf.PageCount, ["source"] = source });
+        MarkNavigation(id, "pdf-page");
+        Interlocked.Exchange(ref _currentRequest, id);
+        _contentRequest = id;
+        _pdfRequest = id;
+        _pdfFirstFrameMarked = false;
+        _ = MarkPdfPageShownAsync(id, rendered: null);
+    }
+
+    /// <summary>full-set / full-visible for the page now current (after it is drawn, or at once when already drawn).</summary>
+    private async Task MarkPdfPageShownAsync(long requestId, (int Width, int Height)? rendered)
+    {
+        if (_pdfFirstFrameMarked || requestId != _pdfRequest)
+        {
+            return;
+        }
+
+        _pdfFirstFrameMarked = true;
+        int page = _pdf.CurrentPage;
+        (double width, double height) = _pdf.PageSizeDips(page);
+        (int layoutWidth, int layoutHeight) = _window.LayoutImageAreaPixels();
+        _timeline.Mark(requestId, "full-set", QuickViewTimeline.Now, new Dictionary<string, object?>
+        {
+            ["sourceWidth"] = Math.Round(width),
+            ["sourceHeight"] = Math.Round(height),
+            ["decodedWidth"] = rendered?.Width,
+            ["decodedHeight"] = rendered?.Height,
+            ["decodeMs"] = 0,
+            ["decoder"] = "pdfium-view",
+            ["areaWidth"] = _plannedArea.Width,
+            ["areaHeight"] = _plannedArea.Height,
+            ["layoutAreaWidth"] = layoutWidth,
+            ["layoutAreaHeight"] = layoutHeight,
+            ["dpi"] = NativeMethods.GetDpiForWindow(_window.Handle),
+            ["pageIndex"] = page,
+            ["pageCount"] = _pdf.PageCount,
+            ["layout"] = _pdf.Layout.ToString(),
+        });
+        await NextFrameAsync();
+        if (requestId == _pdfRequest)
+        {
+            _timeline.Mark(requestId, "full-visible", QuickViewTimeline.Now);
+        }
+    }
+
+    /// <summary>
+    /// Session diagnostics into the timing log: the first drawn current page completes the request (full-set /
+    /// full-visible), and page positions are logged for tests (window client, physical pixels).
+    /// </summary>
+    private void PdfTrace(string name, IReadOnlyDictionary<string, object?> detail)
+    {
+        long request = Interlocked.Read(ref _currentRequest);
+        _timeline.Mark(request, name, QuickViewTimeline.Now, detail);
+        if (name is not ("pdf-rendered" or "pdf-scrolled") || !detail.TryGetValue("page", out object? value) || value is not int page)
+        {
+            return;
+        }
+
+        if (name == "pdf-rendered" && page == _pdf.CurrentPage && detail.TryGetValue("width", out object? w) && w is int width && detail.TryGetValue("height", out object? h) && h is int height)
+        {
+            _ = MarkPdfPageShownAsync(_pdfRequest, (width, height));
+        }
+
+        _dispatcher.TryEnqueue(DispatcherQueuePriority.Low, () =>
+        {
+            foreach (int p in name == "pdf-scrolled" ? new[] { page, page + 1 } : [page])
+            {
+                if (_pdf.PageRectInWindow(p) is { } rect)
+                {
+                    _timeline.Mark(Interlocked.Read(ref _currentRequest), "pdf-geometry", QuickViewTimeline.Now, new Dictionary<string, object?>
+                    {
+                        ["page"] = p,
+                        ["x"] = Math.Round(rect.X),
+                        ["y"] = Math.Round(rect.Y),
+                        ["width"] = Math.Round(rect.Width),
+                        ["height"] = Math.Round(rect.Height),
+                    });
+                }
+            }
+        });
+    }
+
+    /// <summary>The session's page, zoom or layout changed: info line, page box, buttons, hook keys.</summary>
+    private void OnPdfViewChanged()
+    {
+        if (!_visible || !_pdf.IsOpen || _currentFacts is not { } facts)
+        {
+            return;
+        }
+
+        int page = _pdf.CurrentPage;
+        _pdfPages.Reset();
+        _pdfPages.SetCount(_pdf.PageCount);
+        _pdfPages.TryStep(page);
+        _pdfPaging = _visible && _pdf.PageCount > 1;
+        _window.SetPageControls(_pdfPaging, _pdf.CanStepPage(-1), _pdf.CanStepPage(+1));
+        UpdateNavigationKeys();
+        _window.SetPageNumber(page, _pdf.PageCount);
+        _window.SetViewControls(true, true, ViewerZoom.Percent(_pdf.Factor));
+        _window.SetPdfTools(true, _pdfSidebarOpen, _pdf.Layout);
+        string size = ByteSizeText.Format(facts.Length);
+        SetInfo(_pdf.PageCount > 1
+            ? string.Format(CultureInfo.CurrentCulture, Strings.GetString("QuickView_InfoPdfPage"), page + 1, _pdf.PageCount, size)
+            : string.Format(CultureInfo.CurrentCulture, Strings.GetString("QuickView_InfoPdf"), _pdf.PageCount, size));
+    }
+
+    private async void OnPdfCommand(QuickViewPdfCommand command, int argument)
+    {
+        if (!_visible || !_pdf.IsOpen)
+        {
+            return;
+        }
+
+        _timeline.Mark(_currentRequest, "pdf-command", QuickViewTimeline.Now, new Dictionary<string, object?> { ["command"] = command.ToString(), ["argument"] = argument });
+        switch (command)
+        {
+            case QuickViewPdfCommand.Find:
+                _window.SetSearchVisible(true);
+                _pdfSearch.Open();
+                break;
+            case QuickViewPdfCommand.FindNext:
+                await _pdfSearch.FindAsync(argument);
+                break;
+            case QuickViewPdfCommand.Sidebar:
+                _pdfSidebarOpen = argument != 0;
+                _window.SetPdfTools(true, _pdfSidebarOpen, _pdf.Layout);
+                SaveQuickViewSettings(s => s with { ShowPdfSidebar = _pdfSidebarOpen });
+                break;
+            case QuickViewPdfCommand.Layout:
+                _pdfLayout = (PdfLayoutMode)argument;
+                _pdf.SetLayout(_pdfLayout);
+                _window.SetPdfTools(true, _pdfSidebarOpen, _pdfLayout);
+                _timeline.Mark(_currentRequest, "pdf-layout", QuickViewTimeline.Now, new Dictionary<string, object?> { ["mode"] = _pdfLayout.ToString() });
+                SaveQuickViewSettings(s => s with { PdfLayout = _pdfLayout });
+                break;
+            case QuickViewPdfCommand.GoToPage:
+                StepPdfPage(0, "page-box", null, argument);
+                break;
+            case QuickViewPdfCommand.FocusPageBox:
+                _window.FocusPageBox();
+                break;
+            case QuickViewPdfCommand.SelectAll:
+                await _pdf.SelectAllAsync();
+                break;
+            case QuickViewPdfCommand.Presentation:
+                StartPresentation();
+                break;
+        }
+    }
+
+    /// <summary>Presents the PDF full screen on Quick View's monitor; Quick View stays open behind it.</summary>
+    private void StartPresentation()
+    {
+        _presentation?.Close();
+        _presentation = PdfPresentationWindow.Start(_pdf, _window.Handle, Strings.GetString("Pdf_PresentationHint"), PdfTrace);
+        if (_presentation is { } window)
+        {
+            window.Closed += (_, _) =>
+            {
+                if (ReferenceEquals(_presentation, window))
+                {
+                    _presentation = null;
+                }
+            };
+        }
+    }
+
+    /// <summary>Remembers a PDF choice in the Quick View settings (the file is re-read before writing).</summary>
+    private void SaveQuickViewSettings(Func<QuickViewSettings, QuickViewSettings> change)
+    {
+        string path = _settingsPath;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await change(QuickViewSettings.Load(path)).SaveAsync(path);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // The choice applies to this session only.
+            }
+        }).ContinueWith(_ => _dispatcher.TryEnqueue(() =>
+        {
+            try
+            {
+                _settingsStamp = File.GetLastWriteTimeUtc(path); // our own write is not a change to re-read
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            {
+                // Re-read next time; harmless.
+            }
+        }), TaskScheduler.Default);
+    }
+
+    /// <summary>Closes the PDF of the session and its tools (another item, hide, failure).</summary>
+    private void ClosePdf()
+    {
+        _presentation?.Close();
+        _presentation = null;
+        _pdfSearch.Close();
+        _window.SetSearchVisible(false);
+        if (_pdf.IsOpen)
+        {
+            _pdf.Close();
+        }
+
+        if (_window.Surface.ShowsDocument)
+        {
+            _window.Surface.ClearDocument();
+        }
+
+        _window.SetPdfTools(false, _pdfSidebarOpen, _pdfLayout);
+    }
+
+    private void ReplaceSvgStream(IRandomAccessStream? stream)
+    {
+        IRandomAccessStream? previous = _svgStream;
+        _svgStream = stream;
+        if (!ReferenceEquals(previous, stream))
+        {
+            previous?.Dispose();
+        }
     }
 
     private void StopMedia(string reason)

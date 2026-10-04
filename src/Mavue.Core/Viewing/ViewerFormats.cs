@@ -7,12 +7,13 @@ public static class ViewerFormats
 {
     /// <summary>
     /// Image formats with a decoder in Windows (some through Store extensions: HEIF, AVIF, WebP on older systems,
-    /// JPEG XL). JPEG 2000 and SVG have no decoder yet, so they are not offered.
+    /// JPEG XL, camera raw), plus SVG (drawn by XAML/Direct2D). JPEG 2000 has no decoder yet, so it is not offered.
     /// </summary>
     public static readonly IReadOnlyList<FileFormat> Images =
     [
         FileFormat.Jpeg, FileFormat.Png, FileFormat.Gif, FileFormat.Bmp, FileFormat.Tiff,
         FileFormat.WebP, FileFormat.Ico, FileFormat.Heif, FileFormat.Avif, FileFormat.JpegXl,
+        FileFormat.Svg, FileFormat.CameraRaw,
     ];
 
     /// <summary>Everything the viewer can open.</summary>

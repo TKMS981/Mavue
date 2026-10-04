@@ -25,6 +25,7 @@ internal sealed partial class Runner
         Environment["mode"] = "app";
         try
         {
+            File.Delete(AppSettingsPath); // every run starts with default settings
             string root = Path.GetDirectoryName(assets[0].Path)!;
             string gifFolder = root + " GIF";
             string pdfFolder = root + " PDF";
@@ -66,6 +67,8 @@ internal sealed partial class Runner
                 "MP4: Space pauses (no sound), Ctrl+→ seeks +10 s (picture turns green), Ctrl+↓/↑ change the volume, Space resumes; closing the window while playing releases the player");
             Guarded("app-multiple-files", () => AppMultipleFiles(assets, pdf, media.Mp3),
                 "Three files on the command line (JPEG, PDF, MP3): ←/→ step through exactly those three in that order");
+            RunAppViewingScenarios(assets, gif, pdf);
+            RunAppMonitorScenarios(assets);
             Guarded("app-open-dialog", AppOpenDialog,
                 "Ctrl+O shows the Windows Open dialog owned by the app window; Esc cancels it and the app keeps working");
         }
@@ -241,7 +244,13 @@ internal sealed partial class Runner
         }
 
         AppEvent? first = app.WaitForState(s => s.Text("kind") == "Pdf", 15000);
-        var observed = new List<string> { $"page {first?.Number("pageIndex") + 1}/{first?.Number("pageCount")}" };
+
+        // These keys and the wheel turn pages in the single-page layout (Ctrl+Shift+1); continuous scrolling is checked
+        // by app-pdf-layouts.
+        int single = app.Events.Count;
+        app.SendChordWith([VkControlKey, 0x10], 0x31);
+        app.WaitForState(s => s.Text("pdfLayout") == "SinglePage", 3000, single);
+        var observed = new List<string> { $"page {first?.Number("pageIndex") + 1}/{first?.Number("pageCount")}, single-page layout" };
         bool ok = first?.Number("pageIndex") == 0 && first.Number("pageCount") == 3;
         foreach ((ushort key, int expected) in new[] { (VkPageDown, 1), (VkPageDown, 2), (VkPageDown, 2), (VkPageUp, 1) })
         {
@@ -402,6 +411,11 @@ internal sealed partial class Runner
         var start = new ProcessStartInfo(options.AppPath ?? throw new InvalidOperationException("Mavue.exe path not set")) { UseShellExecute = false };
         start.ArgumentList.Add("--trace-file");
         start.ArgumentList.Add(trace);
+
+        // The app gets its own settings file: the user's recent files, window position and preferences stay untouched.
+        start.ArgumentList.Add("--settings-file");
+        start.ArgumentList.Add(AppSettingsPath);
+        start.ArgumentList.Add("--no-launch"); // web links in test documents are traced, never opened
         foreach (string file in files)
         {
             start.ArgumentList.Add(file);
@@ -584,6 +598,34 @@ internal sealed partial class Runner
             return Native.SendInput((uint)inputs.Length, inputs, System.Runtime.InteropServices.Marshal.SizeOf<Native.INPUT>()) == inputs.Length;
         }
 
+        /// <summary>A key with several modifiers held (Ctrl+Shift+…).</summary>
+        public bool SendChordWith(ushort[] modifiers, ushort vk)
+        {
+            if (Native.GetForegroundWindow() != Window && !ForceForeground(Window))
+            {
+                return false;
+            }
+
+            var inputs = new List<Native.INPUT>();
+            inputs.AddRange(modifiers.Select(m => Key(m, false)));
+            inputs.Add(Key(vk, false));
+            inputs.Add(Key(vk, true));
+            inputs.AddRange(modifiers.Reverse().Select(m => Key(m, true)));
+            return Native.SendInput((uint)inputs.Count, [.. inputs], System.Runtime.InteropServices.Marshal.SizeOf<Native.INPUT>()) == inputs.Count;
+        }
+
+        /// <summary>A key with a modifier held (Ctrl+…), sent only while the window is in front.</summary>
+        public bool SendChord(ushort modifier, ushort vk)
+        {
+            if (Native.GetForegroundWindow() != Window && !ForceForeground(Window))
+            {
+                return false;
+            }
+
+            Native.INPUT[] inputs = [Key(modifier, false), Key(vk, false), Key(vk, true), Key(modifier, true)];
+            return Native.SendInput((uint)inputs.Length, inputs, System.Runtime.InteropServices.Marshal.SizeOf<Native.INPUT>()) == inputs.Length;
+        }
+
         /// <summary>Closes the window like the title-bar button; true when the process exits (and, for media, the player was stopped first).</summary>
         public (bool Exited, bool Released) Close(bool expectPlayerStop)
         {
@@ -612,6 +654,8 @@ internal sealed partial class Runner
         public string? Text(string key) => Properties.TryGetValue(key, out JsonElement v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
 
         public double? Number(string key) => Properties.TryGetValue(key, out JsonElement v) && v.ValueKind == JsonValueKind.Number ? v.GetDouble() : null;
+
+        public bool? Bool(string key) => Properties.TryGetValue(key, out JsonElement v) && v.ValueKind is JsonValueKind.True or JsonValueKind.False ? v.GetBoolean() : null;
     }
 
     /// <summary>Tails the app's trace file (same incremental reading as <see cref="TimingLog"/>).</summary>

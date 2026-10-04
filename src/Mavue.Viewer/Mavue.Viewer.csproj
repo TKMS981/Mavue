@@ -25,5 +25,6 @@
   <ItemGroup>
     <ProjectReference Include="..\Mavue.Core\Mavue.Core.csproj" />
     <ProjectReference Include="..\Mavue.Image\Mavue.Image.csproj" />
+    <ProjectReference Include="..\Mavue.Pdf\Mavue.Pdf.csproj" />
   </ItemGroup>
 </Project>

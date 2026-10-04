@@ -1,0 +1,4 @@
+LIBRARY Mavue.Shell.Preview
+EXPORTS
+    DllGetClassObject PRIVATE
+    DllCanUnloadNow PRIVATE

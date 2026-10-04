@@ -42,6 +42,30 @@ public static class FileFormatDetector
         [".jpx"] = FileFormat.Jpeg2000,
         [".jxl"] = FileFormat.JpegXl,
         [".svg"] = FileFormat.Svg,
+        [".3fr"] = FileFormat.CameraRaw,
+        [".arw"] = FileFormat.CameraRaw,
+        [".cr2"] = FileFormat.CameraRaw,
+        [".cr3"] = FileFormat.CameraRaw,
+        [".crw"] = FileFormat.CameraRaw,
+        [".dcr"] = FileFormat.CameraRaw,
+        [".dng"] = FileFormat.CameraRaw,
+        [".erf"] = FileFormat.CameraRaw,
+        [".iiq"] = FileFormat.CameraRaw,
+        [".kdc"] = FileFormat.CameraRaw,
+        [".mef"] = FileFormat.CameraRaw,
+        [".mos"] = FileFormat.CameraRaw,
+        [".mrw"] = FileFormat.CameraRaw,
+        [".nef"] = FileFormat.CameraRaw,
+        [".nrw"] = FileFormat.CameraRaw,
+        [".orf"] = FileFormat.CameraRaw,
+        [".pef"] = FileFormat.CameraRaw,
+        [".raf"] = FileFormat.CameraRaw,
+        [".rw2"] = FileFormat.CameraRaw,
+        [".rwl"] = FileFormat.CameraRaw,
+        [".sr2"] = FileFormat.CameraRaw,
+        [".srf"] = FileFormat.CameraRaw,
+        [".srw"] = FileFormat.CameraRaw,
+        [".x3f"] = FileFormat.CameraRaw,
         [".mp4"] = FileFormat.Mp4,
         [".m4v"] = FileFormat.Mp4,
         [".mov"] = FileFormat.QuickTime,
@@ -138,7 +162,13 @@ public static class FileFormatDetector
 
         if (h.StartsWith("II*\0"u8) || h.StartsWith("MM\0*"u8) || h.StartsWith("II+\0"u8) || h.StartsWith("MM\0+"u8))
         {
-            return FileFormat.Tiff;
+            // Most camera raw formats (CR2, NEF, ARW, DNG…) are TIFF containers; the extension tells them apart.
+            return FromExtension(extensionHint) == FileFormat.CameraRaw ? FileFormat.CameraRaw : FileFormat.Tiff;
+        }
+
+        if (h.StartsWith("FUJIFILMCCD-RAW"u8))
+        {
+            return FileFormat.CameraRaw;
         }
 
         if (h.Length >= 12 && h.StartsWith("RIFF"u8) && h.Slice(8, 4).SequenceEqual("WEBP"u8))
@@ -212,6 +242,12 @@ public static class FileFormatDetector
 
         uint boxSize = (uint)(h[0] << 24 | h[1] << 16 | h[2] << 8 | h[3]);
         int end = (int)Math.Min(boxSize, (uint)h.Length);
+
+        // Canon CR3 is an ISO BMFF file with the "crx " brand.
+        if (h.Slice(8, 4).SequenceEqual("crx "u8))
+        {
+            return FileFormat.CameraRaw;
+        }
 
         // Major brand at offset 8; minor version at 12 is skipped; compatible brands from offset 16.
         bool heif = false;
