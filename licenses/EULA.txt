@@ -1,0 +1,112 @@
+Mavue 利用条件（バイナリ配布物） / Mavue Terms of Use (binary distribution)
+Release Candidate 版 — 法務確認前の草案 / Release candidate — DRAFT, not yet reviewed by legal counsel
+【要法務確認】の箇所は確定前です。 / Items marked [LEGAL REVIEW] are not final.
+
+Copyright 2026 TKMS981
+
+========================================================================
+日本語
+========================================================================
+
+1. 対象
+   この利用条件は、Mavue の実行用ファイルの配布物（ZIP 版・MSIX 版。以下「本ソフトウェア」）に
+   適用されます。本ソフトウェアには、Mavue 自身のプログラムと、第三者のコンポーネントが含まれます。
+   Mavue のソースコードは Apache License 2.0 で提供され、この利用条件はソースコードについての
+   Apache License 2.0 の権利を制限しません。
+
+2. 同意
+   本ソフトウェアをインストールまたは使用することにより、この利用条件に同意したものとします。
+   同意しない場合は、インストールまたは使用しないでください。【要法務確認: 同意の取得方法】
+
+3. Mavue 部分のライセンス
+   Mavue 自身のプログラムは Apache License 2.0（LICENSE.txt、NOTICE.txt）に従って使用、複製、
+   改変、再配布できます。
+
+4. 第三者のコンポーネント
+   本ソフトウェアには第三者のコンポーネント（.NET、Windows App SDK、Windows SDK の C# 投影、
+   WebView2、PDFium ほか）が含まれ、それぞれのライセンス（THIRD-PARTY-NOTICES.txt と同じフォルダー
+   の各ライセンス文）に従います。Microsoft のコンポーネントについて、利用者は次を守ってください。
+   (a) 各ライセンスで認められた範囲を超えて、リバース エンジニアリング、逆コンパイル、逆アセンブル
+       をしないこと（法令で認められる場合を除く）。
+   (b) 著作権、商標、特許の表示を削除・改変しないこと。
+   (c) Microsoft の商標を、Microsoft が提供または推奨していると誤認させる形で使用しないこと。
+   (d) 本ソフトウェアを再配布する場合は、各コンポーネントのライセンスの条件に従い、再配布先にも
+       この利用条件と同等以上に Microsoft のコンポーネントを保護する条件を課すこと。
+   (e) Microsoft の OS 以外で実行することを目的として、Microsoft のコンポーネントを配布しないこと。
+   【要法務確認: Windows App SDK・Windows SDK のライセンス条項の取り込み方、Microsoft を第三者受益者
+   とする必要の有無】
+
+5. プライバシー
+   本ソフトウェアは、利用者のファイルや内容をインターネットに送信せず、利用状況の情報（テレメトリ）を
+   収集しません。設定は利用者のコンピューターにのみ保存されます。
+
+6. 無保証
+   本ソフトウェアは「現状のまま」提供され、明示または黙示を問わず、商品性、特定目的への適合性、
+   権利非侵害その他の一切の保証をしません。【要法務確認: 日本の消費者契約法等との関係】
+
+7. 責任の制限
+   法令で認められる最大限の範囲で、著作権者および配布者は、本ソフトウェアの使用または使用不能から
+   生じるいかなる損害についても責任を負いません。【要法務確認】
+
+8. 準拠法・管轄
+   【要法務確認: 準拠法と管轄裁判所】
+
+9. 商標
+   macOS、Finder、Quick Look は Apple Inc. の商標です。Windows は Microsoft グループの商標です。
+   Mavue は Apple Inc. および Microsoft Corporation と提携しておらず、承認や後援を受けていません。
+
+========================================================================
+English
+========================================================================
+
+1. Scope
+   These terms apply to the binary distributions of Mavue (the ZIP and MSIX editions, the
+   "Software"). The Software contains Mavue's own programs and third-party components. Mavue's
+   source code is licensed under the Apache License 2.0, and these terms do not restrict the
+   rights the Apache License 2.0 grants for the source code.
+
+2. Acceptance
+   By installing or using the Software you agree to these terms. If you do not agree, do not
+   install or use it. [LEGAL REVIEW: how acceptance is obtained]
+
+3. Mavue's own programs
+   Mavue's own programs may be used, copied, modified and redistributed under the Apache License
+   2.0 (LICENSE.txt, NOTICE.txt).
+
+4. Third-party components
+   The Software includes third-party components (.NET, Windows App SDK, the Windows SDK C#
+   projection, WebView2, PDFium and others), each under its own license (THIRD-PARTY-NOTICES.txt
+   and the license texts in the same folder). For Microsoft components you must:
+   (a) not reverse engineer, decompile or disassemble them beyond what their licenses allow
+       (except where applicable law permits it);
+   (b) not remove or alter copyright, trademark or patent notices;
+   (c) not use Microsoft's trademarks in a way that suggests the Software comes from or is
+       endorsed by Microsoft;
+   (d) if you redistribute the Software, comply with each component's license and require your
+       recipients to agree to terms that protect the Microsoft components at least as much as
+       these terms;
+   (e) not distribute the Microsoft components to run on a platform other than a Microsoft
+       operating system.
+   [LEGAL REVIEW: incorporation of the Windows App SDK and Windows SDK license terms; whether
+   Microsoft must be named a third-party beneficiary]
+
+5. Privacy
+   The Software does not send your files or their contents over the internet and does not
+   collect usage data (telemetry). Settings are stored only on your computer.
+
+6. No warranty
+   The Software is provided "as is", without warranty of any kind, express or implied, including
+   merchantability, fitness for a particular purpose and non-infringement. [LEGAL REVIEW]
+
+7. Limitation of liability
+   To the maximum extent permitted by law, the copyright holder and distributors are not liable
+   for any damages arising from the use of, or the inability to use, the Software.
+   [LEGAL REVIEW]
+
+8. Governing law and jurisdiction
+   [LEGAL REVIEW: governing law and courts]
+
+9. Trademarks
+   macOS, Finder and Quick Look are trademarks of Apple Inc. Windows is a trademark of the
+   Microsoft group of companies. Mavue is not affiliated with, endorsed by, or sponsored by
+   Apple Inc. or Microsoft Corporation.
