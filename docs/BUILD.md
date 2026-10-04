@@ -18,7 +18,7 @@
 | PowerShell | 5.1 以降 | 5.1 |
 
 > C# 部分（Quick View PoC を含む現在のソリューションすべて）は .NET SDK だけでビルド・テスト・起動できることを確認済み。
-> Build Tools が必要なのはネイティブ COM DLL（Windows 11 右クリックメニュー上段 `native/Mavue.Shell.Native`。今後サムネイル・プレビューハンドラー等）だけ。
+> Build Tools が必要なのはネイティブ COM DLL（Windows 11 右クリックメニュー上段 `native/Mavue.Shell.Native`、プレビュー・サムネイル `native/Mavue.Shell.Preview`）だけ。
 > ネイティブ DLL は `Mavue.slnx` に含めず `tools/build-native.ps1` でビルドする（DLL がなくてもソリューションはビルド・テストでき、ネイティブのテストはスキップされる）。
 
 ## 2. セットアップ
@@ -98,6 +98,14 @@ $env:DOTNET_ROOT = "$env:LOCALAPPDATA\Microsoft\dotnet"   # ユーザーロー�
 
 ファイルは引数・「開く」（Ctrl+O）・ウィンドウへのドロップで開ける。1 ファイルならそのフォルダー内の対応ファイルを ←/→ で移動、
 複数ならその範囲を移動する。`--trace-file <path>` は自動テスト用の診断ログ（JSON Lines、指定したローカルファイルにのみ書く）。
+`--settings-file <path>` は設定ファイルの差し替え（E2E が利用者の設定を変えないため）。
+
+```powershell
+Mavue.exe --register     # 「プログラムから開く」「既定のアプリ」「Mavue で開く」に追加（HKCU、管理者不要。設定画面からも可）
+Mavue.exe --unregister   # 上記をすべて削除
+```
+
+主なキー操作は本体の F1（キーボード ショートカット一覧）を参照。設定は Ctrl+,（`%LOCALAPPDATA%\Mavue\settings.json`）。
 
 ### 5.1 Quick View 常駐ホスト（PoC）
 
@@ -136,7 +144,36 @@ dotnet publish src/Mavue.QuickView.Host -c Release -r win-x64 -p:PublishReadyToR
 NativeAOT（`-p:PublishAot=true`）は MSVC リンカー（§2.2 の Build Tools）が必要で、現状の開発機では「Platform linker not found」で失敗する（未導入のため）。
 起動中は Explorer で Space を押すと Quick View が動作する（他の Quick Look 系ツールと同時に動かすと二重表示の可能性あり）。
 
-### 5.2 Windows 11 右クリックメニュー上段（識別パッケージ）
+### 5.2 Explorer のプレビューウィンドウとサムネイル
+
+```powershell
+dotnet restore Mavue.slnx                                          # PDFium のヘッダー（NuGet）を build-native.ps1 が使う
+powershell -File tools/build-native.ps1 -Architecture x64          # artifacts/native/win-x64/Mavue.Shell.Preview.dll（と Mavue.Shell.Native.dll）
+dotnet build src/Mavue.App -c Release                              # Mavue.exe の出力に DLL をコピー（pdfium.dll と同じフォルダー）
+& $app --register                                                  # プレビュー・サムネイルも登録（既存のハンドラーは奪わない）
+& $app --register --prefer-mavue-preview                           # 既存のプレビュー（Edge の PDF 等）も Mavue に（任意）
+& $app --unregister                                                # すべて解除（保存した値を復元）
+```
+
+Explorer が DLL を読み込んでいる間は上書きできない（ビルドでのコピーが失敗する）。Mavue 専用の prevhost（コマンドラインに
+`{AB883DEA-90EE-4AF4-944A-45CEDD231E53}`）を終了するか、`--unregister` してからビルドする。設計は `docs/WINDOWS-INTEGRATION.md` §4–5。
+
+### 5.3 リリース成果物（ZIP・MSIX・署名・32 ビット）
+
+```powershell
+powershell -File tools/build-native.ps1 -Architecture x64        # ほかに arm64、x86（32 ビット アプリ用の Mavue.Shell.Preview.dll と x86 の pdfium.dll）
+powershell -File tools/build-native.ps1 -Architecture x86
+$env:DOTNET_ROOT = "$env:LOCALAPPDATA\Microsoft\dotnet"       # .NET SDK をユーザー フォルダーに入れている場合（PATH の dotnet に SDK がないとき）
+powershell -File tools/build-release.ps1 -Version 0.1.0          # artifacts\release: ZIP（Install.cmd）、MSIX、シンボル、SHA256SUMS.txt
+powershell -File tools/build-release.ps1 -Version 0.1.0 -SkipMsix   # ZIP のみ
+powershell -File tools/sign-release.ps1 -Path artifacts\release\Mavue -DryRun   # 署名対象の一覧（Mavue の exe/dll と pdfium.dll）
+```
+
+self-contained（.NET と Windows App SDK を同梱）で Mavue と Quick View を 1 フォルダーに発行する。`tools/package-msix.ps1 -AppDirectory` は
+その フォルダーから MSIX を作る（単独で実行すると build-release を先に呼ぶ）。署名の証明書は既定で `CN=Mavue Dev`（開発用、
+`tools/new-dev-certificate.ps1`）。公開用は `-Subject`/`-Thumbprint` と `-TimestampUrl`。詳細・確認結果は `docs/PACKAGING.md`。
+
+### 5.4 Windows 11 右クリックメニュー上段（識別パッケージ）
 
 手順と設計は `docs/WINDOWS-INTEGRATION.md` §15。要点:
 
@@ -151,14 +188,16 @@ powershell -File tools/package-identity.ps1                        # artifacts/i
 開発用証明書は、自己署名の公開部分を **LocalMachine\TrustedPeople**（管理者権限）に入れる必要があった（CurrentUser\TrustedPeople だけでは
 `0x800B0109` で登録できない。実測、2026-10-02。§15.3）。ホストの再ビルドで出力フォルダーを消しても、パッケージの登録はそのまま残る（DLL がないと項目が動かない）。
 
-## 6. パッケージング・インストール（計画）
+## 6. パッケージング・インストール
 
 | 段階 | 内容 | 状態 |
 |---|---|---|
-| 開発実行 | 非パッケージ（`WindowsPackageType=None`）+ WinAppSDK 自己完結 | 実装済み |
-| MSIX | `packaging/Mavue.Package`（App + QuickView ホスト + C++ シェル拡張 + マニフェスト拡張）。`dotnet publish` + `MakeAppx`/`SignTool`（Windows SDK BuildTools 同梱） | Planned |
-| 署名 | 開発: 自己署名テスト証明書 / 配布: コード署名証明書（LL フックを使うため署名は必須級: `WINDOWS-INTEGRATION.md` §1） | Planned |
-| .NET ランタイム | 配布物は自己完結（`SelfContained`）または ReadyToRun/NativeAOT。Quick View ホストは ReadyToRun を計測済み、NativeAOT は Build Tools 導入後に検証 | Planned |
+| 開発実行 | 非パッケージ（`WindowsPackageType=None`）+ WinAppSDK 自己完結、.NET は framework-dependent | 実装済み |
+| リリース用フォルダー | self-contained（.NET 10 + WinAppSDK）、Mavue と Quick View が同居、`licenses\` 同梱（`tools/build-release.ps1`） | 実装済み（2026-10-04） |
+| ZIP + インストーラー | `Install.cmd`/`Install.ps1`/`Uninstall.ps1`（ユーザー単位、版ごとのフォルダー、更新・アンインストール項目） | 実装済み・実機確認 |
+| MSIX | 1 パッケージに Mavue と Quick View（`tools/package-msix.ps1`）。Explorer のプレビュー ウィンドウが使われない課題あり（PACKAGING §5.3） | 試作・実機確認 |
+| 署名 | `tools/sign-release.ps1`（SHA-256、RFC 3161）。公開用証明書は未入手（LL フックを使うため署名は必須級: `WINDOWS-INTEGRATION.md` §1） | 開発用で確認 |
+| ReadyToRun / NativeAOT | 起動時間の改善候補。Quick View ホストは ReadyToRun を計測済み、NativeAOT は WinUI の対応状況を含め未検証 | Investigating |
 | Windows Search IFilter | MSIX 拡張がないため別コンポーネント（管理者インストール）を調査 | Investigating |
 
 ## 7. 既知の注意点

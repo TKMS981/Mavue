@@ -4,7 +4,7 @@
 > 商用利用制限・ネイティブバイナリ再配布要件を確認し、ここに記録する。
 > **本書は法的助言ではない。** 「要法務確認」の項目は製品配布前に専門家の確認を必須とする。
 
-最終更新: 2026-10-02（Quick View ホストの Windows App SDK 参照を必要な部品に限定し、出力を 155 → 95 MB に。Mavue 本体を Apache-2.0 とし、ライセンス関連ファイルを追加。Quick View 第 3 工程時点。製品コードに追加した外部依存はなし — WIC 直接デコード・設定ファイル（System.Text.Json）は OS / .NET 標準機能のみ。PDFium の配布物を実物で確認）
+最終更新: 2026-10-04（配布準備: Windows SDK の C# 投影を REDIST 一覧で確認し再配布可に、.NET ランタイムを self-contained で同梱（MIT）、配布物の `licenses\` を整備、Build Tools の使用条件と EULA を未解決として明記。以前: 2026-10-03 Explorer のプレビュー・サムネイル用ネイティブ DLL: 外部依存の追加なし（Windows SDK の WIC/Direct2D/DirectWrite/Media Foundation と既存の pdfium.dll のみ）。**PDFium を採用・追加**（§3.1、§3.2）。それ以前: 2026-10-02 Quick View ホストの Windows App SDK 参照を必要な部品に限定し、出力を 155 → 95 MB に。Mavue 本体を Apache-2.0 とし、ライセンス関連ファイルを追加。Quick View 第 3 工程時点。製品コードに追加した外部依存はなし — WIC 直接デコード・設定ファイル（System.Text.Json）は OS / .NET 標準機能のみ。PDFium の配布物を実物で確認）
 
 ## 0. Mavue 本体のライセンス（2026-10-02 決定）
 
@@ -21,19 +21,28 @@
     改変許可を求めるライセンス（コピーレフト）の対象にしないこと。Apache-2.0 はソース開示を求めないため抵触しない。
   - **バイナリ配布の開始前に、利用条件（EULA 相当）の文面を用意する**（ソースのみ公開の現状では対象外）。
 - WebView2（`LICENSE.txt`、BSD-3-Clause 型）: バイナリ再配布時は著作権表示・条件・免責をドキュメント等に再掲する。
-- Windows SDK の C# 投影 `Microsoft.Windows.SDK.NET.dll`（.NET SDK が `net10.0-windows` 向けに自動で追加。パッケージ
-  `Microsoft.Windows.SDK.NET.Ref` 10.0.26100.57）— **再配布可否は未確定。「再配布可能」とは扱わない**:
-  - 確認できていること: パッケージの nuspec の `licenseUrl` は Windows SDK のライセンス（`https://aka.ms/WinSDKLicenseURL`）。
-    Microsoft のメンテナーが「Windows SDK の他の NuGet パッケージと同じライセンス条件」と回答（WindowsAppSDK Discussion #4368）。
-    Windows SDK ライセンス（`Microsoft.Windows.SDK.BuildTools.MSIX` 同梱の `sdk_license.txt` で原文を確認）で再配布できる
-    「Distributable Code」は、REDIST.TXT に記載のファイルと REDIST.TXT 一覧のファイル。条件は主要機能の追加、エンドユーザーの同意する利用条件など。
-    パッケージ内にライセンス文書・REDIST 一覧は同梱されていない。
-  - 確認できていないこと: この DLL（と同じパッケージの `Microsoft.Windows.UI.Xaml.dll`）が REDIST 一覧に含まれるか。
-    .NET SDK はすべての `net*-windows*` アプリの出力にこの DLL を置くが、それは再配布許可の根拠にならない。
-  - 配布前に確認すること: (1) Windows SDK の REDIST 一覧（最新版）にこの DLL が含まれるか、(2) 含まれない場合、Microsoft の公式文書
-    （.NET の Windows 向け TFM のドキュメント、CsWinRT の配布ガイド等）に再配布を認める記述があるか、(3) どちらもなければ Microsoft に
-    問い合わせるか法務確認する。結果をここと THIRD-PARTY-NOTICES.md に記録する。
-- `WinRT.Runtime.dll`（C#/WinRT のランタイム）は MIT（microsoft/CsWinRT リポジトリ）。
+- Windows SDK の C# 投影 `Microsoft.Windows.SDK.NET.dll` と `WinRT.Runtime.dll`（.NET SDK が `net10.0-windows` 向けに自動で
+  追加。パッケージ `Microsoft.Windows.SDK.NET.Ref` 10.0.26100.57）— **2026-10-04 確認: Windows SDK の REDIST 一覧に記載あり、再配布可**:
+  - パッケージの nuspec の `licenseUrl` は Windows SDK のライセンス（`https://aka.ms/WinSDKLicenseURL`）。`WinRT.Runtime.dll` も
+    このパッケージから出力に入るため、C#/WinRT のソース（MIT）ではなく**このパッケージの Windows SDK 条件**で扱う。
+  - Windows SDK ライセンス（本機の `C:\Program Files (x86)\Windows Kits\10\Licenses\10.0.26100.0\sdk_license.rtf` で原文を確認）の
+    Distributable Code は「REDIST.TXT 記載のファイルと、REDIST.TXT 一覧（http://go.microsoft.com/fwlink/?LinkId=524842）のファイル」。
+  - REDIST 一覧（https://learn.microsoft.com/en-us/legal/windows-sdk/redist 、2024-10-21 更新）の「Microsoft.Windows.SDK.NET.Ref」節に
+    `./lib/net8.0/Microsoft.Windows.SDK.NET.dll`、`Microsoft.Windows.UI.Xaml.dll`、`WinRT.Runtime.dll`（net6.0 版、winmd 等も）が
+    「改変せずに NuGet パッケージとして、またはアプリが WinRT API を呼ぶためにプログラムの一部として」配布可能と記載。
+  - Mavue の配布物の 2 ファイルはパッケージの `lib/net8.0` と **SHA-256 が一致**（`tools/build-release.ps1` の出力で確認。無改変）。
+    `Microsoft.Windows.UI.Xaml.dll` は出力に含まれない。
+  - 条件（sdk_license の Distribution Requirements）: 主要な機能を加える、.lib はリンク結果のみ、配布者とエンドユーザーに本契約と同等以上に
+    保護する条項へ同意させる、自分の著作権表示を表示する、Microsoft を補償する。禁止: 著作権等の表示の改変、Microsoft 商標の誤認的使用、
+    Microsoft OS 以外での実行、悪意あるプログラムへの組み込み、Excluded License（コピーレフト）の対象にすること。
+    → Windows App SDK §3(b) と同種。**エンドユーザー向け利用条件（EULA 相当）の用意が両方の条件**（§10 の 7）。
+- .NET ランタイム（self-contained で同梱。`runtimepack.Microsoft.NETCore.App.Runtime.win-x64` 10.0.12）: **MIT**（パッケージの
+  `LICENSE.TXT`、第三者通知 `THIRD-PARTY-NOTICES.TXT`）。両ファイルを配布物の `licenses\dotnet\` に同梱する。WindowsDesktop
+  ランタイム（WPF/WinForms）は含まれない（`Mavue.runtimeconfig.json` の includedFrameworks は Microsoft.NETCore.App のみ。確認済み）。
+- Microsoft C/C++ ランタイム（Mavue.Shell.Native/Preview に静的リンク。ビルドは **Visual Studio Build Tools 2026**）: VC++ 再頒布
+  パッケージの DLL は配布しない（リンク結果のみ）。ただし **Build Tools の使用条件**は「Visual Studio のライセンスを持つユーザーの補助」
+  または「OSI 承認ライセンスのオープンソース依存部品のビルド」（Build Tools のライセンス条項。Mavue 自身のコードのビルドは前者に当たる）。
+  Visual Studio の有効なライセンス（例: 個人開発者なら Community の条件）を満たすかは**ユーザーが確認する事項**（未確認）。
 
 ### 0.1 Quick View ホストの依存の整理（2026-10-02、実測）
 
@@ -77,6 +86,7 @@
 |---|---|---|---|---|---|
 | Microsoft.WindowsAppSDK.WinUI / .Foundation / .InteractiveExperiences | 2.3.9 / 2.3.12 / 2.1.9（メタパッケージ 2.5.1 の固定版） | MS-EULA（再配布可） | WinUI 3 / MRT Core / Windowing | Adopted | メタパッケージ `Microsoft.WindowsAppSDK` は参照しない（§0.1）。AI・ML 等は必要になった時点で部品として追加 |
 | Microsoft.Windows.SDK.BuildTools | 10.0.28000.2705 | MS-EULA | ビルドツール | Adopted | 開発時のみ |
+| **bblanchon.PDFium.Win32** | **156.0.8076** | PDFium: BSD-3-Clause（同梱成分は §3.1。いずれも許容型） / ビルドスクリプト: MIT（nuspec の表記は Apache-2.0） | PDF の描画・文字・検索・リンク・目次（`Mavue.Pdf`） | **Adopted**（2026-10-03） | ネイティブ `pdfium.dll`（win-x64 / win-arm64）を出力に置く。ライセンス文は `licenses/pdfium/`（出力にも同梱）。Explorer のプレビュー・サムネイル（`native/Mavue.Shell.Preview`）も同じ `pdfium.dll` を使う（同パッケージのヘッダーでビルド、DLL は Mavue.exe と同じフォルダーから実行時に読み込む。新しい依存・再配布物は増えない）。§3.2 |
 | Microsoft.Graphics.Win2D | 1.4.0 | MIT | GPU 2D 描画・エフェクト | Selected | ネイティブ DLL 同梱 |
 | CommunityToolkit.Mvvm | 8.4.2 | MIT | MVVM（ソース生成） | Selected | |
 | xunit.v3 | 4.0.1 | Apache-2.0 | テスト | Adopted | 開発時のみ |
@@ -101,7 +111,7 @@
 | pdf.js (WebView2) | Apache-2.0 | ○ | ○ | ○ | △ | ✕ | ✕ | ✕ | Rejected: ネイティブ方針に反する、Quick View 起動が重い |
 | Apryse / PSPDFKit(Nutrient) / Syncfusion / Aspose | 商用 | ◎ | ◎ | ◎ | ◎ | ◎ | ◎ | ◎ | 予算判断事項として記録のみ |
 
-### 3.1 PDFium 配布物の確認結果（2026-10-02、実物をダウンロードして確認。プロジェクトには未追加）
+### 3.1 PDFium 配布物の確認結果（2026-10-02 確認、2026-10-03 に採用して再確認）
 
 | 項目 | 確認結果 |
 |---|---|
@@ -121,6 +131,19 @@
 - Windows での配布: `pdfium.dll` をアプリと同じフォルダ（MSIX 内）に配置。システムフォルダには入れない。
 - 更新方法: chromium の PDFium は頻繁にセキュリティ修正が入るため、**最低でも月 1 回**リリースを確認し、`Directory.Packages.props` のバージョンを更新して PDF 回帰テスト（`docs/TESTING.md`）を通してから取り込む。ビルド番号・コミット（nuspec の `repository commit`）を記録する。
 - 自前ビルドへの切り替え基準: 修正の取り込みが遅い、または独自パッチ（墨消し用の API 拡張など）が必要になった場合。その場合は Build Tools と depot_tools が必要。
+
+### 3.2 採用の記録（2026-10-03）
+
+| 項目 | 内容 |
+|---|---|
+| 参照 | `Mavue.Pdf` → NuGet `bblanchon.PDFium.Win32` 156.0.8076（`Directory.Packages.props`）。`Mavue.Viewer`・`Mavue.App`・Quick View ホストは `Mavue.Pdf` 経由 |
+| 由来の確認 | NuGet の `runtimes/win-x64/native/pdfium.dll` と GitHub Release `chromium/8076` の `pdfium-win-x64.tgz` の `bin/pdfium.dll` は SHA-256 が一致（`69F1E860…BAEA6`）。arm64 も一致（`45E414BC…9F40`）。nuspec の `repository commit` は `f2e9a1c45bb17b85b540abf1af30146ef65416ac` |
+| ビルド設定（`args.gn`） | `pdf_enable_v8 = false`、`pdf_enable_xfa = false`、`is_component_build = false`（JavaScript・XFA なし） |
+| 同梱するライセンス文 | `licenses/pdfium/`（`pdfium.txt`、`abseil.txt`、`agg23.txt`、`fast_float.txt`、`freetype.txt`、`icu.txt`、`lcms.txt`、`libjpeg_turbo.ijg`/`.md`、`libopenjpeg.txt`、`libpng.txt`、`llvm-libc.txt`、`simdutf.txt`、`zlib.txt`、ビルドスクリプトの MIT `pdfium-binaries-build-scripts.txt`、`VERSION.txt`、`args.gn.txt`）。`Mavue.Pdf` のビルドで各プログラムの出力の `licenses/pdfium/` にコピーされる |
+| 更新手順 | `Directory.Packages.props` の版を変更 → `tools/update-pdfium-licenses.ps1`（同じ版の .tgz を取得し、x64/arm64 の DLL が NuGet と一致することを検証してからライセンス文を置き換える。不一致なら失敗）→ `licenses/pdfium` の差分確認 → PDF の単体テスト・E2E。**最低月 1 回**リリースを確認 |
+| コピーレフトの確認 | バイナリに含まれる成分はすべて許容型。`icu.txt` に GPL の文言があるが、ICU4C の autoconf 用スクリプト（`aclocal.m4`・`config.guess`、Autoconf 例外付き）に関するもので、`pdfium.dll` には含まれない。FreeType は FTL を選択（文書へのクレジット表記が必要 → THIRD-PARTY-NOTICES.md に記載） |
+| 使い方の制約（Mavue 側） | PDFium はスレッドセーフでないため、すべての呼び出しをプロセス全体のロックで直列化（`PdfiumLibrary`）。ファイルはコールバックで部分読みし（全体を読み込まない）、読み書き・削除共有で開く。リンクは http/https/mailto のみ扱い、JavaScript・ファイル起動・他ファイルへのリンクは実行しない |
+| 代替 | pdfium.dll が読み込めない環境では表示のみ Windows.Data.Pdf にフォールバック（文字・検索・リンク・目次は使えない） |
 
 **PDFium 採用時の義務**: 各コンポーネントの著作権表示・ライセンス文を `THIRD-PARTY-NOTICES.txt` に同梱。
 FreeType は FTL を選択（クレジット表記義務あり）。Chromium の PDFium はバイナリにパッチ履歴がないため、
@@ -216,7 +239,12 @@ WebP Image Extension 1.2.31, Raw Image Extension 2.5.35, VP9 1.2.20, MPEG-2 1.2.
 ## 9. 配布物に同梱する通知
 
 - リポジトリ: `LICENSE`（Apache-2.0 全文、apache.org の公式テキストをそのまま使用）、`NOTICE`、`THIRD-PARTY-NOTICES.md`（依存の一覧とライセンス）。
-- 配布物: `LICENSE`、`NOTICE` と `THIRD-PARTY-NOTICES.txt`（全ネイティブ/マネージド依存のライセンス全文）を MSIX に同梱し、アプリの「バージョン情報」から閲覧可能にする。
+- 配布物（2026-10-04 実装。ZIP と MSIX の共通フォルダー、`tools/build-release.ps1` が作成・検査）の `licenses\`:
+  `LICENSE.txt`・`NOTICE.txt`（Mavue）、`THIRD-PARTY-NOTICES.txt`、`pdfium\`（PDFium と同梱部品の全文）、`dotnet\`（.NET の LICENSE と
+  THIRD-PARTY-NOTICES）、`windowsappsdk\`（WinUI・Foundation・InteractiveExperiences の license.txt と WinUI の NOTICE.txt）、
+  `webview2\`（LICENSE.txt・NOTICE.txt）、各フォルダーの `VERSIONS.txt`（出力の `Mavue.deps.json` から読んだパッケージと版）。
+  NuGet パッケージのファイルを版を合わせて複写するので、依存の更新で取り違えない（一覧にないパッケージが deps.json から消えたらビルドを止める）。
+  アプリの 設定 › Mavue について › ライセンス情報 から開ける（バージョン表示も同じ場所）。Windows App SDK Base は MSBuild 用で出力に何も置かないため対象外。
 - LGPL コンポーネント（採用時）: 動的リンク、DLL 差し替えを妨げない（MSIX でもユーザーが差し替え可能な手段の提供方法を法務確認）、ソース入手方法を記載。
 
 ## 10. 未解決事項
@@ -226,6 +254,11 @@ WebP Image Extension 1.2.31, Raw Image Extension 2.5.35, VP9 1.2.20, MPEG-2 1.2.
 3. TWAIN DSM のライセンス表記の一次情報確認。
 4. PDFium の XFA 有効ビルドの要否（XFA は V8 依存でサイズ・攻撃面が増大）。現状の方針は XFA/V8 なしのビルド（2026-10-02 確認の公式ビルドと同じ）。
 5. bblanchon.PDFium の NuGet 表記（Apache-2.0）とリポジトリ LICENSE（MIT）の食い違い — 実害は小さい（どちらも許容型）が、通知文はリポジトリ/tgz の表記に合わせる。
-6. `Microsoft.Windows.SDK.NET.dll`（Windows SDK の C# 投影）の再配布可否 — 確認済み・未確認・配布前の確認手順は §0 を参照。**バイナリ配布の前提条件**。
-7. バイナリ配布用の利用条件（Windows App SDK `license.txt` §3(b)(ii) の要件を満たす文面）の作成。
+6. ~~`Microsoft.Windows.SDK.NET.dll` の再配布可否~~ — 2026-10-04 解決: Windows SDK の REDIST 一覧に記載（§0）。条件は 7 と共通。
+7. **バイナリ配布用の利用条件（EULA 相当）の確定 — 草案（`licenses/EULA.txt`、RC の配布物に草案と明記して同梱。論点は `docs/EULA-DRAFT.md`）・要法務確認**。Windows App SDK `license.txt` §3(b)(ii) と Windows SDK の
+   Distribution Requirements の両方が「配布者とエンドユーザーに、Microsoft のコードを本契約と同等以上に保護する条項へ同意させる」ことを求める。
+   Mavue のコードの Apache-2.0 はこれを満たさない（第三者部品の条件は別）。文面・提示方法（インストール時の同意、MSIX/Store の場合の扱い）は
+   人の判断が必要で、本リポジトリでは推測で作らない。
 8. ~~`Mavue.App` の依存整理~~（2026-10-02 対応: 部品パッケージのみ。§0.1）。Windows AI / Windows ML を使う機能を実装するときに、必要な部品だけを追加して再確認する。
+9. Visual Studio Build Tools 2026 でネイティブ DLL をビルドする権利（Visual Studio の有効なライセンスの有無。§0）— ユーザー確認。
+10. ネイティブ DLL・Mavue の exe/dll の **公開用コード署名**（docs/PACKAGING.md §3）— 証明書の入手は人の判断・契約が必要。

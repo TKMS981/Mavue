@@ -3,7 +3,7 @@
 > SPEC §3, §22, `CLAUDE.md` §7 に対応。Explorer 統合はオプションではなく第一級機能として扱う。
 > すべての項目は実機 Windows 11 での検証が必須（`docs/TESTING.md` §5）。
 
-最終更新: 2026-10-02（Quick View PoC の実測結果と MSIX 整理を反映）
+最終更新: 2026-10-04（MSIX 版の Explorer 連携を実測: §0 の結論を再検討。2026-10-03 プレビューハンドラー・サムネイルプロバイダーを実装。それ以前: Quick View PoC の実測結果と MSIX 整理）
 対象 OS: Windows 11（開発機: 25H2 build 26200.9550）。Windows App SDK 2.x の最小要件は Windows 10 1809 だが、
 Explorer 統合（タブ、上段コンテキストメニュー）は Windows 11 を主対象とする。Windows 10 での動作範囲は別途記録する。
 
@@ -16,15 +16,20 @@ Explorer 統合（タブ、上段コンテキストメニュー）は Windows 11
 | ファイル関連付け | `uap:FileTypeAssociation` | `HKCU\Software\Classes` + `RegisteredApplications` |
 | 上段コンテキストメニュー（Win11） | `desktop4:FileExplorerContextMenus` + `com:ComServer`（`IExplorerCommand`） | **不可**（パッケージ ID 必須）→ スパースパッケージ（外部ロケーション付きパッケージ）で ID を付与 |
 | 従来コンテキストメニュー（「その他のオプションを確認」） | 静的 verb (`uap3:Verb`) | `shell\<verb>` レジストリ |
-| サムネイルプロバイダー | `desktop2:ThumbnailHandler` + `com:SurrogateServer` | `ShellEx\{E357FCCD-A995-4576-B01F-234630154E96}` |
-| プレビューハンドラー | `desktop2:DesktopPreviewHandler` + `com:SurrogateServer` | `ShellEx\{8895b1c6-b41f-4c1c-a562-0d564250836f}` + `PreviewHandlers` 一覧 |
+| サムネイルプロバイダー | `desktop2:ThumbnailHandler` + `com:SurrogateServer` | `ShellEx\{E357FCCD-A995-4576-B01F-234630154E96}`（**実装済み**: `Mavue.exe --register`、§5） |
+| プレビューハンドラー | `desktop2:DesktopPreviewHandler` + `com:SurrogateServer` | `ShellEx\{8895b1c6-b41f-4c1c-a562-0d564250836f}` + `PreviewHandlers` 一覧（**実装済み**: `Mavue.exe --register`、§4） |
 | プロパティハンドラー | `desktop2:DesktopPropertyHandler` | `HKLM\...\PropertySystem\PropertyHandlers\.ext`（**HKLM のみ・管理者権限要**） |
 | IFilter（全文検索） | **マニフェスト拡張なし（調査済み: 公式拡張一覧に記載なし）** | `HKLM` 登録（管理者権限要）→ 別インストーラ部品として提供（Investigating） |
 | ログオン時起動 | `desktop:StartupTask` | `HKCU\...\Run` |
 | 実行エイリアス (`mavue.exe`) | `uap3:AppExecutionAlias` | PATH |
 | 共有ターゲット | `uap:ShareTarget` | 不可（ID 必須） |
 
-**結論**: MSIX パッケージで配布し、Windows Search IFilter のみ追加の（任意・管理者）コンポーネントとして扱う案を第一とする。
+**結論（2026-10-02 時点の案）**: MSIX パッケージで配布し、Windows Search IFilter のみ追加の（任意・管理者）コンポーネントとして扱う案を第一とする。
+**2026-10-04 の実測で再検討が必要**: MSIX の `desktop2:DesktopPreviewHandler`/`ThumbnailHandler` は拡張子キーに書かれず、Windows がパッケージの
+カタログから引く。実測では、その種類を宣言するパッケージが Mavue だけのとき（この PC では .pdf と .x3f）にだけ使われ、フォト・ペイント・メディア プレーヤー等も
+宣言する .png・.svg・.mp4 などでは使われない（Explorer 再起動後も同じ。既定のアプリにした場合は未確認）。HKCU の拡張子キーからパッケージの COM クラスを
+指す方法は `REGDB_E_CLASSNOTREG` で不可。非パッケージの HKCU 登録（ZIP 版）はすべて動作する。どちらを主たる配布形態にするかはユーザーの判断待ち
+（`docs/PACKAGING.md` §1・§5.3）。
 開発中は非パッケージ実行 + `HKCU` 登録で検証する。**実装済み（第 4 工程）**: `Mavue.QuickView.Host.exe --register [--no-startup]` /
 `--unregister` / `--registration-status`（`Mavue.Shell.QuickViewShellRegistration`。従来メニューの「Mavue Quick View」とサインイン時の起動。
 作成・削除するのは `Mavue.QuickView` という名前のキーと値のみ）。当初予定の `tools/dev-register.ps1` は、拡張子の一覧をコードと
@@ -88,25 +93,67 @@ Explorer 統合（タブ、上段コンテキストメニュー）は Windows 11
   Mavue は関連付け候補として登録し、ユーザーを `ms-settings:defaultapps?registeredAppUser=Mavue`（または registeredAUMID）へ誘導する。
 - 「プログラムから開く」一覧への登録、ProgID ごとのアイコン・説明（多言語）を提供。
 
-## 4. Preview Handler（Explorer プレビューウィンドウ）
+### 3.1 実装（2026-10-03、アンパッケージ版・現在のユーザーのみ）
 
-- インターフェース: `IPreviewHandler`, `IInitializeWithStream`（推奨。仮想フォルダ・ZIP 内でも動作）, `IObjectWithSite`, `IOleWindow`,
-  `IPreviewHandlerVisuals`（背景色・フォント・テキスト色をテーマに追従）。
-- ホスト: 既定は `prevhost.exe`（AppID `{6d2b5079-2f0b-48dd-ab7f-97cec514d30b}`）。他社ハンドラーのクラッシュに巻き込まれないよう
-  **専用 AppID + DllSurrogate** を検討（MSIX では `com:SurrogateServer`）。
-- 描画: `Mavue.Native.Render`（PDFium / WIC / D2D）でハンドラー内に描画。PDF はページスクロール、画像は Fit 表示。
-- 既存ハンドラーとの関係: 本機の `.pdf` には既に `{3A84F9C2-6164-485C-A7D9-4B27F8AC009E}` が登録済み（Edge の PDF プレビュー）。
-  **他社登録を黙って上書きしない**。設定画面で「Mavue をプレビューに使用」を選んだ場合のみ HKCU に登録し、元の値を保存・復元可能にする。
-  MSIX 登録時の優先順位（パッケージ登録 vs 既存 HKLM/HKCU 登録）は実機で検証する（Investigating）。
-- 対象形式: PDF、Windows がプレビュー非対応の画像形式（SVG, JPEG 2000, AVIF/HEIC 拡張なし環境, RAW 一部 等）。
+`Mavue.Shell.AppRegistration`（`Mavue.exe --register` / `--unregister`、または本体の設定画面「Windows との統合」）が HKCU に書く:
 
-## 5. Thumbnail Provider
+| キー | 内容 |
+|---|---|
+| `Software\Microsoft\Windows\CurrentVersion\App Paths\Mavue.exe` | Mavue.exe の場所（名前で起動できる。Quick View の「Mavue で開く」もここから探す） |
+| `Software\Classes\Mavue.Image` / `Mavue.Pdf` / `Mavue.Video` / `Mavue.Audio` | ProgID（種類名は登録時の言語、アイコン、`shell\open\command` = `"Mavue.exe" "%1"`） |
+| `Software\Classes\.ext\OpenWithProgids` | 対応する全拡張子に ProgID を追加（「プログラムから開く」に出る）。**既定値（既定のアプリ）は変更しない** |
+| `Software\Classes\Applications\Mavue.exe` | 表示名・SupportedTypes |
+| `Software\Mavue\Capabilities` + `Software\RegisteredApplications` | 「設定 › アプリ › 既定のアプリ」に Mavue が出る（ユーザーがそこで既定にする。設定画面から `ms-settings:defaultapps?registeredAppUser=Mavue` を開ける） |
+| `Software\Classes\SystemFileAssociations\.ext\shell\Mavue.Open` | 従来メニューの「Mavue で開く」（1 ファイル選択時。複数選択は Quick View で） |
 
-- `IThumbnailProvider` + **`IInitializeWithStream`**（Microsoft 推奨。分離プロセスでロードされる場合に使用される唯一の初期化方式）。
-  `DisableProcessIsolation` は使用しない（レガシー用）。
-- 出力: 要求サイズ `cx` に合わせた 32bpp `HBITMAP` + `WTSAT_ARGB`。
-- 対象: PDF（1 ページ目）、SVG、JPEG 2000、OS が対応しない形式。**JPEG/PNG 等 OS が既に提供する形式は上書きしない**。
-- サムネイル生成は高速性が求められる: PDF は低解像度レンダリング、画像は縮小デコード。タイムアウトに注意。
+削除は Mavue の名前のキー・値だけ（他のアプリの OpenWithProgids・動詞は残す。単体テスト `AppRegistrationTests` で確認）。
+Windows 11 上段メニューの「Mavue で開く」は未実装（`native/Mavue.Shell.Native` に 2 つ目の `IExplorerCommand` を追加し、識別パッケージを再作成・再登録する）。
+Quick View の右クリック（従来・上段）の対象拡張子に動画・音声・SVG・RAW を追加した（従来メニューは `--register`、上段は識別パッケージの再作成で反映）。
+
+## 4. Preview Handler（Explorer プレビューウィンドウ）— 2026-10-03 実装
+
+`native/Mavue.Shell.Preview`（C++20、MSVC、静的 CRT）の `Mavue.Shell.Preview.dll`。サムネイル（§5）と同じ DLL。
+
+| 項目 | 内容 |
+|---|---|
+| インターフェース | `IPreviewHandler`・`IInitializeWithStream`（ストリーム初期化のみ。仮想フォルダーの項目でも動く）・`IObjectWithSite`（`IPreviewHandlerFrame` へキーを渡す）・`IOleWindow`・`IPreviewHandlerVisuals`（背景色・文字色に追従） |
+| ホスト | **専用の prevhost.exe**: CLSID の `AppID` を Mavue 専用 `{E2B69F32-…}` にし、`DllSurrogate=%SystemRoot%\system32\prevhost.exe`。実機で `prevhost.exe {AB883DEA-…} -Embedding` が Mavue のためだけに起動することを確認（他社ハンドラーの不具合と相互に巻き込まない）。prevhost は**低整合性**で動く（診断ログは `%USERPROFILE%\AppData\LocalLow` にしか書けない、実測） |
+| 処理の分担 | UI スレッド（prevhost の STA）は描画（Direct2D、HWND レンダーターゲット）と入力だけ。読み込み・デコード・PDF の描画はプレビューごとの背景スレッド（MTA、ストリームは `CoMarshalInterThreadInterfaceInStream` で渡す）。`Unload` は背景処理を待たない（スレッドは切り離し、DLL は `DllCanUnloadNow` で処理終了まで保持） |
+| 画像 | WIC（Mavue と同じデコーダー。HEIF/AVIF/WebP/RAW は Windows の拡張機能）。EXIF/XMP の向き（`System.Photo.Orientation`）を適用、ペインのモニターの大きさ（最大 4096 px）に縮小デコード、表示は**拡大しない**（Mavue の規則）・高品質キュービック。4 億画素超は「大きすぎる」表示 |
+| GIF アニメ | 全フレームを論理画面に合成（Disposal 対応、20 ms 未満の遅延は 100 ms＝`GifComposer` と同じ）。合計 256 MB を超えるものは 1 枚目を静止表示 |
+| SVG | Direct2D の `ID2D1SvgDocument`（スクリプト・外部参照なし）。width/height/viewBox から大きさを決め、ペインに合わせて拡大縮小 |
+| PDF | Mavue と同じ pdfium.dll（DLL と同じフォルダーからフルパスで読み込み、ない時は「PDF のプレビューを利用できません」）。幅に合わせた連続表示、スクロールバー・ホイール・キー、ページ番号表示。**表示範囲の前後 1 ページだけ**その大きさで描画（600 ページで描画 2〜3 ページ、prevhost のプライベートメモリ 114〜181 MB）。描画は進行型で取り消し可能、PDFium の呼び出しはプロセス内で 1 本化。パスワード付きは案内表示 |
+| 動画・音声 | Media Foundation のメディアエンジン（Mavue のプレーヤーと同じ Windows のコーデック）。動画は子ウィンドウに描画（拡大しない）、下部に再生/一時停止・時間・シーク・ミュート。自動再生はしない（クリックまたは Space）。**エンジンの終了は別スレッド**: UI スレッドで行うと約 200 ms COM で待ち、その間に Explorer で押されたキーが失われた（Explorer と prevhost の子ウィンドウは入力キューを共有。Quick View の E2E `media-formats` で発見・計測）。描画先の子ウィンドウは終了まで message-only ウィンドウ（`HWND_MESSAGE`）として残す（トップレベルにすると前面を奪った、実測） |
+| 不正・空・非対応 | 文言を表示（「このファイルはプレビューできません」「このファイルは空です」等、日本語/英語の文字列テーブル）。中身で判定（`%PDF-`、`<svg`、WIC、残りはメディアエンジン）するので拡張子違いも安全 |
+
+登録は §4.1、テストは `docs/TESTING.md`。
+
+### 4.1 登録（`Mavue.exe --register` / `--unregister`、現在のユーザーのみ・管理者不要・署名不要）
+
+`Mavue.Shell.ShellHandlerRegistration`（`AppRegistration` から呼ぶ。Mavue.exe と同じフォルダーに DLL があるときだけ）:
+
+- `HKCU\Software\Classes\CLSID\{AB883DEA-…}`（プレビュー）・`{B4E9FA4B-…}`（サムネイル）: `InprocServer32`=DLL、`ThreadingModel=Apartment`。プレビューは `AppID`、`HKCU\…\PreviewHandlers` に一覧登録。
+- 結び付け（`ShellEx\{IID}`）は **Explorer が今どのハンドラーを使うか（`AssocQueryString(ASSOCSTR_SHELLEXTENSION)`）を調べ、無い拡張子だけ** `SystemFileAssociations\.ext` に書く（最も優先度が低い場所: 後から他のアプリが登録すればそちらが優先）。本機の結果: プレビューは 66 種類（画像・SVG・動画・音声）、**PDF は Edge のまま**。サムネイルは **.pdf と .svg だけ**（JPEG/PNG/HEIC/RAW は Windows の Photo Thumbnail Provider、動画・音声は Windows のまま）。
+- Mavue の ProgID（`Mavue.Image`/`Pdf`/`Video`/`Audio`）にもプレビューを結び付ける（利用者が既定のアプリを Mavue にした場合に使われる。既定のアプリ自体は変更しない。この経路は既定のアプリを変えずに実機確認できないため未検証）。
+- **オプトイン** `Mavue.exe --register --prefer-mavue-preview`: 既存のプレビュー（例: Edge の PDF）も Mavue にする。`HKCU\Software\Classes\.ext\ShellEx` に書き、以前の HKCU の値は `HKCU\Software\Mavue\ShellExBackup` に保存して解除時に戻す。書いた後に実際に Mavue が選ばれるか確認し、効かない場合（利用者の既定アプリの ProgID が上位で登録している等）は元に戻す。
+- `--unregister`: Mavue の CLSID・AppID・一覧の値と、Mavue の CLSID を指す結び付けだけを削除（他社の値は残す）。保存した値を復元。
+- 32 ビット（2026-10-03 対応）: `x86\`の x86 版（x86 の pdfium.dll 付き）を 32 ビット ビュー（`Classes\Wow6432Node\CLSID`）にも登録。プレビューは Windows の 32 ビット prevhost（AppID `{534A1E02-…}`）、
+  サムネイルは 32 ビットの分離プロセスで動く（E2E `explorer-32bit`）。x86 版がない状態では、結び付け（両ビュー共通）だけが見えて 32 ビット アプリで `REGDB_E_CLASSNOTREG` になっていた。詳細は `docs/PACKAGING.md` §4。
+- PDF のプレビュー切替: 設定画面「エクスプローラーのプレビュー ウィンドウでの PDF」（`--prefer-mavue-preview` と同じ処理を `.pdf` だけに。オフで以前の値を復元）。
+- テーマ: Explorer は暗色モードでも `IPreviewHandlerVisuals` で白・黒を渡す（実測）。Windows のアプリ モードが暗色で背景が明るいときは Explorer と同じ暗色（#191919）を使い、
+  表示中の切り替え（`WM_SETTINGCHANGE` "ImmersiveColorSet"）にも追従。PDF のページは紙として白のまま。
+- DPI: prevhost のスレッドは**システム DPI 対応**（実測 `DPI_AWARENESS_SYSTEM_AWARE`）、Explorer のペインはモニターごと（v2）で物理ピクセルを渡す。そのままだと
+  100 % のモニターでプレビューのウィンドウが 150 % 分ずれた位置・大きさになった（実測、E2E `explorer-monitors` で発見）。プレビューのウィンドウは作成・配置の間だけ
+  スレッドを per-monitor v2 にして作る（終われば元に戻す: 32 ビットの prevhost は他社ハンドラーと共有するため）。別の DPI のモニターへ移ると `WM_DPICHANGED_AFTERPARENT` で再配置。
+- パッケージ・署名: アンパッケージ版の HKCU 登録には不要。Smart App Control を有効にした PC では未署名 DLL の読み込みが拒否されうる（配布時はコード署名が前提）。MSIX では `desktop2:DesktopPreviewHandler`/`desktop2:ThumbnailHandler` + `com:SurrogateServer` で宣言（試作パッケージで実装、`docs/PACKAGING.md`）。
+- ビルド中の注意: Explorer が DLL を読み込んでいる間（prevhost / サムネイル用 dllhost）は上書きできない。Mavue 専用の prevhost（コマンドラインに `{AB883DEA-…}`）を終了してからビルドする。
+
+## 5. Thumbnail Provider — 2026-10-03 実装
+
+- `IThumbnailProvider` + `IInitializeWithStream`（`DisableProcessIsolation` は使わない）→ Explorer の**分離されたサムネイル用プロセス**（`DllHost.exe /Processid:{AB8902B4-09CA-4BB6-B78D-A8F59079A8D5}`、実測）で動く。
+- 出力: 要求サイズに合わせた 32bpp トップダウン DIB（`WTSAT_ARGB`）。PDF は 1 ページ目（白い紙、不透明）、SVG はサイズまで拡大、画像は縮小のみ（小さい画像は Explorer が拡大）。
+- 対象: 既存のプロバイダーが無い拡張子だけ（本機では .pdf と .svg）。JPEG/PNG 等 Windows が持つ形式は上書きしない。
+- 速さ: 実機で PDF 7〜34 ms、SVG 11〜18 ms。壊れた PDF・SVG でない文書は `WTS_E_FAILEDEXTRACTION` を 7〜88 ms で返す。
 
 ## 6. プロパティハンドラー / Windows Search
 

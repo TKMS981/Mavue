@@ -52,11 +52,12 @@
 │     │                         │ Mavue.Scan.Twain32.exe (x86)  │ 32bit TWAIN DS 用ブリッジ
 │     │                         └──────────────────────────────┘           │
 │     ▼                                                                    │
-│  Mavue.Shell.Native.dll (C++ COM, in-proc/サロゲート)                     │
-│   ・IThumbnailProvider  → Explorer の分離プロセス (dllhost)               │
-│   ・IPreviewHandler     → prevhost.exe (または専用 AppID サロゲート)       │
-│   ・IPropertyStore      → explorer / SearchProtocolHost 等                │
-│   ・IExplorerCommand    → explorer (パッケージ ID 必須: §8)               │
+│  Mavue.Shell.Preview.dll (C++ COM, in-proc)                              │
+│   ・IThumbnailProvider  → Explorer の分離プロセス (dllhost)  [実装済み]   │
+│   ・IPreviewHandler     → 専用 AppID の prevhost.exe       [実装済み]   │
+│  Mavue.Shell.Native.dll (C++ COM, パッケージのサロゲート)                │
+│   ・IExplorerCommand    → dllhost (パッケージ ID 必須: §8) [実装済み]   │
+│   ・IPropertyStore      → explorer / SearchProtocolHost 等 (計画)       │
 │  Mavue.Search.Filter.dll (C++ IFilter) → SearchFilterHost.exe             │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
@@ -65,7 +66,8 @@
 |---|---|---|---|
 | `Mavue.App.exe` | C# WinUI 3 | エディタ本体（閲覧・編集・変換・印刷・スキャン・OCR） | 通常アプリ。単一インスタンス + 複数ウィンドウ（AppInstance リダイレクト） |
 | `Mavue.QuickView.Host.exe` | C# WinUI 3（NativeAOT 対象） | Space キー Quick View。常駐（ログオン時起動、設定で無効化可）。PoC 実装済み | 常駐 / オンデマンド |
-| `Mavue.Shell.Native.dll` | C++20 COM | サムネイル・プレビューハンドラー・プロパティハンドラー・コンテキストメニュー | Explorer 等にロード |
+| `Mavue.Shell.Native.dll` | C++20 COM | Windows 11 上段メニュー「Mavue Quick View」（`IExplorerCommand`）。将来プロパティハンドラー | 識別パッケージの COM サロゲート |
+| `Mavue.Shell.Preview.dll` | C++20 COM | プレビューハンドラー・サムネイルプロバイダー（WIC / Direct2D / PDFium / Media Foundation）。`Mavue.exe --register` で HKCU に登録 | 専用 prevhost.exe・サムネイル用 dllhost にロード |
 | `Mavue.Search.Filter.dll` | C++20 COM | Windows Search 用 IFilter（PDF テキスト、OCR テキスト） | SearchFilterHost にロード |
 | `Mavue.Native.Render` (静的ライブラリ) | C++20 | PDFium / WIC / D2D による描画の共通コア。Shell DLL と（P/Invoke で）マネージド側から共用 | — |
 | `Mavue.Scan.Twain32.exe` | C++ x86 | 64bit アプリから 32bit TWAIN データソースを使うためのブリッジ | スキャン時のみ |
@@ -76,7 +78,11 @@
 - in-proc の .NET COM サーバーは 1 プロセス 1 ランタイムの制約があり、他社の .NET 製シェル拡張と衝突しうる。
 - Explorer / prevhost / dllhost の起動遅延・メモリ増加・クラッシュ時の巻き込み。
 - Microsoft はマネージドコードによる in-proc シェル拡張を推奨していない。
-- よってシェル拡張は C++ で実装し、描画コアは `Mavue.Native.Render` として共有する。
+- よってシェル拡張は C++ で実装する。
+- 共有の実態（2026-10-03）: 対応拡張子の一覧と登録は C#（`ViewerFormats`・`ShellHandlerRegistration`）を正とし、ネイティブ側は内容で形式を判定する。
+  デコーダー（WIC と Windows のコーデック拡張、Media Foundation）と `pdfium.dll` の実体は本体と同じもの。表示規則（拡大しない、EXIF の向き、
+  GIF の最短遅延、PDF の表示範囲付近だけ描画）は本体に合わせてネイティブで再実装した（WinUI の共通ビューアは Explorer のプロセスに載せられない）。
+  計画の `Mavue.Native.Render`（本体と共有する C++ 描画コア）はまだ作っていない（本体は C# から WIC/PDFium を直接使う）。
 
 ---
 
@@ -131,6 +137,58 @@ Mavue/
   - `DocumentViewer`: App 用のまとめ役。1 度に 1 ファイル。開く・切替・閉じる・破棄で、デコードの取り消し、GIF/動画の停止、ビットマップ・プレーヤー・ファイルの解放を行う。
     表示面の大きさとスケールモードから計画し、リサイズ・モニター変更で作り直す。ズーム・サムネイル・ページ先読みはここに足す。
 - Quick View は表示面・デコード・再生を共有し、段階表示（シェルのサムネイル → 本画像）・先読みキャッシュ・計測などの Quick View 固有の制御は `QuickViewController` に残す。
+
+#### 拡大縮小・回転（2026-10-03）
+
+- 計算は `Mavue.Core.Viewing`（BCL のみ、単体テスト）: `ViewerZoom`（Fit／幅に合わせる／倍率、段階、ホイール、デコードする画素数、ポインター位置を保つスクロール量）、
+  `ViewOrientation`（90° 単位の回転と左右反転を「画面上の操作」として合成）。100 % は画像なら 1 画素 = 1 物理画素、PDF・SVG は 96 dpi × モニター倍率。
+- 表示は 2 段階: 操作した瞬間は表示中のビットマップを要素の大きさだけ変えて伸縮（`ViewerSurface.ZoomImage`、アンカー位置を保つ）、
+  止まった後（約 180 ms）に必要な画素数で再デコード / 再描画。ラスター画像は原画素を超えてデコードしない（拡大は引き伸ばし）、上限 5,000 万画素。GIF・SVG は再デコード不要。
+- 回転・反転はデコード後の画素に適用（`Mavue.Image.PixelOrientation`、表示サイズの画素だけ）。ファイルは変更しない。別ファイルに移ると元に戻る。
+- PDF は本体では `PdfDocumentSession` で開いたままにする（ページ送り・サムネイルごとに解析し直さない）。ファイルは読み取り・書き込み・削除の共有付きで開き、
+  表示中も他のアプリが変更・名前変更・削除できる。描画は 1 つずつ（ゲート）。Quick View は従来どおり描画ごとに開く（常駐プロセスがファイルを掴まない）。
+- SVG は XAML の `SvgImageSource`（Direct2D）。大きさは `SvgDimensions`（DTD・外部実体を処理しない）。Direct2D の SVG は `<text>` 等を描かないため、resvg（DEPENDENCIES §4）で置き換える予定。
+
+#### PDF ビューア（2026-10-03、PDFium）
+
+- `Mavue.Pdf`（BCL のみ・WinRT なし）: `PdfiumDocument`（`IPdfDocument`）が PDFium の C API を包む。
+  - **スレッド**: PDFium はスレッドセーフでないため、全呼び出しを `PdfiumLibrary.Gate` で直列化。ライブラリは初回使用時に初期化し、プロセス終了まで保持。
+  - **ファイル**: `FPDF_LoadCustomDocument` の読み取りコールバックで必要な部分だけ読む（全体をメモリに載せない）。`FileShare.ReadWrite | Delete` で開くので、表示中も他のアプリが変更・名前変更・削除できる。
+  - **ページ**: 必要時に読み込み、直近 4 ページ（ページ＋テキスト）だけ保持。
+  - **座標**: 「表示ポイント」= 表示時のページ左上原点のポイント（ページの /Rotate と表示の回転を適用）。変換は PDFium の `FPDF_PageToDevice/DeviceToPage`。
+  - **リンク**: リンク注釈（ページ内移動・URI）と本文中の URL。http/https/mailto 以外と起動・JavaScript・他ファイルへのリンクは返さない。
+  - pdfium.dll が読み込めない場合 `PdfiumLibrary.IsAvailable` が false になり、表示は Windows.Data.Pdf にフォールバック。
+- `Mavue.Core.Viewing.PdfPageLayout`（純粋計算）: 単一ページ / 連続 / 見開きの配置、ページ・幅に合わせる倍率、表示範囲のページ（二分探索）、現在ページ。
+- `Mavue.Viewer.Controls.PdfDocumentView`（本体）: スクロールビューアー上の Canvas に、**表示範囲の前後 1 画面分のページだけ**要素とビットマップを作る（それ以外は解放・再利用）。
+  描画は見えているページを優先してバックグラウンドで 1 枚ずつ（`PdfiumRendering.Render` が PDFium から SoftwareBitmap のメモリへ直接描く）、1 ページ最大 2,400 万画素。
+  **UI スレッドは PDFium を直接呼ばない**（大きなページの描画中にロック待ちで固まらないよう、文字位置・選択範囲・検索強調・リンクも別スレッドで計算して反映）。
+  ページキー・目次・リンク・検索で移動したときは、スクロールが目的位置に着くまで目的ページを「現在ページ」に固定する（途中のスクロール位置から再計算すると前のページに戻った、実測）。
+- `Mavue.Viewer.PdfSession`（本体と Quick View で共通）: 開いている PDF 1 つ分の状態と操作。`PdfDocumentView` を持ち、開く/閉じる（文書の解放は別スレッド）、
+  ページ移動・表示方法・倍率、検索（16 ページずつ別スレッド、最大 10,000 件、取り消し可）、目次、選択文字のコピー、リンク要求（`UriRequested`。開くかどうかはアプリ側が決める）を公開する。
+- 共通の UI 部品（`Mavue.Viewer.Controls`）: `PdfSearchBar`（Ctrl+F の検索バー、Enter/F3 で次・前）、`PdfSidebar`（「ページ」サムネイル・「目次・しおり」・「検索結果」のタブ）、
+  `PdfPresentationWindow`（F5 の全画面表示。ページを画面に収めて描画し、前後ページを先読み）。文字列は `Func<string, string>` で各アプリのリソース（`Pdf_*` キー）から受け取る
+  （ライブラリは独自の PRI を持たない）。部品はセッションのイベントだけを見るので、本体と Quick View で同じものを載せる。
+- `DocumentViewer`（本体）は PDF を `PdfSession` で開いて表示面（`ViewerSurface.ShowDocument`）に載せる。
+- Quick View も同じ `PdfSession`・部品を使う（`QuickViewController.ShowPdfSessionAsync`）。表示中だけ文書を開き、閉じる・次のファイルへ移るとすぐ解放（常駐プロセスがファイルを掴み続けない）。
+  Explorer が前面のままの PageUp/PageDown はフック経由でセッションのページ送りに渡す。検索欄・ページ番号欄に入力中は Space/Esc/文字キーを Quick View の操作に使わない。
+  表示方法とサイドバーの開閉は `QuickViewSettings` に保存。pdfium.dll が無いときは従来の 1 ページ画像表示（Windows.Data.Pdf）にフォールバック。
+- 設定レコード（`AppSettings`・`QuickViewSettings`）のプロパティは `init` ではなく `set`: System.Text.Json のソース生成は init 専用プロパティを常に代入するため、
+  ファイルに無い項目が初期値ではなく既定値（例: 表示方法が「単一ページ」）になった（単体テストで再現・回帰テスト追加）。
+
+#### 本体のアプリ層（`Mavue.App`）
+
+- 設定 `Mavue.Core.Settings.AppSettings`（`%LOCALAPPDATA%\Mavue\settings.json`、SafeFileWriter で原子的に保存、複数ウィンドウを想定して変更のたびに読み直す）:
+  外観、開いたときの表示サイズ、情報パネル・サムネイルの表示、最近使ったファイル（15 件）、ウィンドウ位置。Quick View の設定（`QuickViewSettings`）も Core に移し、本体の設定画面から書く。
+- ファイル操作は `Mavue.Shell.ShellActions`（Windows の「プログラムから開く」・フォルダーに表示・プロパティ・クリップボード・Mavue の起動）を本体と Quick View で共用。
+- Windows への登録は `Mavue.Shell.AppRegistration`（HKCU のみ。WINDOWS-INTEGRATION §3）。
+
+#### パッケージ版（2026-10-03）
+
+- `Mavue.Shell.PackageInfo.IsPackaged`（`GetCurrentPackageFullName`）で MSIX 内かを判定。パッケージ内では Windows 統合をマニフェスト（`MsixPackageManifest`）が担い、
+  HKCU への登録（`--register` と設定画面）は行わない。パッケージの配置は `Mavue\`（本体と常駐ホストが同じフォルダー。2026-10-04 から）。`docs/PACKAGING.md`。
+- 配布物（2026-10-04）: .NET と Windows App SDK を self-contained で同梱し、本体と Quick View を 1 フォルダーに同居（共通ファイルはバイト一致）。
+  ZIP 版（`Install.cmd`、HKCU 登録、版ごとのフォルダー）と MSIX 版は同じフォルダーから作る（`tools/build-release.ps1`）。
+- 暗号化 PDF: `PdfSession.OpenAsync(..., password)`。`DocumentViewer.PasswordProvider`（アプリが設定）が入力を求め、誤りなら再入力。パスワードは保存・記録しない。
 
 ### 3.1 依存方向（循環禁止）
 
@@ -331,6 +389,10 @@ Windows 11 で以下を実現するには**パッケージ ID**が必要:
 
 よって**配布形態は MSIX を第一とする**。開発時は非パッケージで実行可能に保つ。詳細は `docs/WINDOWS-INTEGRATION.md`。
 
+**2026-10-04 追記**: 上段メニューのパッケージ ID は非パッケージ版でも識別パッケージ（スパース）で得られる。一方、MSIX の
+プレビュー/サムネイル ハンドラーは、他のパッケージ（フォト等）も宣言する種類では Explorer に使われないことを実測した（原因と検証は PACKAGING §5.3）。MSIX を第一とする方針（ADR-8）は
+再検討中で、ユーザーの判断待ち（`docs/PACKAGING.md` §1・§5.3）。
+
 ---
 
 ## 9. IPC
@@ -405,7 +467,7 @@ Windows 11 で以下を実現するには**パッケージ ID**が必要:
 | ADR-5 | PDF は PDFium + QPDF + 独自墨消し | MuPDF は AGPL（組み込むと Mavue 全体が AGPL の条件に縛られ Apache-2.0 で提供できない）。PDFium 単体では暗号化書き込み・線形化不可 | 採用（ライセンス最終確認: DEPENDENCIES.md） |
 | ADR-6 | 画像は WIC 優先 + 許容ライセンスのフォールバック | OS 拡張の有無が環境依存のため | 採用 |
 | ADR-7 | HEIC のフォールバックデコーダー同梱は保留 | HEVC 特許ライセンスの法的確認が必要 | Investigating（機能自体は削除しない: OS 拡張経由で対応） |
-| ADR-8 | 配布は MSIX、開発は非パッケージ実行 | Windows 11 上段コンテキストメニュー等にパッケージ ID が必要 | 採用 |
+| ADR-8 | 配布は MSIX、開発は非パッケージ実行 | Windows 11 上段コンテキストメニュー等にパッケージ ID が必要 | 再検討中（2026-10-04: MSIX のプレビュー ハンドラーの制約。§8） |
 | ADR-9 | ペン入力は独自実装、InkCanvas は安定版待ち | WinUI 3 InkCanvas は 2.4/2.5 で Experimental | 採用（再評価予定） |
 | ADR-10 | Quick View は「パネル」表示（非アクティブ、表示中のみ Topmost、他アプリ前面化で自動クローズ） | 実ユーザー入力でフック経由の前面化・z 順引き上げが不安定（QUICKVIEW-POC §3.2）。Topmost は権利不要の正規の仕組み | 採用（**ユーザーの最終承認待ち**: 「強制 Topmost は避ける」要件との関係） |
 | ADR-11 | Shell COM（選択取得・サムネイル）は専用 STA スレッド | MTA では RPC_E_CANTCALLOUT_ININPUTSYNCCALL（実測） | 採用 |
