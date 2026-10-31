@@ -177,4 +177,205 @@
   <data name="QuickView_PageCount" xml:space="preserve">
     <value>/ {0}</value>
   </data>
+  <data name="QuickView_Filmstrip" xml:space="preserve">
+    <value>フィルムストリップ (F)</value>
+  </data>
+  <data name="QuickView_PixelInspector" xml:space="preserve">
+    <value>ピクセル インスペクター (I)</value>
+  </data>
+  <data name="QuickView_Pin" xml:space="preserve">
+    <value>このプレビューを固定 (P)</value>
+  </data>
+  <data name="QuickView_Unpin" xml:space="preserve">
+    <value>固定を解除 (P)</value>
+  </data>
+  <data name="QuickView_DragFile" xml:space="preserve">
+    <value>ドラッグしてファイルをコピー</value>
+  </data>
+  <data name="QuickView_Card_Type" xml:space="preserve">
+    <value>種類</value>
+  </data>
+  <data name="QuickView_Card_Size" xml:space="preserve">
+    <value>サイズ</value>
+  </data>
+  <data name="QuickView_Card_SizeValue" xml:space="preserve">
+    <value>{0}（{1} バイト）</value>
+  </data>
+  <data name="QuickView_Card_Modified" xml:space="preserve">
+    <value>更新日時</value>
+  </data>
+  <data name="QuickView_Card_Created" xml:space="preserve">
+    <value>作成日時</value>
+  </data>
+  <data name="QuickView_Card_Mime" xml:space="preserve">
+    <value>MIME タイプ</value>
+  </data>
+  <data name="QuickView_Card_Location" xml:space="preserve">
+    <value>場所</value>
+  </data>
+  <data name="QuickView_Card_Attributes" xml:space="preserve">
+    <value>属性</value>
+  </data>
+  <data name="QuickView_Card_Origin" xml:space="preserve">
+    <value>入手元</value>
+  </data>
+  <data name="QuickView_Card_FromInternet" xml:space="preserve">
+    <value>インターネットから取得（{0}）</value>
+  </data>
+  <data name="QuickView_Card_FromInternetNoHost" xml:space="preserve">
+    <value>インターネットから取得</value>
+  </data>
+  <data name="QuickView_Card_Zone" xml:space="preserve">
+    <value>セキュリティ ゾーン {0}</value>
+  </data>
+  <data name="QuickView_Card_Items" xml:space="preserve">
+    <value>内容</value>
+  </data>
+  <data name="QuickView_Card_ItemsCount" xml:space="preserve">
+    <value>{0} 個の項目</value>
+  </data>
+  <data name="QuickView_Card_ItemsMore" xml:space="preserve">
+    <value>{0} 個以上の項目</value>
+  </data>
+  <data name="QuickView_Card_ItemsCounting" xml:space="preserve">
+    <value>数えています…</value>
+  </data>
+  <data name="QuickView_Card_Folder" xml:space="preserve">
+    <value>フォルダー</value>
+  </data>
+  <data name="QuickView_Card_NotFound" xml:space="preserve">
+    <value>この項目は見つかりません。</value>
+  </data>
+  <data name="QuickView_Attr_ReadOnly" xml:space="preserve">
+    <value>読み取り専用</value>
+  </data>
+  <data name="QuickView_Attr_Hidden" xml:space="preserve">
+    <value>隠しファイル</value>
+  </data>
+  <data name="QuickView_Attr_System" xml:space="preserve">
+    <value>システム</value>
+  </data>
+  <data name="QuickView_Attr_Online" xml:space="preserve">
+    <value>オンラインのみ</value>
+  </data>
+  <data name="QuickView_Attr_Encrypted" xml:space="preserve">
+    <value>暗号化</value>
+  </data>
+  <data name="QuickView_More" xml:space="preserve">
+    <value>その他の操作</value>
+  </data>
+  <data name="QuickView_TransparencyGrid" xml:space="preserve">
+    <value>透明部分を市松模様で表示</value>
+  </data>
+  <data name="QuickView_Archive_Summary" xml:space="preserve">
+    <value>ファイル {0} 個 · フォルダー {1} 個 · 展開後 {2}（圧縮時 {3}）</value>
+  </data>
+  <data name="QuickView_Archive_InfoLine" xml:space="preserve">
+    <value>ZIP · ファイル {0} 個 · {1}</value>
+  </data>
+  <data name="QuickView_Archive_ShowImages" xml:space="preserve">
+    <value>画像を表示（{0} 枚）</value>
+  </data>
+  <data name="QuickView_Archive_Up" xml:space="preserve">
+    <value>上のフォルダーへ（Backspace）</value>
+  </data>
+  <data name="QuickView_Archive_BackToList" xml:space="preserve">
+    <value>一覧に戻る（Backspace）</value>
+  </data>
+  <data name="QuickView_Archive_ListName" xml:space="preserve">
+    <value>アーカイブ内の項目</value>
+  </data>
+  <data name="QuickView_Archive_ImageInfo" xml:space="preserve">
+    <value>{0} · {1} / {2} · {3} × {4}</value>
+  </data>
+  <data name="QuickView_Archive_Position" xml:space="preserve">
+    <value>{0} / {1}</value>
+  </data>
+  <data name="QuickView_Archive_FolderItems" xml:space="preserve">
+    <value>{0} 項目</value>
+  </data>
+  <data name="QuickView_Archive_Empty" xml:space="preserve">
+    <value>このアーカイブは空です。</value>
+  </data>
+  <data name="QuickView_Archive_Hint" xml:space="preserve">
+    <value>フォルダーや画像はダブルクリックまたは Enter で開きます。</value>
+  </data>
+  <data name="QuickView_Archive_Warn_Encrypted" xml:space="preserve">
+    <value>暗号化された項目 {0} 個（Quick View ではパスワードを扱いません）</value>
+  </data>
+  <data name="QuickView_Archive_Warn_Unsupported" xml:space="preserve">
+    <value>Quick View が読めない圧縮方式の項目 {0} 個</value>
+  </data>
+  <data name="QuickView_Archive_Warn_UnsafeNames" xml:space="preserve">
+    <value>安全でない名前の項目 {0} 個（最上位に表示。展開はしません）</value>
+  </data>
+  <data name="QuickView_Archive_Warn_Ratio" xml:space="preserve">
+    <value>圧縮率が異常な項目 {0} 個（展開爆弾の可能性）</value>
+  </data>
+  <data name="QuickView_Archive_Warn_Nested" xml:space="preserve">
+    <value>中のアーカイブ {0} 個は一覧のみ（開きません）</value>
+  </data>
+  <data name="QuickView_Archive_Error_NotArchive" xml:space="preserve">
+    <value>有効な ZIP アーカイブではありません。</value>
+  </data>
+  <data name="QuickView_Archive_Error_Damaged" xml:space="preserve">
+    <value>この ZIP アーカイブは壊れています。</value>
+  </data>
+  <data name="QuickView_Archive_Error_MultiVolume" xml:space="preserve">
+    <value>分割された ZIP アーカイブの一部のため、単独ではプレビューできません。</value>
+  </data>
+  <data name="QuickView_Archive_Error_TooManyEntries" xml:space="preserve">
+    <value>項目が多すぎるため、安全のためプレビューしません。</value>
+  </data>
+  <data name="QuickView_Archive_Error_DirectoryTooLarge" xml:space="preserve">
+    <value>項目の一覧が大きすぎるため、安全のためプレビューしません。</value>
+  </data>
+  <data name="QuickView_Archive_Entry_Encrypted" xml:space="preserve">
+    <value>この項目は暗号化されています。Quick View ではパスワードを扱いません。</value>
+  </data>
+  <data name="QuickView_Archive_Entry_Unsupported" xml:space="preserve">
+    <value>この項目の圧縮方式（{0}）には対応していません。</value>
+  </data>
+  <data name="QuickView_Archive_Entry_Damaged" xml:space="preserve">
+    <value>この項目は壊れています。</value>
+  </data>
+  <data name="QuickView_Archive_Entry_TooLarge" xml:space="preserve">
+    <value>この項目は大きすぎるため表示しません（上限 {0}）。</value>
+  </data>
+  <data name="QuickView_Archive_Entry_Ratio" xml:space="preserve">
+    <value>展開量が異常なため、安全のため中止しました。</value>
+  </data>
+  <data name="QuickView_Archive_Entry_NotPreviewable" xml:space="preserve">
+    <value>アーカイブ内では画像だけを表示できます（その他の項目は一覧のみ）。</value>
+  </data>
+  <data name="QuickView_Archive_Entry_Nested" xml:space="preserve">
+    <value>アーカイブ内のアーカイブは開きません。</value>
+  </data>
+  <data name="QuickView_Archive_Unsafe" xml:space="preserve">
+    <value>安全でない名前</value>
+  </data>
+  <data name="QuickView_Archive_Encrypted" xml:space="preserve">
+    <value>暗号化</value>
+  </data>
+  <data name="QuickView_Archive_Folder" xml:space="preserve">
+    <value>フォルダー</value>
+  </data>
+  <data name="QuickView_Media_Play" xml:space="preserve">
+    <value>再生（Enter）</value>
+  </data>
+  <data name="QuickView_Media_Pause" xml:space="preserve">
+    <value>一時停止（Enter）</value>
+  </data>
+  <data name="QuickView_Media_Mute" xml:space="preserve">
+    <value>ミュート</value>
+  </data>
+  <data name="QuickView_Media_Unmute" xml:space="preserve">
+    <value>ミュート解除</value>
+  </data>
+  <data name="QuickView_Media_Position" xml:space="preserve">
+    <value>再生位置（ホイールで ±5 秒、Shift を押しながら ±30 秒）</value>
+  </data>
+  <data name="QuickView_Media_Waveform" xml:space="preserve">
+    <value>波形（クリックまたはドラッグで再生位置を移動）</value>
+  </data>
 </root>

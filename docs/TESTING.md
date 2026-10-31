@@ -266,6 +266,170 @@ Quick View の表示方法が「単一ページ」になり、本体の「サム
 ハーネス: UI Automation を Quick View のウィンドウハンドルから探す（常駐ホストは複数のトップレベルウィンドウを持つ）、ToggleButton は TogglePattern で操作、
 PDFium 表示の「領域に収まる」判定は 1 px の丸めを許容。
 
+#### Quick Preview Phase 0（2026-10-06、Quick View の内部分割）
+
+- 変更前の基準: 単体テスト 445 件（成功 444・スキップ 1・失敗 0）。E2E（Release）: 7 形式 × 3 回の表示 21/21 PASS
+  （例: Space → 表示呼び出し 10〜13 ms、小 JPEG のフル品質 33 ms、24 MP JPEG 98 ms、PDF 41 ms）。同じ実行のシナリオは、計測中に実ユーザー入力
+  （約 3.7 万件）が重なったため失敗が多く、基準として使わない。
+- Phase 0 の実装後: ソリューション全体のビルド成功（警告 0）。テストの実行と新規テストの作成は利用者の指示で後回しにし、2026-10-29 に実施（下記）。
+
+#### Quick Preview Phase 0 のテストと回帰確認（2026-10-29）
+
+- 修正前（Phase 0 の実装そのまま）: 単体 **445（444 成功、1 スキップ、失敗 0）** で基準と一致。E2E（Release）: 表示 **21/21**、シナリオ 23/24（`cli-quickview` のみ。既知の前面化の揺らぎで単独再実行は PASS）、実ユーザー入力 0。
+  Space → 表示呼び出し 8.6〜10.9 ms、小 JPEG のフル品質 25 ms、24 MP JPEG 91 ms、PDF 32 ms（基準と同等以上）。
+- 見つけて直した不具合（ARCHITECTURE §4.7.6）:
+  1. 画像として扱うファイル（データ・テキスト・壊れた JPEG 等）へ移ると、「非対応」「プレビューできません」が出た後に、遅れて終わったシェルのサムネイル取得が
+     「読み込み中」で上書きしていた（分割前から。実機で 3 ファイルとも発生を確認）。クラウドのみの画像でも「読み込み中」が残った。→ `ItemDisplayState`。
+  2. 異常終了後の再起動で、`--quickview` 付きで起動した常駐プロセスは他の引数（`--settings` 等）も失っていた。→ `RestartArguments`（`--quickview` 以降だけを除く。クォートも Windows の規則どおり）。
+  3. ZIP の項目名で `.. `（末尾の空白）・`...` など点と空白だけの名前が安全と判定されていた（Windows が末尾の点・空白を落とすため `..` になり得る）。`./` は空の名前として扱う。
+- 先読みの判断を `PreviewPrefetchPlan`（Core、純粋関数）に切り出し、`NeighborPrefetcher` はそれに従う。先読みの記録 `prefetched` に形式を追加、
+  診断用に `thumbnail-suppressed`（メッセージの後に届いたサムネイル結果を捨てた）を追加。
+
+| プロジェクト | 追加したテスト | 件数 |
+|---|---|---|
+| `Mavue.Core.Tests` | `PreviewContentRoutingTests`（全形式 × 全アクセス状態 × PDFium 有無、メディアのクラウドは再生しない、SVG は WIC に回さない、PDF は PDFium 有無で文書表示/ページ画像、拡張子ではなく中身で判定） | 145 |
+| | `PreviewResourcePolicyTests`（段階の境界値 6/12 GiB・2/4 コア・省エネ・リモート、不明な値で下げない、High = PoC の値、下位の段階は上限が大きくならない） | 32 |
+| | `PreviewPrefetchPlanTests`（次 → 前、Low は次だけ、上限・クラウド・フォルダーは先読みしない、先読みするのは画像だけ = PDFium 表示中の PDF と SVG は先読みしない） | 26 |
+| | `ArchiveEntryNameTests`（絶対パス・UNC・ドライブ相対・`..`・点と空白だけ・ADS の `:`・制御文字・予約デバイス名・長さと深さの境界・正規化） | 71 |
+| | `DecompressionGuardStreamTests`（項目・全体・圧縮率の上限と境界、実際の ZIP 爆弾〔64 MiB のゼロ〕を圧縮サイズの 200 倍で停止、通常の ZIP は全部読める、キャンセル、非同期、スレッド安全） | 20 |
+| `Mavue.QuickView.Tests` | `ItemDisplayStateTests`（メッセージの後に「読み込み中」・サムネイル・前の画像の消去が上書きしない、クラウドはサムネイルのみ、次の項目に持ち越さない） | 12 |
+| | `RestartArgumentsTests`（`--quickview` 以降を除く、大文字小文字、1,023 文字の境界、`CommandLineToArgvW` で読み戻して一致） | 19 |
+| | `PreviewCacheTests`（`BudgetBytes`: 下げると古い順に即解放、上げても消さない、以後の追加に適用、0 以下は拒否） | 6 |
+| **全体（Release）** | **776（775 成功、1 スキップ: 開発者モードが必要、失敗 0）**。追加 331 件（Theory のデータ行を含む） | |
+
+- 修正後の E2E（Release）: 表示 **21/21**、シナリオ **24/25**（`cli-quickview` のみ同じ揺らぎ。単独再実行で PASS）、実ユーザー入力 0。
+  新シナリオ `message-not-replaced`: 画像 → 乱数データ（.bin）→ テキスト → 壊れた JPEG を ↓ で移動し、14〜19 ms でメッセージが出て 0.9 秒後もそのまま
+  （UI Automation で画面の文字を確認。3 件とも遅れたサムネイル結果を抑止）、↑ で画像に戻る。
+- 実機ログで確認: 段階 High（16 論理プロセッサ・63 GB）、再起動の登録 HRESULT 0、PDF ページ（Windows.Data.Pdf）の先読み 0・先読みエラー 0
+  （先読みは JPEG/PNG/WebP/AVIF のみ）、閉じた後のメモリ返却（`idle-memory`）、再生の解放（`media-*`）。
+- 再起動の登録内容: `--settings <パス> --timing-log <パス> --quickview <ファイル>` で起動した常駐プロセスから `GetApplicationRestartSettings` で読み出し、
+  `--settings "…" --timing-log "…"`（ファイルなし、フラグ 0xC = 更新・再起動時は対象外）であることを確認。
+- 未確認: Windows による実際の再起動（60 秒以上動いた後の異常終了が必要）、Low/Balanced 段階での実動作（開発機は High。段階の選択と上限は単体テストのみ）、
+  ZIP の表示（Phase 2。安全上限は単体テストのみ）。
+
+#### Quick Preview Phase 1（2026-10-29: ピクセル Inspector・フィルムストリップ・Pin・外へのドラッグ・Universal Preview）
+
+| プロジェクト | 追加したテスト | 件数 |
+|---|---|---|
+| `Mavue.Core.Tests` | `PixelInspectionTests`（表示回転 8 通りの逆変換、要素上の位置 → 画素（拡大・縮小・端・範囲外）、EXIF 1〜8 → ファイル内の画素（範囲内・1 対 1・左上の行き先）、タイルの整列と切り詰め、HEX/RGB/Alpha の表記） | 46 |
+| | `UniversalFileInfoTests`（内容を読まない事実、Mark-of-the-Web: ゾーンとホスト名のみ・URL の個人情報を残さない・不正な値・巨大なストリーム、フォルダー・存在しない・デバイス パス、種類と MIME、項目数の上限と取り消し、ドラッグはファイルのみ・移動しない） | 50 |
+| | `PreviewContentRoutingTests` 追加（内容が不明で拡張子が文書・アーカイブ等 → 情報カード、それ以外はデコーダーを試す、内容が拡張子に優先） | 17 |
+| `Mavue.QuickView.Tests` | `PreviewPinTests`（固定中は Explorer の選択・空の選択に追従しない、解除で追従、閉じる/新しい Space で解除、固定中の矢印は Explorer を動かさない、`GoTo`） | 10 |
+| | `FilmstripModelTests`（範囲の上限と切り詰め、端に近づいたら読み直し・ビューの端では読まない、範囲外、パスのない項目の欠け、ビュー順、複数選択、前後） | 18 |
+| | `QuickViewSettingsTests` 追加（フィルムストリップ・Inspector は既定でオフ、往復で他の設定を壊さない） | 2 |
+| `Mavue.Image.Tests` | `WicPixelReaderTests`（PNG の正確な値とストレート α、端のタイル、範囲外・画像でない・存在しない、大きすぎる範囲の拒否、**EXIF 1〜8 の各方向で Windows のデコーダーと同じ色**） | 13 |
+| **全体（Release）** | **932（931 成功、1 スキップ: 開発者モードが必要、失敗 0）**。Phase 0 時点の 776 件・基準 445 件はすべて成功のまま。追加 156 件 | |
+
+実機 E2E（Release）:
+
+- 新シナリオ 5 件すべて PASS: `pixel-inspector`（400×300 PNG 上で赤・#123456・半透明の青の X/Y・RGB・HEX・Alpha、画像の外で消える、タイル 3 枚）、
+  `filmstrip`（6 枚中 3 枚目で Space → プレビュー表示の後に 6 件を Explorer の順で表示、5 枚目のクリックで Explorer が選択し Quick View が追従、複数選択は選択した 3 件のみ）、
+  `pin`（固定中は Explorer の ↓ で変わらない・他のアプリがアクティブでも閉じない・Explorer の Esc で閉じない、解除で Explorer の選択に追従）、
+  `drag-out`（ファイル名と画像の 2 経路で、同じドライブの別フォルダーへドロップ → コピーされ元は残る。操作は Copy のみ）、
+  `info-card`（.docx・.zip はデコーダーを試さず即カード、ZIP は入手元のホスト名、乱数データはメッセージ付きカード、フォルダーは「3 個の項目」）。
+- 全体: 表示 **21/21**、シナリオ **28/29**（`cli-quickview` のみ既知の前面化の揺らぎ、単独再実行で PASS）。Space → 表示呼び出し 10.8〜12.6 ms、
+  小 JPEG のフル品質 28 ms、24 MP JPEG 89 ms、PDF 37 ms（基準と同等以上）。常駐時のメモリ（非表示後）: プライベート 163.5 MB（Phase 0 修正後の実行 161.4 MB）、
+  起動から準備完了 297 ms（同 287 ms）。新機能はオフのとき何も動かない。
+- 本体（`--app`）: 14/15、`app-multiple-files` は全体実行で 1 回だけ矢印の 1 ステップが重複し、単独 3 回とも PASS（共通の表示面 `ViewerSurface` の変更は
+  Quick View が有効にするドラッグだけで、本体では無効）。
+- 既存シナリオの変更: `message-not-replaced` のテキスト ファイルは Phase 1 から即情報カード（メッセージなし）になるため期待値を更新。
+- E2E で見つけて直した不具合: フィルムストリップ・Pin のボタンのクリックで Quick View が閉じる（前面ウィンドウが Quick View の子ウィンドウとして通知され、
+  他のアプリへの切り替えと判定していた）。フォルダーの項目数が UI オートメーション名に反映されない（読み上げが「数えています…」のまま）。
+- 目視（スクリーンショット）: フィルムストリップ（現在の項目に枠）、隅の Inspector パネル、情報カード（入手元を含む）の配置。
+- 未確認: Ctrl なしのホイールズーム（F03.31、今回対象外）、色管理後の値（Inspector はファイルの値）、クラウドのみのファイルでのフィルムストリップの実機確認、
+  巨大フォルダー（数万件）でのフィルムストリップの体感、他のアプリ（メール・Office）へのドロップ、タッチ・ペンでのドラッグ。
+
+#### Phase 1 の実機確認（2026-10-29、`--phase1-real`）
+
+追加シナリオ（既定の実行には含めない。`--phase1-real` で実行。Office は `MAVUE_E2E_OFFICE=1` のときだけ）:
+
+| シナリオ | 結果 | 内容 |
+|---|---|---|
+| `filmstrip-cloud` | PASS | **テスト用の同期ルート**（Cloud Files API、%TEMP% に作成し終了時に登録解除。OneDrive には触れない）にクラウドのみのファイル 5 件（jpg/png/mp4/pdf/heic）。データ要求（FETCH_DATA）を要求元プロセスごとに記録し即拒否する。フィルムストリップに 6 件表示、↓ で各ファイルへ（画像・PDF はクラウドの案内、動画は情報カード）。**Quick View からのデータ要求 0 件**、終了後もすべてクラウドのみのまま |
+| `filmstrip-large` | PASS | 30,000 ファイル（ハード リンク）のフォルダーの中央で Space → フル表示 32〜38 ms（通常と同じ）。範囲 121/30,000 件の読み取り 169〜185 ms（表示の後）。↓×50 で 1 回だけ読み直し、エラー 0。End で末尾 61 件。常駐プロセスのメモリ +10〜12 MB |
+| `inspector-transforms` | PASS | 位置を色に符号化した TIFF（EXIF 6）で、100 %・Ctrl+R で回転後・Ctrl+ホイールで 2.07 倍の各 3 点: 報告された X/Y の画素の色＝報告された色（完全一致）、画面上の色とも一致。JPEG（EXIF 8）の 4 象限で報告色＝画面の色 |
+| `pin-real` | PASS | A: P で固定 → Explorer で別ファイルをマウスでクリック（Quick View は変わらない）、Alt+Tab、他のアプリ、Explorer のウィンドウを閉じる → いずれも閉じない、Quick View 上の Esc で閉じる。B: ボタンで固定 → Explorer で Space → 閉じる。C: P で固定 → Explorer で ↓↓ → P で解除 → Explorer の選択（04）に追従 |
+| `drag-out` | PASS | ファイル名・画像から同じドライブの別フォルダー（Explorer）へ → コピー、元は残る（3 回連続） |
+| `drag-probe` | PASS | 別プロセスの WinForms のドロップ先: 許可はコピーのみ、形式 Shell IDList Array・FileDrop・FileContents・FileGroupDescriptorW・Preferred DropEffect、ファイルのパスを受け取る |
+| `drag-apps` | Edge PASS（3/3）・ペイント FAIL・Word 対象外 | Edge（別プロファイル）でファイルが開く。ペイントは開かない（下記）。Word は 1 回目に挿入を確認したが、Office 未サインイン（ライセンス ダイアログ）で自動操作が不安定なため利用者の指示で対象外 |
+| `drag-paint-control` | 参考 | 同じファイルを Explorer からペイントへドラッグすると開く |
+
+ドラッグについて分かったこと（ARCHITECTURE §4.7.8）:
+
+- ペイントは WinUI のドラッグ（`DataPackage`）を受け付けない。許可する操作をコピー/移動/リンクすべてにしても同じ（実験。元に戻した）。
+- Explorer と同じシェルのデータ オブジェクト＋`SHDoDragDrop` を試したが、WinUI がプロセス全体で mouse-in-pointer を有効にしている（`IsMouseInPointerEnabled = true` を実測）ため、
+  ドラッグ ループがボタンを離したことを受け取れない（7〜13 秒続き Esc で終了）。別プロセスで行う案は起動に約 1 秒かかり、ボタンを離した直後に起動した場合に
+  次のマウス移動でドロップされる危険があるため不採用。WinUI のドラッグに戻した（開始判定はホストで行い `StartDragAsync`）。ペイントへのドラッグは残課題。
+
+その他:
+
+- ハーネスの修正: 画像の範囲の検出から Inspector パネルを除外、ドロップ先・クリック対象の Explorer を Quick View と重ならない位置へ移動、Explorer のキーボード フォーカスを
+  クリックで戻してから Space/↓、ハード リンクは 1 ファイル 1,023 個までのため元ファイルを分散、Word の COM 呼び出しの再試行。
+- 全体の実行（`--phase1-real` 込み）: 表示 21/21。実行中に実ユーザー入力が 1,450 件あった回は `pin-real`・`media-video` が失敗し、単独再実行で PASS
+  （`media-video` は重い準備の直後だと「開いた直後に再生中」の判定が間に合わない。単独では 113 ms で再生）。
+- 単体テスト: 932（931 成功、1 スキップ、失敗 0）。
+- 実行後に残るもの: %TEMP%\Mavue.QuickView.E2E\…「Phase1 大量」（30,000 個のハード リンク。実データは 32 ファイル分）、%TEMP%\Mavue.E2E.EdgeProfile。
+  同期ルートはテスト終了時に登録解除・削除。
+
+#### Quick Preview Phase 2（2026-10-30: ウィンドウのデザイン・市松模様）
+
+| プロジェクト | 追加したテスト | 件数 |
+|---|---|---|
+| `Mavue.Core.Tests` | `TransparencyRuleTests`（市松模様を出す形式・出さない形式、設定の既定オン・古い設定ファイルでもオン・オフの保存） | 18 |
+| **全体（Release）** | **950（949 成功、1 スキップ、失敗 0）** | |
+
+実機 E2E（Release）:
+
+- 新シナリオ: `checkerboard`（半透明の象限は 2 色が交互、不透明の象限は 1 色。「…」メニューでオフにすると 1 色）、`toolbar-keyboard`（F6 でツールバーのボタン、
+  そこで Esc → 閉じずに内容へ、もう一度 Esc で閉じる）。どちらも PASS。
+- 全体: 表示 **21/21**、シナリオ 29/31 → 失敗 2 件を確認: `quickview-zoom-rotate` はハーネスの判定点がツールバー移動で SVG の外に出ていたため（判定点を追加して PASS。
+  Ctrl+ホイールのカーソル中心ズーム自体は PASS）、`cli-quickview` は既知の揺らぎ（単独で PASS）。
+- **性能の回帰を発見して修正**: 最初の実装（コンテンツをタイトルバーへ拡張）で Space → 表示が約 10 ms 遅くなった（show-call → shown 3.7 → 13.7 ms）。
+  同じ日の RC 0.1.0 のホストとの比較と組み合わせ試験で原因を特定: `ExtendsContentIntoTitleBar`（13.8 ms）とキャプション ボタンの色の変更（13.5 ms）が
+  それぞれ単独で遅くする。タイトルバーなし（`SetBorderAndTitleBar`）も 10.8 ms。Mica は影響なし（3.6 ms）。→ Windows 標準のタイトルバーのまま
+  ツールバーと Mica で一体に見せる設計に変更し、3.8 ms（RC と同等）。Space → 表示呼び出し 10.3〜13.5 ms、24 MP JPEG のフル品質 83〜92 ms。
+- 起動時の例外を発見して修正: `AccessibilitySettings.HighContrastChanged` の購読が CoreWindow のないアプリで 0x80070490（未処理例外の記録に HRESULT と
+  メソッド名を追加して特定）。
+- 目視（スクリーンショット、ダーク）: タイトルバー＋ツールバーが同色の帯、画像の舞台は #1E1E1E、市松模様は半透明部分にだけ見える、Inspector は隅。
+- 未確認: ライト テーマ・ハイコントラストの実機表示（利用者のシステム設定を変えないため）、壁紙のある環境での Mica の見え方。
+
+#### Quick Preview Phase 3（2026-10-30: ZIP Preview・動画/音声の軽い操作・ホイールシーク・波形）
+
+利用者の方針（2026-10-30）: 機能ごとにテストを回さず、Phase 3 の実装（ZIP と動画・音声）がまとまってから一括で実行した。
+
+| プロジェクト | 追加したテスト | 件数 |
+|---|---|---|
+| `Mavue.Core.Tests` | `ZipArchiveTests`（CRC-32、中央ディレクトリの一覧、CP932/フラグなし UTF-8 の名前、自己解凍形式の先頭データ、ZIP64、ZIP でない・壊れた・分割、項目数/ディレクトリの上限、危険な名前、stored/deflate の往復、フォルダー/暗号化/未対応方式、CRC 不一致・範囲外、申告の展開爆弾は読む前に拒否、申告を偽った爆弾は実測で停止、項目/合計の上限、取り消し、フォルダー構造と自然順、画像列の除外条件） | 28 |
+| `Mavue.Core.Tests` | `Phase3RulesTests`（.zip/.cbz の判定と振り分け、Office/JAR/EPUB は従来どおり、クラウドのみは読まない、双方向制御文字の検出と表示用の置換、ホイールシーク ±5/±30 秒とタッチパッドの累積、波形の列の最大値） | 17 |
+| `Mavue.Core.Tests`（既存） | 全形式を回す理論テスト 4 件に `FileFormat.Zip` が加わった分 | 4 |
+| **全体（Release）** | **999（998 成功、1 スキップ、失敗 0）** | |
+
+実機 E2E（Release、`--iterations 1`）: 新シナリオ（`RunnerPhase3.cs`）
+
+- `archive-list`: ダウンロード扱い（MotW ゾーン 3）の ZIP。一覧 16.6 ms（中央ディレクトリのみ）、ファイル 8・フォルダー 3・画像 4・危険な名前 1・暗号化 1・入れ子 1、名前は shift_jis で「日本語」を表示、
+  「インターネットから取得（example.com）」と警告を表示。PASS。
+- `archive-images`: 「画像を表示」→ 1/4（640×480）、PageDown/PageUp/→ で前後（戻りは cache から）、Explorer の選択は変わらない、Backspace で一覧。PASS。
+- `archive-cbz`: .cbz は 1 ページ目から（一覧なし）、ホイールで 2 ページ目、Explorer からの PageDown（フック）で 3 ページ目（先読み済みで 6 ms）。PASS。
+- `archive-safety`: 60 MB の展開爆弾は一覧で警告、表示時は `entry-limit-MaxCompressionRatio` で読まずに拒否、次の画像は表示。壊れた ZIP・ZIP でないファイル・分割の一部は
+  それぞれの理由を情報カードに表示。常駐プロセスはそのまま。PASS。
+- `media-wheel`: 軽い操作バーを表示、ホイール +5 秒・Shift+ホイール +30 秒（長さで止まる）・2 段下げ −10 秒、ファイルは移動しない。PASS。
+- `audio-waveform`: 20 秒の MP3 の波形を 205 ms で計算（exact）、波形の中央クリックで 10.0 秒へ。PASS。
+
+全体の一括実行で見つかったもの（いずれもハーネス側。製品の変更なし）:
+
+- `info-card` が空の .zip を情報カードの例に使っていた → ZIP は専用の表示になったため .7z に変更（PASS）。
+- `pixel-inspector`: 画像探索が Phase 1 の「下 260 px は情報バー」の前提のままで、低い画面にウィンドウが出ると画像の下端が切れた → 枠だけ除くように修正（PASS）。
+- `archive-images`/`archive-safety` の初版: UI Automation で「画像を表示」を押すと（クリックと同じく）Quick View がアクティブになり、その後の Explorer への PageDown は
+  既存の仕様どおり Explorer が受け取る → Quick View に送るよう修正。Explorer からのフック経由のページ送りは `archive-cbz` で確認。
+- `media-wheel` の初版: バーの外枠（Border）は UI Automation の要素にならない → 再生ボタンとスライダーで確認。
+- 本体 `app-multiple-files` が 3 回中 2 回失敗: PDF はページ数が分かった時点で状態をもう一度通知し、ハーネスがそれを次のキーの結果と取り違えていた（実際の移動は正しい）
+  → キーの前に 0.6 秒待つよう修正し 3/3 PASS。
+- `cli-quickview` は全体実行で 1 回失敗（既知の揺らぎ）、単独で PASS。
+
+結果: Quick View 表示 7/7（各 1 回）、シナリオは上記の修正後すべて PASS、本体 15/15。Space → 表示・24 MP JPEG のフル品質（81.6 ms）は Phase 2 と同等。
+
+- 未確認: ZIP 内の大量画像（数千枚）・数 GB の ZIP での体感、長い音声（1 時間超）の概形→精密化の実機表示、ライト テーマでの ZIP 一覧・操作バーの見え方。
+
 ### 2.1 Quick View 実機 E2E ハーネス（`tools/Mavue.QuickView.Harness`）
 
 **実際のデスクトップを操作する**（Explorer を開き、SendInput で Space/Esc/Alt+Tab を送り、前面ウィンドウと画面ピクセルを検査する）。

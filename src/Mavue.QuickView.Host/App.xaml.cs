@@ -29,8 +29,15 @@ public partial class App : Application
         InitializeComponent();
         UnhandledException += (_, e) =>
         {
-            // Keep the resident process alive on unexpected UI errors; the failure is logged by type only.
-            _timeline?.Mark(0, "unhandled-exception", QuickViewTimeline.Now, new Dictionary<string, object?> { ["type"] = e.Exception.GetType().Name });
+            // Keep the resident process alive on unexpected UI errors; the failure is logged by type, HRESULT and the
+            // methods involved (never file names or contents).
+            _timeline?.Mark(0, "unhandled-exception", QuickViewTimeline.Now, new Dictionary<string, object?>
+            {
+                ["type"] = e.Exception.GetType().Name,
+                ["hresult"] = e.Exception.HResult,
+                ["at"] = string.Join(" < ", new System.Diagnostics.StackTrace(e.Exception, fNeedFileInfo: false).GetFrames()
+                    .Select(f => System.Diagnostics.DiagnosticMethodInfo.Create(f) is { } m ? $"{m.DeclaringTypeName}.{m.Name}" : "?").Take(6)),
+            });
             e.Handled = true;
         };
     }
@@ -103,9 +110,12 @@ public partial class App : Application
         _shutdownEvent = new EventWaitHandle(false, EventResetMode.AutoReset, Program.ShutdownEventName);
         ThreadPool.RegisterWaitForSingleObject(_shutdownEvent, (_, _) => dispatcher.TryEnqueue(Shutdown), null, Timeout.Infinite, executeOnlyOnce: true);
 
-        Dictionary<string, object?> ready = QuickViewController.MemorySnapshot();
+        Dictionary<string, object?> ready = Performance.ResidentResources.MemorySnapshot();
         ready["hookInstalled"] = _hook.IsInstalled;
         _timeline.Mark(0, "ready", QuickViewTimeline.Now, ready);
+
+        // After a crash or hang of a decoder in this process, Windows starts it again (Space keeps working).
+        _controller.Resources.RegisterRestart(Program.Arguments);
 
         StartPipeServer();
         if (options.QuickViewPaths.Count > 0)

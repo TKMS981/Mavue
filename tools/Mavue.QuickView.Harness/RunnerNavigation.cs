@@ -253,7 +253,7 @@ internal sealed partial class Runner
             {
                 _log.Poll();
                 nav ??= _log.Marks.FirstOrDefault(m => m.Name == "nav" && m.Qpc >= qpc && m.Text("source") == source);
-                done = nav is null ? null : _log.ForRequest(nav.Request).FirstOrDefault(m => m.Name is "full-visible" or "full-skipped" or "error");
+                done = nav is null ? null : _log.ForRequest(nav.Request).FirstOrDefault(m => m.Name is "full-visible" or "full-skipped" or "error" or "info-card");
                 return done is not null;
             },
             8000,

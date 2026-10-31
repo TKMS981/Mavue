@@ -29,6 +29,15 @@ public sealed record QuickViewSettings
     /// <summary>The PDF sidebar (pages, contents, results) is open.</summary>
     public bool ShowPdfSidebar { get; set; }
 
+    /// <summary>The filmstrip (neighbors in the folder, or the selection) is shown under the preview. Off by default.</summary>
+    public bool ShowFilmstrip { get; set; }
+
+    /// <summary>The pixel inspector follows the pointer over images. Off by default.</summary>
+    public bool ShowPixelInspector { get; set; }
+
+    /// <summary>A checkerboard is shown behind transparent images. On by default (user decision 2026-10-30).</summary>
+    public bool ShowTransparencyGrid { get; set; } = true;
+
     /// <summary>Default location for the current user.</summary>
     public static string DefaultPath { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Mavue", "QuickView", "settings.json");

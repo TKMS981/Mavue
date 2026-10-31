@@ -177,4 +177,205 @@
   <data name="QuickView_PageCount" xml:space="preserve">
     <value>/ {0}</value>
   </data>
+  <data name="QuickView_Filmstrip" xml:space="preserve">
+    <value>Filmstrip (F)</value>
+  </data>
+  <data name="QuickView_PixelInspector" xml:space="preserve">
+    <value>Pixel inspector (I)</value>
+  </data>
+  <data name="QuickView_Pin" xml:space="preserve">
+    <value>Pin this preview (P)</value>
+  </data>
+  <data name="QuickView_Unpin" xml:space="preserve">
+    <value>Unpin (P)</value>
+  </data>
+  <data name="QuickView_DragFile" xml:space="preserve">
+    <value>Drag to copy the file</value>
+  </data>
+  <data name="QuickView_Card_Type" xml:space="preserve">
+    <value>Type</value>
+  </data>
+  <data name="QuickView_Card_Size" xml:space="preserve">
+    <value>Size</value>
+  </data>
+  <data name="QuickView_Card_SizeValue" xml:space="preserve">
+    <value>{0} ({1} bytes)</value>
+  </data>
+  <data name="QuickView_Card_Modified" xml:space="preserve">
+    <value>Modified</value>
+  </data>
+  <data name="QuickView_Card_Created" xml:space="preserve">
+    <value>Created</value>
+  </data>
+  <data name="QuickView_Card_Mime" xml:space="preserve">
+    <value>MIME type</value>
+  </data>
+  <data name="QuickView_Card_Location" xml:space="preserve">
+    <value>Location</value>
+  </data>
+  <data name="QuickView_Card_Attributes" xml:space="preserve">
+    <value>Attributes</value>
+  </data>
+  <data name="QuickView_Card_Origin" xml:space="preserve">
+    <value>Origin</value>
+  </data>
+  <data name="QuickView_Card_FromInternet" xml:space="preserve">
+    <value>Downloaded from the internet ({0})</value>
+  </data>
+  <data name="QuickView_Card_FromInternetNoHost" xml:space="preserve">
+    <value>Downloaded from the internet</value>
+  </data>
+  <data name="QuickView_Card_Zone" xml:space="preserve">
+    <value>Security zone {0}</value>
+  </data>
+  <data name="QuickView_Card_Items" xml:space="preserve">
+    <value>Contents</value>
+  </data>
+  <data name="QuickView_Card_ItemsCount" xml:space="preserve">
+    <value>{0} items</value>
+  </data>
+  <data name="QuickView_Card_ItemsMore" xml:space="preserve">
+    <value>More than {0} items</value>
+  </data>
+  <data name="QuickView_Card_ItemsCounting" xml:space="preserve">
+    <value>Counting…</value>
+  </data>
+  <data name="QuickView_Card_Folder" xml:space="preserve">
+    <value>Folder</value>
+  </data>
+  <data name="QuickView_Card_NotFound" xml:space="preserve">
+    <value>This item no longer exists.</value>
+  </data>
+  <data name="QuickView_Attr_ReadOnly" xml:space="preserve">
+    <value>Read-only</value>
+  </data>
+  <data name="QuickView_Attr_Hidden" xml:space="preserve">
+    <value>Hidden</value>
+  </data>
+  <data name="QuickView_Attr_System" xml:space="preserve">
+    <value>System</value>
+  </data>
+  <data name="QuickView_Attr_Online" xml:space="preserve">
+    <value>Online-only</value>
+  </data>
+  <data name="QuickView_Attr_Encrypted" xml:space="preserve">
+    <value>Encrypted</value>
+  </data>
+  <data name="QuickView_More" xml:space="preserve">
+    <value>More options</value>
+  </data>
+  <data name="QuickView_TransparencyGrid" xml:space="preserve">
+    <value>Checkerboard behind transparency</value>
+  </data>
+  <data name="QuickView_Archive_Summary" xml:space="preserve">
+    <value>{0} files · {1} folders · {2} expanded ({3} compressed)</value>
+  </data>
+  <data name="QuickView_Archive_InfoLine" xml:space="preserve">
+    <value>ZIP · {0} files · {1}</value>
+  </data>
+  <data name="QuickView_Archive_ShowImages" xml:space="preserve">
+    <value>Show images ({0})</value>
+  </data>
+  <data name="QuickView_Archive_Up" xml:space="preserve">
+    <value>Up one level (Backspace)</value>
+  </data>
+  <data name="QuickView_Archive_BackToList" xml:space="preserve">
+    <value>Back to the list (Backspace)</value>
+  </data>
+  <data name="QuickView_Archive_ListName" xml:space="preserve">
+    <value>Items in the archive</value>
+  </data>
+  <data name="QuickView_Archive_ImageInfo" xml:space="preserve">
+    <value>{0} · {1} / {2} · {3} × {4}</value>
+  </data>
+  <data name="QuickView_Archive_Position" xml:space="preserve">
+    <value>{0} / {1}</value>
+  </data>
+  <data name="QuickView_Archive_FolderItems" xml:space="preserve">
+    <value>{0} items</value>
+  </data>
+  <data name="QuickView_Archive_Empty" xml:space="preserve">
+    <value>This archive is empty.</value>
+  </data>
+  <data name="QuickView_Archive_Hint" xml:space="preserve">
+    <value>Double-click or press Enter to open a folder or an image.</value>
+  </data>
+  <data name="QuickView_Archive_Warn_Encrypted" xml:space="preserve">
+    <value>{0} encrypted items (Quick View does not ask for passwords)</value>
+  </data>
+  <data name="QuickView_Archive_Warn_Unsupported" xml:space="preserve">
+    <value>{0} items use a compression method Quick View cannot read</value>
+  </data>
+  <data name="QuickView_Archive_Warn_UnsafeNames" xml:space="preserve">
+    <value>{0} items have unsafe names (listed at the top level; nothing is extracted)</value>
+  </data>
+  <data name="QuickView_Archive_Warn_Ratio" xml:space="preserve">
+    <value>{0} items have an abnormal compression ratio (possible decompression bomb)</value>
+  </data>
+  <data name="QuickView_Archive_Warn_Nested" xml:space="preserve">
+    <value>{0} archives inside are listed but not opened</value>
+  </data>
+  <data name="QuickView_Archive_Error_NotArchive" xml:space="preserve">
+    <value>This file is not a valid ZIP archive.</value>
+  </data>
+  <data name="QuickView_Archive_Error_Damaged" xml:space="preserve">
+    <value>This ZIP archive is damaged.</value>
+  </data>
+  <data name="QuickView_Archive_Error_MultiVolume" xml:space="preserve">
+    <value>This is one part of a split ZIP archive; it cannot be previewed by itself.</value>
+  </data>
+  <data name="QuickView_Archive_Error_TooManyEntries" xml:space="preserve">
+    <value>This archive has too many items to preview safely.</value>
+  </data>
+  <data name="QuickView_Archive_Error_DirectoryTooLarge" xml:space="preserve">
+    <value>This archive's list of items is too large to preview safely.</value>
+  </data>
+  <data name="QuickView_Archive_Entry_Encrypted" xml:space="preserve">
+    <value>This item is encrypted. Quick View does not ask for passwords.</value>
+  </data>
+  <data name="QuickView_Archive_Entry_Unsupported" xml:space="preserve">
+    <value>This item uses a compression method Quick View cannot read (method {0}).</value>
+  </data>
+  <data name="QuickView_Archive_Entry_Damaged" xml:space="preserve">
+    <value>This item is damaged.</value>
+  </data>
+  <data name="QuickView_Archive_Entry_TooLarge" xml:space="preserve">
+    <value>This item is too large to preview (limit {0}).</value>
+  </data>
+  <data name="QuickView_Archive_Entry_Ratio" xml:space="preserve">
+    <value>This item expands abnormally; it was stopped for safety.</value>
+  </data>
+  <data name="QuickView_Archive_Entry_NotPreviewable" xml:space="preserve">
+    <value>Only images can be shown from inside an archive; other items are listed.</value>
+  </data>
+  <data name="QuickView_Archive_Entry_Nested" xml:space="preserve">
+    <value>Archives inside an archive are not opened.</value>
+  </data>
+  <data name="QuickView_Archive_Unsafe" xml:space="preserve">
+    <value>Unsafe name</value>
+  </data>
+  <data name="QuickView_Archive_Encrypted" xml:space="preserve">
+    <value>Encrypted</value>
+  </data>
+  <data name="QuickView_Archive_Folder" xml:space="preserve">
+    <value>Folder</value>
+  </data>
+  <data name="QuickView_Media_Play" xml:space="preserve">
+    <value>Play (Enter)</value>
+  </data>
+  <data name="QuickView_Media_Pause" xml:space="preserve">
+    <value>Pause (Enter)</value>
+  </data>
+  <data name="QuickView_Media_Mute" xml:space="preserve">
+    <value>Mute</value>
+  </data>
+  <data name="QuickView_Media_Unmute" xml:space="preserve">
+    <value>Unmute</value>
+  </data>
+  <data name="QuickView_Media_Position" xml:space="preserve">
+    <value>Position (mouse wheel: ±5 s, with Shift: ±30 s)</value>
+  </data>
+  <data name="QuickView_Media_Waveform" xml:space="preserve">
+    <value>Waveform (click or drag to move the position)</value>
+  </data>
 </root>

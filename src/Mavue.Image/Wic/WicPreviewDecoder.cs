@@ -282,7 +282,7 @@ public static class WicPreviewDecoder
         return ((uint)Math.Max(1, Math.Round(width * scale)), (uint)Math.Max(1, Math.Round(height * scale)));
     }
 
-    private static unsafe int ReadOrientation(nint frame)
+    internal static unsafe int ReadOrientation(nint frame)
     {
         if (WicNative.GetMetadataQueryReader(frame, out nint reader) < 0 || reader == 0)
         {

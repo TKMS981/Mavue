@@ -90,6 +90,84 @@ public static class ImageDecoding
             },
             cancellation);
 
+    /// <summary>
+    /// Decodes an image held in memory (e.g. an entry read from an archive) through the color-managed WinRT decoder,
+    /// at most <paramref name="viewportWidth"/> × <paramref name="viewportHeight"/> (never enlarged).
+    /// </summary>
+    public static Task<DecodedImage> DecodeAsync(
+        ReadOnlyMemory<byte> data,
+        uint viewportWidth,
+        uint viewportHeight,
+        BitmapInterpolationMode interpolation,
+        CancellationToken cancellation,
+        long maxSourcePixels = PreviewSafetyPolicy.MaxSourcePixels) =>
+        Task.Run(
+            async () =>
+            {
+                long start = Stopwatch.GetTimestamp();
+                using IRandomAccessStream stream = OpenMemory(data);
+                BitmapDecoder decoder;
+                try
+                {
+                    decoder = await BitmapDecoder.CreateAsync(stream);
+                }
+                catch (Exception ex) when (ex.HResult == unchecked((int)0x88982F50))
+                {
+                    return DecodedImage.Skipped("no-codec");
+                }
+
+                uint width = decoder.OrientedPixelWidth;
+                uint height = decoder.OrientedPixelHeight;
+                if (PreviewSafetyPolicy.CheckDimensions(width, height) != PreviewAccess.Allowed || (long)width * height > maxSourcePixels)
+                {
+                    return DecodedImage.Skipped("too-large");
+                }
+
+                (uint fitWidth, uint fitHeight) = PreviewSizing.FitWithin(width, height, viewportWidth, viewportHeight);
+                bool swapped = width != decoder.PixelWidth;
+                var transform = new BitmapTransform
+                {
+                    ScaledWidth = swapped ? fitHeight : fitWidth,
+                    ScaledHeight = swapped ? fitWidth : fitHeight,
+                    InterpolationMode = interpolation,
+                };
+                cancellation.ThrowIfCancellationRequested();
+                SoftwareBitmap bitmap = await decoder.GetSoftwareBitmapAsync(
+                    BitmapPixelFormat.Bgra8,
+                    BitmapAlphaMode.Premultiplied,
+                    transform,
+                    ExifOrientationMode.RespectExifOrientation,
+                    ColorManagementMode.ColorManageToSRgb);
+                return DecodedImage.Decoded(bitmap, width, height, Stopwatch.GetTimestamp() - start, "winrt-memory-" + interpolation);
+            },
+            cancellation);
+
+    /// <summary>Upright size of an image held in memory (header only), or null when no installed codec reads it.</summary>
+    public static Task<(uint Width, uint Height)?> ReadDimensionsAsync(ReadOnlyMemory<byte> data, CancellationToken cancellation) =>
+        Task.Run<(uint Width, uint Height)?>(
+            async () =>
+            {
+                using IRandomAccessStream stream = OpenMemory(data);
+                try
+                {
+                    BitmapDecoder decoder = await BitmapDecoder.CreateAsync(stream);
+                    return (decoder.OrientedPixelWidth, decoder.OrientedPixelHeight);
+                }
+                catch (Exception ex) when (ex is COMException || ex.HResult == unchecked((int)0x88982F50))
+                {
+                    return null;
+                }
+            },
+            cancellation);
+
+    private static IRandomAccessStream OpenMemory(ReadOnlyMemory<byte> data)
+    {
+        MemoryStream memory = MemoryMarshal.TryGetArray(data, out ArraySegment<byte> segment)
+            ? new MemoryStream(segment.Array!, segment.Offset, segment.Count, writable: false)
+            : new MemoryStream(data.ToArray(), writable: false);
+        return memory.AsRandomAccessStream();
+    }
+
     /// <summary>Opens a file for reading while other programs may still read and write it.</summary>
     public static async Task<IRandomAccessStream> OpenReadAsync(string path) =>
         await FileRandomAccessStream.OpenAsync(path, FileAccessMode.Read, StorageOpenOptions.AllowReadersAndWriters, FileOpenDisposition.OpenExisting);

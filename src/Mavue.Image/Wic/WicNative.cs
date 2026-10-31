@@ -21,6 +21,9 @@ internal static unsafe partial class WicNative
 
     public static readonly Guid PixelFormat32bppPBGRA = new("6FDDC324-4E03-4BFE-B185-3D77768DC910");
 
+    /// <summary>32-bit BGRA with straight (not premultiplied) alpha: the stored color of each pixel.</summary>
+    public static readonly Guid PixelFormat32bppBGRA = new("6FDDC324-4E03-4BFE-B185-3D77768DC90F");
+
     private static readonly Guid ClsidImagingFactory2 = new("317D06E8-5F24-433D-BDF7-79CE68D8ABC2");
     private static readonly Guid IidImagingFactory = new("EC5EC8A9-C395-4314-9C77-54D7A935FF70");
     private const uint ClsctxInprocServer = 0x1;
@@ -86,6 +89,13 @@ internal static unsafe partial class WicNative
         {
             CopyPixels(source, stride, (uint)buffer.Length, b);
         }
+    }
+
+    /// <summary>Copies a rectangle of pixels (WICRect: X, Y, Width, Height).</summary>
+    public static void CopyPixels(nint source, int x, int y, int width, int height, uint stride, uint bufferSize, byte* buffer)
+    {
+        int* rect = stackalloc int[4] { x, y, width, height };
+        Check(((delegate* unmanaged[Stdcall]<nint, void*, uint, uint, byte*, int>)Slot(source, 7))(source, rect, stride, bufferSize, buffer));
     }
 
     public static void CopyPixels(nint source, uint stride, uint bufferSize, byte* buffer) =>

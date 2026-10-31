@@ -12,6 +12,9 @@ internal sealed record HarnessOptions
     public int Iterations { get; init; } = 3;
     public HashSet<string>? Cases { get; init; }
     public bool IncludeHuge { get; init; }
+
+    /// <summary>Phase 1 checks that need more setup (cloud sync root, 30,000 files, Office/Paint/Edge as drop targets).</summary>
+    public bool Phase1Real { get; init; }
     public bool Prewarm { get; init; } = true;
     public bool Scenarios { get; init; } = true;
 
@@ -183,6 +186,15 @@ internal sealed partial class Runner(HarnessOptions options, Action<string> log)
                 RunQuickViewPdfScenario(assets);
                 RunGifScenario(assets);
                 RunViewScenario(assets);
+                RunMessageScenario(assets);
+                RunPhase1Scenarios(assets);
+                RunPhase2Scenarios(assets);
+                RunPhase3Scenarios(assets);
+                if (options.Phase1Real)
+                {
+                    RunPhase1RealScenarios(assets);
+                }
+
                 RunMediaScenario(assets);
             }
 
@@ -792,21 +804,32 @@ internal sealed partial class Runner(HarnessOptions options, Action<string> log)
             return false;
         }
 
-        // Upper-middle point: inside the image area but away from the centered status text.
-        int x = (r.Left + r.Right) / 2;
-        int y = r.Top + ((r.Bottom - r.Top) * 35 / 100);
+        // Points inside the image area but away from the centered status text: upper middle, and the middle height a
+        // little right of center (small centered images; the stage starts under the tool bar since Phase 2).
+        (int X, int Y)[] points =
+        [
+            ((r.Left + r.Right) / 2, r.Top + ((r.Bottom - r.Top) * 35 / 100)),
+            (((r.Left + r.Right) / 2) + ((r.Right - r.Left) * 7 / 100), (r.Top + r.Bottom) / 2),
+        ];
         nint dc = Native.GetDC(0);
         try
         {
-            color = Native.GetPixel(dc, x, y);
+            foreach ((int x, int y) in points)
+            {
+                color = Native.GetPixel(dc, x, y);
+                int red = (int)(color & 0xFF), green = (int)((color >> 8) & 0xFF), blue = (int)((color >> 16) & 0xFF);
+                if (Math.Abs(red - 30) + Math.Abs(green - 30) + Math.Abs(blue - 30) > 60 && color != 0xFFFFFFFF)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
         finally
         {
             Native.ReleaseDC(0, dc);
         }
-
-        int red = (int)(color & 0xFF), green = (int)((color >> 8) & 0xFF), blue = (int)((color >> 16) & 0xFF);
-        return Math.Abs(red - 30) + Math.Abs(green - 30) + Math.Abs(blue - 30) > 60 && color != 0xFFFFFFFF;
     }
 
     private static bool QuickLookWindowVisible()

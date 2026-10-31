@@ -114,6 +114,36 @@ public sealed class QuickViewSettingsTests : IDisposable
     }
 
     [Fact]
+    public async Task OlderFile_FilmstripAndInspectorAreOff()
+    {
+        // Phase 1 features are off until the user turns them on (they must not cover the image by default).
+        string path = Path.Combine(_dir, "before-phase1.json");
+        await File.WriteAllTextAsync(path, "{\"version\": 1, \"imageScale\": \"FitNoUpscale\", \"pdfLayout\": \"TwoPages\"}", TestContext.Current.CancellationToken);
+
+        QuickViewSettings settings = QuickViewSettings.Load(path);
+        Assert.False(settings.ShowFilmstrip);
+        Assert.False(settings.ShowPixelInspector);
+        Assert.Equal(PdfLayoutMode.TwoPages, settings.PdfLayout);
+        Assert.False(new QuickViewSettings().ShowFilmstrip);
+        Assert.False(new QuickViewSettings().ShowPixelInspector);
+    }
+
+    [Fact]
+    public async Task FilmstripAndInspector_RoundTrip_WithoutTouchingOtherChoices()
+    {
+        string path = Path.Combine(_dir, "phase1.json");
+        await new QuickViewSettings { PdfLayout = PdfLayoutMode.SinglePage, ShowFilmstrip = true }.SaveAsync(path, TestContext.Current.CancellationToken);
+        QuickViewSettings loaded = QuickViewSettings.Load(path);
+        await (loaded with { ShowPixelInspector = true }).SaveAsync(path, TestContext.Current.CancellationToken);
+
+        QuickViewSettings again = QuickViewSettings.Load(path);
+        Assert.True(again.ShowFilmstrip);
+        Assert.True(again.ShowPixelInspector);
+        Assert.Equal(PdfLayoutMode.SinglePage, again.PdfLayout);
+        Assert.Contains("\"showFilmstrip\"", await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task PdfLayout_RoundTrips()
     {
         string path = Path.Combine(_dir, "layout.json");

@@ -136,7 +136,7 @@ Mavue/
   - `Playback`: `GifPlayer`、`MediaSession`（1 ファイル 1 セッション、UI スレッドにイベント、破棄後のイベントは捨てる）。
   - `DocumentViewer`: App 用のまとめ役。1 度に 1 ファイル。開く・切替・閉じる・破棄で、デコードの取り消し、GIF/動画の停止、ビットマップ・プレーヤー・ファイルの解放を行う。
     表示面の大きさとスケールモードから計画し、リサイズ・モニター変更で作り直す。ズーム・サムネイル・ページ先読みはここに足す。
-- Quick View は表示面・デコード・再生を共有し、段階表示（シェルのサムネイル → 本画像）・先読みキャッシュ・計測などの Quick View 固有の制御は `QuickViewController` に残す。
+- Quick View は表示面・デコード・再生を共有し、段階表示（シェルのサムネイル → 本画像）・先読みキャッシュ・計測などの Quick View 固有の制御は Quick View ホストに残す（2026-10-06 から形式ごとの表示部品に分割: §4.7）。
 
 #### 拡大縮小・回転（2026-10-03）
 
@@ -326,6 +326,295 @@ NativeAOT / ReadyToRun / Release 構成でどこまで縮むかは未計測（�
 | ネットワーク / 低速ドライブ | タイムアウト付き非同期 I/O、プレースホルダ表示を維持 |
 | 仮想フォルダ（ZIP 内・ライブラリ・ごみ箱） | `IShellItem` → `BindToHandler(BHID_Stream)` によるストリームで読み込み（ファイルパスに依存しない） |
 
+### 4.7 Quick View の内部構成と Quick Preview 拡張（2026-10-06、Phase 0）
+
+SPEC §3.1（Quick Preview 拡張）に向けて、1 ファイル 2,439 行に集中していた `QuickViewController` を責務ごとに分割した。
+**動作は変えていない**（タイミングログの項目名・内容、Space → 表示の順序、選択追従、フック、段階表示、先読み、再生、ズームは同じ）。
+例外は §4.7.6 の 4 点（無駄な処理の削除と既存の不具合の修正）。
+
+```
+Mavue.QuickView.Host
+├─ QuickViewController        セッションの調整役: Space / 右クリックの依頼、選択追従（単一・複数・タブ）、フックで取るキー、
+│                             項目の読み込みの流れ（ファイル情報 → 内容へ委譲）、再計画（リサイズ・DPI）、閉じる。形式で分岐しない
+├─ Presentation/QuickViewPresence   ウィンドウの配置・前面化（panel 等）・最前面帯からの離脱・非表示、自動クローズの判定材料
+├─ QuickViewSettingsStore     設定ファイル（開くたびに更新時刻を見て読み直し、PDF の選択を書き戻す）
+├─ QuickViewFileActions       Mavue で開く・プログラムから開く・コピー（将来: 外へのドラッグ、共有）
+├─ Content/                   表示部品（IPreviewContent、1 種類 1 インスタンス、重いものは初回使用時に作る）
+│   ├─ RasterContent          WIC 画像: 段階表示・キャッシュ・先読み・GIF アニメ・PDF の画像表示（PDFium なし時）・ズーム/回転
+│   ├─ SvgContent             SVG（Direct2D）
+│   ├─ PdfDocumentContent     PDFium の文書表示（PdfSession・検索・サイドバー・プレゼンテーション）
+│   ├─ MediaContent           動画・音声（Media Foundation）
+│   ├─ UniversalContent       何でも何かを表示する（Phase 0 は従来のメッセージ。Phase 1 で情報カード）
+│   ├─ SurfaceImageView       画像として描く内容の共通状態（ズーム・回転・表示中の大きさ・表示用ビットマップ）
+│   ├─ PreviewInfoText        情報欄の文字列（メタデータ表示の境界）
+│   └─ PreviewContracts       IPreviewContent・能力インターフェース・IPreviewHost・PreviewServices
+└─ Performance/
+    ├─ ResidentResources      資源上限（性能段階）、非表示後のメモリ返却、異常終了時の自動再起動
+    └─ NeighborPrefetcher     先読み（項目内 → 隣のファイル。`PreviewPrefetchPlan` に従い、それぞれのファイルの表示部品に任せる）
+
+Mavue.QuickView
+├─ Preview/ItemDisplayState       項目が画面に出したもの（内容・最終メッセージ・案内）。「読み込み中」・遅れたサムネイル・前の画像の消去の判定
+└─ Resident/RestartArguments      異常終了後の再起動の引数（`--quickview` 以降を除く）
+
+Mavue.Core
+├─ Viewing/PreviewContentRouting   ファイル情報 → 表示部品の種類（唯一の振り分け。純粋関数）
+├─ Viewing/PreviewResourcePolicy   性能段階と資源上限（High = PoC の実測値、Balanced、Low）
+├─ Viewing/PreviewPrefetchPlan     先読みの順序（次 → 前）・対象（通常のファイル・段階の上限内）・先読みする部品（画像のみ）
+└─ Archives/                        ZIP 等の安全上限（ArchiveLimits）、項目名の検査（ArchiveEntryName）、展開量の計測（DecompressionGuardStream）
+```
+
+#### 4.7.1 表示部品の契約
+
+- `IPreviewContent`: `Kind`、`ShowAsync(PreviewItem, CancellationToken)`、`Reset(ContentReset, reason)`、`OnAreaChanged()`、`HasAuxiliaryWindow`。
+  - `Reset` は**全部品に毎回**呼ぶ（冪等）。`Reload`（同じ項目の再読み込み: 再生だけ止める）、`NewItem`（ズーム・回転・ページを忘れ、文書を閉じる）、
+    `Hidden`（キャッシュと表示用の画素も解放）。前の項目の状態が次の項目に残らないことを構造で保証する。
+- 任意の能力はインターフェースで表す: `IViewTransformContent`（ズーム・回転）、`IPagedContent`（ページ）、`IPlaybackContent`（再生中なら一時停止）、
+  `IAnimatedContent`（Enter のアニメ切替）、`ISelectionContent`（選択のコピー）、`IPrefetchingContent`（項目内・隣のファイルの先読み）。
+  コントローラーは「表示中の部品がその能力を持つか」だけを見る（形式名で分岐しない）。
+- 部品固有のウィンドウ操作（PDF のツール、メディアのキー）は部品自身が購読する。
+- 部品からコントローラーへの要求は `IPreviewHost`（現在の依頼、段階表示の記録、情報欄、ページ操作、同じ項目の再表示、先読み開始）だけ。
+
+#### 4.7.2 形式を追加する手順（拡張点）
+
+1. 必要なら `FileFormat` と `FileFormatDetector` に形式を追加（先頭バイトで判定）。
+2. `PreviewContentKind` に種類を追加し、`PreviewContentRouting.Choose` に 1 行の規則を足す（単体テストで固定）。
+3. `IPreviewContent` を実装した部品を 1 つ作り、`PreviewContentSet` に登録する。重い依存（解析ライブラリ、WebView2 等）は
+   部品の中で初回使用時に作る。.NET のアセンブリは初めて型が使われたときに読み込まれるので、常駐の起動コストは増えない。
+4. 必要な能力インターフェースを実装する（ズーム・ページ・再生・先読み等）。上限は `PreviewResourcePolicy`、アーカイブは `ArchiveLimits` を使う。
+
+| 今後の機能 | 追加する場所 |
+|---|---|
+| Text / Code / Markdown | `TextContent`（`PreviewContentKind.Text`）。色付けは部品の中で、見えている行から |
+| Archive（ZIP） | `ArchiveContent`（`PreviewContentKind.Archive`）。中央ディレクトリの一覧、項目の読み出しは `DecompressionGuardStream`。ZIP 内の画像は `RasterContent` の描画を流用 |
+| HTML | `HtmlContent`（WebView2 の安全境界は部品内に閉じる） |
+| Universal Preview | `UniversalContent`（情報カード）。どの部品も表示できない場合の受け皿 |
+| 動画の軽い操作 UI・ホイールでシーク・波形 | `MediaContent` |
+| ピクセル Inspector・Ctrl なしのホイールズーム | `SurfaceImageView` / `RasterContent`（入力の意味は表示中の部品が決める） |
+| フィルムストリップ・Pin | コントローラー（ナビゲーション）+ UI 部品。Pin は「選択変更を適用しない」状態をコントローラーが持つ |
+| 外へのドラッグ・共有 | `QuickViewFileActions` |
+| EXIF Inspector・共有前チェック | `PreviewInfoText` と専用パネル（読み取りは本体の `FileInformation` と共通） |
+
+#### 4.7.3 別プロセス化の境界
+
+- 各部品は「データを作る層」と「表示する層」に分かれている。データ層（`ImageDecoding`・`PdfRendering`・`GifAnimationReader`・`SvgDimensions`・
+  `FileFacts`、今後の ZIP 一覧・テキスト索引・波形・知覚ハッシュ）は**パスと上限と CancellationToken を受け取り、画素や一覧などのデータを返す**。UI 型に依存しない。
+- 重い処理（類似画像検索、長い音声の波形）や危険度の高い解析は、このデータ層を `Mavue.Worker.exe`（使うときだけ起動、ジョブ オブジェクトでメモリ・CPU 上限、
+  将来 AppContainer / 低 IL）に移す。表示部品の `ShowAsync` から見た契約は変わらない。
+- 表示の速さが最優先の画像・PDF の 1 枚目は、従来どおり常駐プロセス内で処理する（Space → 表示の遅延を増やさない）。
+
+#### 4.7.4 性能（Always Ready, Never Always Working）
+
+- 非表示中に動くものは増やしていない（タイマーなし）。性能段階は Quick View を開くときに再評価し（システム指標 1 回と保持済みの値）、
+  省エネの変化は Windows のイベントで受け取る。
+- 性能段階（`PreviewResourcePolicy`）: High（従来値: キャッシュ 192 MB、前後 2 件、64 MB・4,000 万画素まで先読み、GIF アニメ 800 万画素）、
+  Balanced（128 MB、2,400 万画素）、Low（64 MB、次の 1 件のみ、32 MB・1,200 万画素、GIF 400 万画素）。
+  Low: メモリ 6 GiB 未満・論理プロセッサ 2 以下・省エネ。Balanced: 12 GiB 未満・4 以下・リモート セッション。開発機は High（従来と同じ）。
+- 閉じると全部品の `Reset(Hidden)` でキャッシュ・表示用画素・文書・プレーヤーを解放し、1 秒後に GC（従来どおり）。
+
+#### 4.7.5 セキュリティ
+
+- 異常終了・応答なしの後、Windows（`RegisterApplicationRestart`、60 秒以上動いたプロセスのみ。再起動ループを防ぐ）が常駐プロセスを再起動する。
+  元の引数は引き継ぐが、表示するファイル（`--quickview` とそれ以降）は引き継がない（落ちたファイルを自動で開き直さない）。引数の組み立てとクォートは
+  `Mavue.QuickView.Resident.RestartArguments`（`CommandLineToArgvW` で読み戻して一致することを単体テストで確認。1,023 文字を超える場合は引数なしで再起動）。
+- アーカイブ（Phase 2 で使用）: ディスクに展開しない。一覧は中央ディレクトリから（項目数・ディレクトリの大きさに上限）。項目は実際に展開したバイト数を数え、
+  項目ごと・アーカイブ全体・圧縮率（4 MiB 以降で 200 倍超）で停止。名前は絶対パス・`..`（と `.. `・`...` など点と空白だけの名前。Windows が末尾の点・空白を落とすため）・ドライブ/ADS の `:`・制御文字・予約デバイス名・長さ・深さを検査。
+  入れ子のアーカイブは開かない。上限は `ArchiveLimits`（既定値はコードに記載）。
+- 外部の起動・通信・スクリプト・Mark-of-the-Web の扱いは SPEC §3.1 の要件 4 に従う（PDF のリンクは従来どおり http/https/mailto のみ、クリック時のみ）。
+
+#### 4.7.6 分割に伴う変更点（動作が変わるもの）
+
+1. PDFium の文書表示中に、Windows.Data.Pdf で前後ページを先読みしていた（文書表示はその画像を使わない＝無駄な描画とキャッシュ消費）。先読みは表示中の部品が
+   自分の分だけ行うようにしたため、文書表示ではこの描画をしない。
+2. 隣の SVG を WIC でデコードしようとして失敗していた先読み（SVG は WIC で読めない）をしない。
+3. 矢印キー等で次の項目へ移ったとき、表示できない旨のメッセージ（非対応・壊れたファイル・ファイルではない）が 120 ms 以内に出ると、
+   「前の画像を消す」処理がそれを「読み込み中」で上書きしていた。さらに（分割前から）画像として扱うファイルでは、デコーダーの「非対応・破損」が
+   シェルのサムネイル取得より先に終わると、後から届いた「サムネイルなし」が「読み込み中」で上書きしていた（実機で毎回発生: 2026-10-29 の E2E
+   `message-not-replaced`）。クラウドのみのファイルでも同じく「読み込み中」が残った。項目ごとの表示状態を `ItemDisplayState`（`Mavue.QuickView.Preview`）に
+   まとめ、最終メッセージを出した時点で記録し、その項目のサムネイル・「読み込み中」・前の画像の消去が上書きしないよう修正（クラウドの案内はサムネイルのみ許可）。
+4. 動画・音声・メッセージを表示したとき、前の画像の表示用ビットマップをすぐ解放する（従来は次の画像表示か非表示まで保持）。
+
+#### 4.7.7 Phase の順序（2026-10-06 承認、ZIP の優先度を上げた）
+
+| Phase | 内容 |
+|---|---|
+| 0 | 本節の分割・振り分け・資源上限と性能段階・自動再起動・アーカイブの安全上限（完了。2026-10-29 にテストと回帰確認: TESTING.md「Quick Preview Phase 0 のテストと回帰確認」） |
+| 1 | Ctrl なしのホイールズーム（設定）・吸着、ピクセル Inspector、フィルムストリップ、Pin（現在の Quick View を固定）、外へのドラッグ（既定はコピー）、Universal Preview（2026-10-29: ホイールズーム以外の 5 項目を実装・テスト。§4.7.8） |
+| 2 | ウィンドウのデザイン（2026-10-29 利用者の指示で ZIP と入れ替え。前提と改善点は §4.7.9） |
+| 3 | ZIP（一覧・ZIP 内画像・前後移動）（2026-10-30 実装。§4.7.10）。利用者の指示で Phase 4 の動画・音声もまとめて実装（§4.7.11） |
+| 4 | 動画（軽い操作 UI、ホイール ±5 秒、Shift+ホイール ±30 秒）、音声の波形（2026-10-30 に Phase 3 とまとめて実装。§4.7.11） |
+| 5 | テキスト・コード（色付けライブラリは選定のうえ）・Markdown（XAML 直接描画） |
+| 6 | HTML（WebView2 の安全境界）、EXIF Inspector、共有前チェック・メタデータを除いたコピー |
+| 7 | 類似画像検索（別プロセス） |
+| 8 | 統合テスト・性能テスト・長時間テスト |
+
+#### 4.7.8 Phase 1 の設計（2026-10-29、実装前に整理）
+
+利用者の指示（2026-10-29）で、Phase 1 のうち次の 5 項目を先に実装する: ピクセル Inspector、フィルムストリップ、Pin、外へのドラッグ、Universal Preview の基盤。
+Ctrl なしのホイールズーム（F03.31）は今回の対象外（Planned のまま）。既存の Ctrl+ホイール（カーソル中心）は変更しない。
+
+共通の約束（SPEC §3.1 要件 1〜7）:
+
+- 常駐中（非表示）は何もしない。新しい処理はすべて「Quick View が表示中」かつ「その機能が表示中」のときだけ動き、項目の切り替え・非表示で取り消す。
+- メインのプレビューを最優先する。フィルムストリップの読み込みは表示中の項目が出た後に始め、メインのサムネイル取得とは別のスレッドで行う。
+- 重い処理（原寸タイルのデコード、サムネイル抽出、フォルダー内の件数）は UI スレッドの外で、取り消し可能・上限付き。
+- 画像を邪魔しない: フィルムストリップ・Inspector は既定で非表示（ボタンとキーで切替、選択は設定に保存）。Inspector は小さなパネルを画像の隅に重ねる。
+- 判断ロジックは純粋関数として Core / Mavue.QuickView に置き、単体テストで固定する。ホストは UI と配線だけ。
+
+| 機能 | 純粋ロジック（テスト対象） | データ層 | ホスト（UI と配線） | 拡張点 |
+|---|---|---|---|---|
+| ピクセル Inspector（F03.29） | `Core.Viewing.PixelInspection`: 画面上の位置 → 表示中の画像の画素（ズーム・表示回転の逆変換）→ ファイル内の画素（EXIF 回転の逆変換）、タイルの範囲、HEX/RGB/Alpha の表記 | `Image.Wic.WicPixelReader`: 原寸のタイル（既定 256×256）1 枚だけを WIC で読み、BGRA（ストレート α）で返す。スケーラーなし・色変換なし（ファイルの値） | `Content/PixelInspector`: 表示面のポインター追跡、隅のパネル、タイル 1 枚のキャッシュ、移動の間引き。表示中の部品が `IPixelSourceContent` を持つときだけ有効（現在は `RasterContent`。GIF アニメ再生中・PDF・SVG・動画は対象外） | PDF ページ・SVG は `IPixelSourceContent` を実装すれば対応できる。色管理後の値の表示は表記側に追加 |
+| フィルムストリップ（F03.28） | `QuickView.Preview.FilmstripWindow`: Explorer のビュー順の範囲（現在の項目の前後 N 件）、再読み込みが要る位置、表示する項目とその番号 | `ExplorerViewSession.ReadItems`（`IFolderView2` の範囲取得）、`SelectItem`。サムネイルは専用の STA スレッドで Windows のキャッシュ → ローカルのファイルだけ抽出（クラウドのみのファイルは抽出しない）→ 種類のアイコン | `Presentation/FilmstripBar`: 情報バーの上の帯（仮想化した横並び）、見えている項目だけサムネイルを要求、件数上限付きのサムネイル キャッシュ（非表示で破棄） | 複数選択時は選択された項目を表示。比較表示・Pin 一覧への発展は同じ帯の項目の種類を増やす |
+| Pin（F03.45） | `PreviewNavigator.IsPinned`: 固定中は Explorer の選択変更を適用しない（ナビゲーターの状態の一部） | — | コントローラー: 固定中は他のアプリへの切替・Explorer の終了で閉じない、フックで Explorer のキーを奪わない（←/→・PageUp/PageDown）。Space・Esc・閉じるボタンでは閉じる。フィルムストリップのクリックは固定中も Quick View 内で移動する（Explorer の選択は変えない） | 複数 Pin: 固定したセッション（ナビゲーター＋表示部品＋ウィンドウ）を 1 単位とし、Space で新しい Quick View を開く形へ拡張できる |
+| 外へのドラッグ（F03.44） | `Core.Viewing.DragOutPolicy`: ドラッグできる項目（通常のファイルのみ）と許可する操作（コピーのみ。移動は許可しない） | — | `QuickViewFileActions.PrepareDrag`: WinUI の `DragStarting` でファイルを渡す（読み取り専用）。ドラッグ元は情報バーのファイル名の領域（常に）と、パンできないときの画像 | 共有（Windows の共有）・メタデータを除いたコピー（Phase 6）は同じ場所に追加 |
+| Universal Preview（F03.40） | `Core.Viewing.UniversalFileInfo`: 種類の分類（アイコン）、MIME、Mark-of-the-Web（`Zone.Identifier` の解析）、表示する項目。振り分け: 内容が判定できず拡張子が文書・アーカイブ・プログラム等なら `PreviewContentRouting` が直接 Universal へ | `UniversalFileInfo.Read`（System.IO と ADS の読み取りのみ。ファイルの内容は読まない）、種類の名前は `AssocQueryString` | `Content/UniversalContent`: 情報カード（種類のアイコン・名前・種類・サイズ・日時・MIME・属性・Web から取得）。画像として読めなかったファイルもこのカードにメッセージ付きで表示。フォルダーは項目数を上限付きで後から数える | テキスト・ZIP 等の部品は、表示できないときにこのカードへ戻す |
+
+実装時の決定と結果（2026-10-29）:
+
+- 表示部品からカードへの切り替えは `IPreviewHost.ShowInfoCardAsync`（`RasterContent` の「非対応・破損」と、コントローラーの例外時）。メッセージは従来どおり即座に出し（`ItemDisplayState.MarkMessage`）、カードが届いたら置き換える。
+- Pin 中の Space（Explorer）は従来どおり閉じる（「Space で開閉」を崩さない）。Explorer 上の Esc は Explorer のもの（閉じない）。
+- 新しいボタンはキーボード フォーカスを取らない（Space/Esc が Quick View に残る）。キー: F（フィルムストリップ）・I（Inspector）・P（Pin）は Quick View がアクティブなときだけ。
+- E2E で見つけた不具合: Quick View のボタン（フィルムストリップ・Pin）をクリックすると、前面ウィンドウとして Quick View の子ウィンドウが通知され、
+  「他のアプリに切り替わった」と判定して閉じていた。前面ウィンドウのルートが Quick View 自身か、同じプロセスのウィンドウなら閉じないよう修正。
+- 情報カードの値は UI オートメーション名（「項目名: 値」）で読み上げる。後から変わる値（フォルダーの項目数）は名前も更新する。
+- 外へのドラッグ（2026-10-29 実機確認で変更）: ドラッグ開始はホストが判定する（左ボタンで押してシステムのドラッグ距離 SM_CXDRAG/SM_CYDRAG を超えたら
+  `UIElement.StartDragAsync`）。画像は拡大してパンできるときはパンを優先。データは WinUI の `DataPackage`（読み取り専用の StorageItems、許可はコピーのみ）。
+  Explorer と同じシェルのデータ オブジェクト＋`SHDoDragDrop` も試したが、WinUI はプロセス全体で mouse-in-pointer を有効にする（実測 `IsMouseInPointerEnabled = true`）ため
+  ドラッグ ループがボタンを離したことを受け取れず使えない。別プロセスで行う案は起動に約 1 秒かかり、ボタンを離した後の次のマウス移動でドロップされる危険があるため不採用。
+  結果: Explorer・Edge・WinForms アプリ・Word（Office サインイン時）へはコピーされる。ペイント（Windows 11）は WinUI のドラッグを受け付けない
+  （Explorer からのドラッグは受け付ける。コピー/移動/リンクをすべて許可しても受け付けないことを実験で確認）。残課題。
+
+#### 4.7.9 Quick Preview の UI 構成と Phase 2（デザイン）の改善点（2026-10-29 整理）
+
+Phase 2 の前提（利用者の指示）: 画像を主役にする。タイトルバーと背景を macOS Preview のように統一する。Windows 11 の Mica / Acrylic は控えめに使う。
+透明感で画像の色を邪魔しない。
+
+現在の構成（Phase 1 時点）:
+
+```
+┌ システムのタイトルバー: 「<ファイル名> – Mavue クイックビュー」 ─────────── □ × ┐   OverlappedPresenter（最小化なし）、アプリのテーマに追従
+├ Row0 SearchHost（PDF の検索バー。通常は非表示） ─────────────────────────┤
+├ Row1 ┌SidebarHost(PDF 232)┐┌ SurfaceHost: ViewerSurface（余白 12、画像/動画/文書/メッセージ） ┐ │   背景 #1E1E1E（ダーク）/#F3F3F3（ライト）、単色
+│      │                    ││  + CardHost（情報カード）+ InspectorPanel（左下/右下に重ねる）  │ │
+├ Row2 FilmstripHost（88 DIP、既定オフ） ─────────────────────────────────┤   #181818
+├ Row3 InfoBar: [ファイル名＋情報（ドラッグ元）]  [PDF ツール][ページ][－ % ＋ 回転][帯 Insp Pin][開く][Mavue で開く] ┤   #181818
+└──────────────────────────────────────────────────────────┘
+ウィンドウ: 常駐中に 1 枚だけ作成し、非表示は DWM のクローク。Explorer のモニターの作業領域の 70%×75%。Mica なし（最初のフレームの速さと、E2E の「画像が出た」判定の基準色 #1E1E1E のため）。
+```
+
+改善点（スクリーンショットと実装からの整理）:
+
+| # | 現状 | 改善の方向 |
+|---|---|---|
+| 1 | タイトルバー（上）と操作（下）が分かれ、ファイル名が 2 か所に出る | `ExtendsContentIntoTitleBar` でタイトルバーと操作を上部の 1 本のバー（約 40〜48 DIP）に統合（macOS Preview / Quick Look と同じ配置）。ファイル名は 1 か所（ドラッグ元も兼ねる）。キャプション ボタンは背景を透明にして同じ面に置く。ボタン部分は `InputNonClientPointerSource` でクリック可能領域に |
+| 2 | 面の色が 3 種類（システムのタイトルバー・#1E1E1E・#181818）で統一感がない | 「操作の面」（上部バー・フィルムストリップ）と「画像の舞台」の 2 層に整理。操作の面だけに Mica（Base Alt を第一候補）を控えめに使い、画像の舞台は不透明なニュートラル色のまま（壁紙の色が画像の周りに混ざらない） |
+| 3 | 操作が最大 13 個並ぶ（PDF）。アイコンと文字ボタン（Mavue で開く）が混在。フィルムストリップのアイコン（E786）が動画風で意味が伝わりにくい | 主要操作だけをアイコンで（ズーム・回転・Pin・フィルムストリップ・Inspector・共有/開く）、他は「…」メニューへ。アイコン 16px・当たり判定 32×32・ツールチップにショートカット。アイコンを見直す |
+| 4 | 下部の情報行（種類・寸法・サイズ）が常に高さを使う | 上部バーの副題（小さな文字）に統合し、画像の舞台を広げる。ページ番号などは内容に応じて上部バーへ |
+| 5 | 透明部分がウィンドウの背景色で塗られる（半透明の青が濃紺に見える） | 画像の範囲内だけに控えめなチェッカーボード（SPEC §5「Transparency checkerboard」と共通）。舞台の色はそのまま |
+| 6 | 色をコードで直接指定（ライト/ダーク切替は `ApplyTheme`）。ハイコントラスト未対応 | テーマ リソース（ThemeDictionaries: Default/Light/HighContrast）に移す。ハイコントラストでは背景効果なし・システム色 |
+| 7 | Inspector パネル・情報カード・フィルムストリップが個別のスタイル | 共通のカード スタイル（角丸・境界線・文字サイズ）に揃える。画像の上に重ねるもの（Inspector）はぼかしを使わず半透明の単色（画像の見え方を変えない） |
+| 8 | ボタンはタブ移動できない（Space/Esc を Quick View に残すため） | F6 で上部バーへフォーカス、Esc で戻る。Space/Esc の意味は変えない |
+| 9 | ウィンドウは常に作業領域の 70%×75%。小さい画像は大きな暗い枠の中に浮く | （要判断）画像の縦横比と大きさに合わせてウィンドウを決める（macOS Quick Look 方式、上限・下限あり）か、現状の固定サイズか |
+
+背景効果の扱い（Mica / Acrylic を控えめに）:
+
+- 画像の舞台の後ろには背景効果を置かない（色の判断を妨げない）。Acrylic（ぼかし）は使わないか、メニュー等の一時的な面だけ。
+- 透明効果オフ・省エネ・リモート デスクトップ・ハイコントラスト・性能段階 Low では単色に切り替える（Mica は OS 側でも自動で単色になる）。
+- 背景効果の準備は事前描画（prewarm）で済ませ、Space → 表示の遅延を増やさない。Phase 2 の受け入れ条件: E2E の表示 21/21 と Space → 表示呼び出し・最初のフレーム・フル品質の時間が現状と同等、常駐時のメモリが同等。
+- E2E は画像の舞台の色（#1E1E1E）を基準に「画像が出た」を判定しているため、舞台の色を変える場合はハーネスも同時に更新する。
+
+利用者の判断が必要な点: ウィンドウの大きさ（固定か画像に合わせるか）、チェッカーボードの既定（オン/オフ）、下部情報行を残すか、Mica と Mica Alt のどちらを基調にするか。
+
+決定（2026-10-30）: ウィンドウは**固定サイズ**（作業領域の 70%×75%）、チェッカーボードは**既定オン**（利用者）。下部情報行は上部バーへ統合、背景は **Mica（Base）**
+（壁紙の色の影響が Mica Alt より小さい。推奨どおりで進めた）。
+
+Phase 2 の実装（2026-10-30）:
+
+```
+┌ Windows のタイトルバー（ファイル名。カスタマイズしない） ─────────────── □ × ┐ ┐ Mica（同じ面に見える）
+├ ツールバー（44 DIP）: [📄 種類・寸法・サイズ（ドラッグでコピー）]   [PDF ツール│][◀ 3/10 ▶│][－ 100% ＋ 回転│][帯 スポイト 固定│][Mavue で開く][…] ┤ ┘
+├ PDF の検索バー（必要な時だけ） ─────────────────────────────────────────┤
+├ 画像の舞台（不透明 #1E1E1E / #F3F3F3）: サイドバー｜表示面＋情報カード＋Inspector（角丸 8 の不透明カード、ぼかしなし） ┤
+└ フィルムストリップ（88 DIP、Mica。既定オフ） ─────────────────────────────┘
+```
+
+- **タイトルバーは Windows 標準のまま**（ファイル名を表示）。その下のツールバーと Mica で 1 つの帯に見せる。下部の情報行はツールバーの左（ファイルの
+  アイコン＋種類・寸法・サイズ。ドラッグ元）へ移し、ファイル名の重複をなくした。
+  - 計測（2026-10-30、Release、Space → 表示の内訳の show-call → shown の中央値）: 標準のタイトルバー＋Mica 3.6〜3.8 ms（RC 0.1.0 も 3.7 ms）、
+    `ExtendsContentIntoTitleBar` 13.8 ms、キャプション ボタンの色の変更（`AppWindowTitleBar.Button*Color`）13.5 ms、タイトルバーなし
+    （`SetBorderAndTitleBar(true, false)`）10.8 ms。フレームを変える方法はどれも表示のたびに約 10 ms 遅くなるため採用しない
+    （「Space → 表示の遅延を悪化させない」SPEC §3.1 要件 1）。Mica は遅延に影響しない。
+- 画像領域の計算は「クライアント領域 − ツールバー 44 − 検索 − フィルムストリップ − 余白」。E2E の「計算した領域と XAML のレイアウトが一致」で確認。
+- 色: ウィンドウのテーマ辞書（Default=ダーク/Light/HighContrast）。コードでの色指定をやめ、`ApplyTheme` はテーマの切替だけ。
+  ハイコントラストの切替は `UISettings.ColorValuesChanged` で受ける（`AccessibilitySettings.HighContrastChanged` は CoreWindow のないアプリで購読できず、
+  0x80070490 で起動時に例外。実機で発見し修正。未処理例外の記録に HRESULT と呼び出し元のメソッド名を追加）。
+- 背景効果: `MicaBackdrop`（Kind=Base）を起動時に設定（事前描画に含まれる）。性能段階 Low・ハイコントラストでは `SystemBackdrop = null` で単色。
+  Quick View は多くの場合アクティブにせず表示するため、Windows の仕様で Mica は非アクティブ表示（単色に近い）。壁紙なしの本機ではバーは #202020、
+  舞台は #1E1E1E（実測）。計測用に `--no-backdrop`。
+- 市松模様: `ViewerSurface` の `TransparencyGrid`（行ごとに繰り返しグラデーションの矩形 1 つ。セル 8 DIP）。透明になり得る形式・明示的な画像の大きさ・画像が
+  設定済みのときだけ表示（不透明な画像では作らない、画像より先に模様だけが出ることはない）。「…」メニューで切替、設定 `showTransparencyGrid`（既定 true）。
+- キーボード: F6 でツールバーの最初のボタンへ（その間だけタブ移動可、Tab で循環）、Esc で内容へ戻る（閉じない）。Space/Esc の通常の意味は変えない。
+- アイコン: フィルムストリップ E7AA（写真の束）、Inspector EF3C（スポイト）、固定 E718 → 固定中 E841（塗り）、「Mavue で開く」E8A7、その他 E712、
+  ファイル E7C3。「プログラムから開く」は「…」メニューへ。
+- 未確認: ライト テーマ・ハイコントラストの実機表示（利用者のシステム設定を変えないため）、壁紙のある環境での Mica の見え方。
+
+#### 4.7.10 ZIP Preview（Phase 3、2026-10-30）
+
+展開せずに中身を見る。SPEC §3.1 要件 5（中央ディレクトリから一覧、項目はオンデマンド、名前とサイズを信用しない、安全に表示できなければ理由を示して
+Quick View は動き続ける）に従う。
+
+```
+Mavue.Core.Archives（データ層: パス・上限・CancellationToken → 一覧・バイト列。UI 型に依存しない＝将来 Mavue.Worker.exe へ移せる）
+├─ ZipDirectory      末尾 64 KiB から終端レコード → ZIP64 ロケーター/終端 → 中央ディレクトリだけを読む。項目数・ディレクトリの大きさは
+│                    読む前に ArchiveLimits と比較。先頭に別データがある ZIP（自己解凍形式）はずれを補正。分割 ZIP は「分割の一部」として拒否
+├─ ZipEntryReader    1 項目をメモリへ展開（ディスクに書かない）。暗号化・未対応の圧縮方式（stored/deflate 以外）は理由付きで拒否。申告サイズが
+│                    上限超・申告の圧縮率が異常なら読む前に拒否。実際の展開量は DecompressionGuardStream で数え、最後にサイズと CRC-32 を照合
+├─ ArchiveTree       フォルダー構造（暗黙のフォルダーを補う）、フォルダー優先・自然順（2 < 10）、ZIP 内画像の列（自然順）、集計（警告用）
+├─ ArchiveEntryName  名前の検査（絶対パス・..・ADS・制御文字・予約名・長さ・深さ、**双方向制御文字**（"photo[U+202E]gpj.exe" 型の偽装）を追加）と表示用の置換
+└─ Crc32             slice-by-8
+
+Mavue.QuickView.Host/Content/ArchiveContent（表示部品、PreviewContentKind.Archive）
+├─ 一覧モード        1 フォルダーずつ ListView（仮想化、行は ContainerContentChanging で埋める）。見出し: 名前・件数・展開後/圧縮時の合計（申告値）、
+│                    「画像を表示（N 枚）」。警告: インターネットから取得（Mark-of-the-Web）・安全でない名前・異常な圧縮率・暗号化・未対応方式・入れ子
+├─ 画像モード        ZIP 内画像を 1 件ずつ読み、ヘッダーの寸法から表示サイズを決めてデコード（WinRT BitmapDecoder、色管理あり）。ズーム・回転は通常の画像と同じ
+│                    （SurfaceImageView を共有）。前後の画像は性能段階の範囲で先読み（読み取り量はアーカイブ単位で MaxTotalBytes まで）、表示済みはキャッシュ
+└─ キー              一覧: Enter/ダブルクリックで開く、Backspace で上へ、Space/Esc は閉じる。画像: PageUp/PageDown（Explorer から、フック）・ホイール・
+                     ページ ボタン・←/→/Home/End（Quick View がキーボードを持つとき）で前後、Backspace で一覧へ
+```
+
+- **対象**: 拡張子 .zip と .cbz（`FileFormat.Zip`）。Office 文書・JAR・EPUB 等の ZIP 形式のファイルは従来どおり情報カード（中身の署名では判定しない）。
+  .cbz は最初から画像モード。クラウドのみのファイルは読まない（一覧は末尾にあるため読むとダウンロードされる）→ 情報カード。
+  `ViewerFormats` には加えない（ZIP の関連付け・Explorer のプレビュー/サムネイル登録は行わない。Space は全ファイルで動作）。
+- **名前の文字コード**: UTF-8 フラグ・Info-ZIP Unicode Path（CRC 一致時）を優先。フラグのない名前は、全件が UTF-8 として正しければ UTF-8
+  （macOS 等）、次に OEM コードページ（日本語 Windows は CP932。Explorer と同じ）で全件読めればそれ、最後に CP437。
+- **安全**: ディスクに書かないので Zip Slip は起きない（名前は表示にだけ使い、危険な名前は最上位に全体名で警告付き表示、画像列にも入れない）。
+  入れ子のアーカイブは開かない。ZIP 内からは実行・外部起動・通信をしない。展開爆弾は申告値で一覧に警告、表示時に読む前に拒否、申告を偽った
+  場合も実測で停止（単体テスト）。上限は `ArchiveLimits`（項目 20 万・ディレクトリ 64 MiB・1 項目 256 MiB・圧縮率 200 倍（4 MiB 以降））。
+  利用者が開く 1 件ごとに 1 項目の上限、Quick View が自分で行う先読みはアーカイブ単位の合計（1 GiB）で打ち切る。
+- **性能**: Space → 表示は「読み込み中」→ 一覧。一覧の読み取りは別スレッド（取り消し可）。行は表示中の分だけ作る。最後に読んだ項目のバイト列
+  （64 MiB 以下）だけ保持し、ズーム・回転・リサイズで再展開しない。閉じる・別ファイルでセッション・キャッシュを解放。
+- **計測項目**（タイミング ログ）: `archive-listed`（件数・警告数・文字コード・MotW ゾーン・一覧の所要時間）、`archive-list`、`archive-folder`、
+  `archive-image`（位置・方式・サイズ）、`full-set`（`archiveIndex`）、失敗は `full-skipped` の reason（`archive-Damaged` 等、`entry-limit-*`、`entry-Encrypted` 等）。
+- **未対応**（残課題）: ZIP 内の画像以外の内容（テキスト等は Phase 5 の部品ができたら同じ仕組みで表示可能）、暗号化 ZIP のパスワード入力、
+  Deflate64/LZMA/bzip2/Zstandard、7z/RAR/TAR（形式ごとに読み取り部を足す。`ArchiveTree` 以降は共通）、ZIP 内の項目のドラッグ/コピー、
+  ZIP 内画像のフィルムストリップ。
+
+#### 4.7.11 動画・音声の軽い操作 UI・ホイールでシーク・波形（Phase 4 分、2026-10-30）
+
+- **軽い操作 UI**（`MediaOverlay`）: Quick View では MediaTransportControls を使わず（`ViewerSurface.UseOwnMediaControls`。本体は従来の操作バーのまま）、
+  下部に 1 本のバー（再生/一時停止・現在位置・シーク スライダー・長さ・ミュート）。動画の再生中はポインターが 2.5 秒止まるとバーが消え、
+  移動・ホイールで戻る（映像を邪魔しない）。ボタンはキーボード フォーカスを取らない（Enter・Ctrl+矢印・Space・Esc の意味を保つ）。最初のメディアで作る。
+- **ホイールでシーク**: 動画・音声の上でホイール 1 段 ±5 秒（上＝進む）、Shift+ホイール ±30 秒、長さの範囲に収める。タッチパッドの細かい量は
+  1 段分たまってから（`MediaControlMath.WheelSeek`）。シークは常に 1 件: 実行中の要求は最新だけを保持し、完了（`SeekCompleted`）で次を実行。
+  完了が届かない場合も 1 秒で解除（`MediaSession.RequestSeek`）。Ctrl+ホイールは従来どおり（メディアではズームなし）。
+- **音声の波形**（`AudioWaveformReader`、Mavue.Viewer）: Media Foundation の Source Reader（再生と同じデコーダー）で float PCM に変換し、
+  1,024 区間のピーク値だけを保持（メモリは区間数に比例、ファイルの長さによらない）。20 秒を超える音声はまず 128 か所を少しずつ読む概形
+  （1 秒未満）→ 先頭から全体を読んで精密化（0.25 秒ごとに描画を更新）。2 時間を超える音声は概形のみ。再生開始後に優先度の低い専用スレッドで
+  実行し、別ファイル・閉じるで取り消し。描画は WriteableBitmap（2 px の棒、再生済み部分は明るい色を位置でクリップ）。クリック/ドラッグでシーク。
+  別プロセス化（長い音声）は Mavue.Worker.exe ができた段階で（§4.7.3 の境界: パス・長さ・取り消し → ピーク配列）。
+- 位置の表示は再生中のファイルがある間だけ 200 ms ごとに更新（非表示・別ファイルで停止。常駐中は何も動かない）。
+- 計測項目: `media-wheel-seek`（stepMs・targetMs）、`media-seek`（slider/waveform）、`media-mute`、`media-command` に source（key/button）、
+  `audio-waveform`（exact/coarse/unavailable・所要時間）。
+
 ---
 
 ## 5. 描画パイプライン
@@ -479,4 +768,5 @@ Windows 11 で以下を実現するには**パッケージ ID**が必要:
 | ADR-18 | Quick View の画像領域は XAML のレイアウトではなく `AppWindow.ClientSize` と `GetDpiForWindow` から計算。表示サイズの設定は開くたびに設定ファイルを読み直す（その場の切替 UI は置かない） | 拡大率の違うモニターへ移るとき、配置後に Windows が DPI 変更でウィンドウを再リサイズし、レイアウトが古いままの値でデコードしていた（3 モニターで実測）。切替 UI はユーザー要望で設定画面に移す | 採用 |
 | ADR-20 | Windows 11 上段メニューは `IExplorerCommand`（C++ の最小 DLL）+ 署名済み識別パッケージ。DLL は Explorer に `Mavue.QuickView.Host.exe --quickview` を起動させるだけで、ホストにはパッケージ ID を付けない | 代理プロセスから起動すると前面に出られず（TeraCopy で実測）、パッケージのコンテナ内で動く（VS Code issue）。Explorer に起動させると前面化の権利を持ちコンテナ外で動く（実測）。既存の `--quickview` → パイプ経路と表示・追従ロジックをそのまま使える | 採用（実装・実機確認済み） |
 | ADR-19 | 右クリック「Mavue Quick View」は、まず HKCU の従来メニュー（SystemFileAssociations の動詞 → `--quickview` → 名前付きパイプ）で提供。常駐プロセスはそのファイルを選択中の Explorer ビューを読み、Space と同じ表示・追従に合流する | 上段メニューはパッケージ ID とネイティブ DLL が必要で、Build Tools（管理者インストール）待ち。動詞は 1 ファイル 1 プロセスで起動されるが、選択を読めば最初の 1 件で全体を表示できる（実測） | 採用（上段メニューは後続） |
+| ADR-21 | Quick View の内容は形式ごとの表示部品（`IPreviewContent`）に分け、ファイル情報からの振り分けは `PreviewContentRouting` の 1 か所だけにする。コントローラーは形式で分岐しない | 機能追加のたびに 1 つのクラスへ分岐と状態が集中し（2,439 行）、性能・品質を保てなくなるため。部品単位で別プロセス化・資源制限ができる | 採用（2026-10-06、§4.7） |
 | ADR-14 | 他の Space プレビューツールとの共存: 既定は Mavue 優先（フック再設置で先頭を維持）、設定で譲る | QuickLook は Space を流すため、後から起動した側が先に呼ばれ二重表示（実測 3/3） | 採用（既定値はユーザー確認事項） |

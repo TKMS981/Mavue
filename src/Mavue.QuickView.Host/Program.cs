@@ -21,10 +21,14 @@ internal static partial class Program
     /// <summary>Foreground window when this process started (the Explorer window a context-menu command came from).</summary>
     internal static nint StartupForeground { get; private set; }
 
+    /// <summary>Command-line arguments of this process (kept for a restart after a crash).</summary>
+    internal static IReadOnlyList<string> Arguments { get; private set; } = [];
+
     [STAThread]
     private static int Main(string[] args)
     {
         StartupForeground = NativeMethods.GetForegroundWindow();
+        Arguments = args;
         HostOptions options = HostOptions.Parse(args);
 
         if (options.Registration != RegistrationCommand.None)

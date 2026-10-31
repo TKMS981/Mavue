@@ -103,6 +103,9 @@ internal sealed record HostOptions
     /// <summary>Render the hidden window once at startup so the first Space does not pay XAML/DWM setup.</summary>
     public bool Prewarm { get; init; } = true;
 
+    /// <summary>Measurement: no Mica behind the chrome (solid colors), to compare the cost of the backdrop.</summary>
+    public bool NoBackdrop { get; init; }
+
     public OtherQuickLookPolicy OtherQuickLook { get; init; } = OtherQuickLookPolicy.Prefer;
 
     /// <summary>Also react to Space in Open/Save dialogs.</summary>
@@ -200,6 +203,9 @@ internal sealed record HostOptions
                     break;
                 case "--no-prewarm":
                     options = options with { Prewarm = false };
+                    break;
+                case "--no-backdrop":
+                    options = options with { NoBackdrop = true };
                     break;
                 case "--include-dialogs":
                     options = options with { IncludeFileDialogs = true };

@@ -19,7 +19,17 @@ public sealed record BgraImage(int Width, int Height, byte[] Pixels);
 public static partial class ShellThumbnail
 {
     /// <summary>Returns the cached thumbnail closest to <paramref name="maxSize"/>, or null if none is cached.</summary>
-    public static BgraImage? TryGetCached(string path, int maxSize)
+    public static BgraImage? TryGetCached(string path, int maxSize) =>
+        GetImage(path, maxSize, ShellNative.SIIGBF_THUMBNAILONLY | ShellNative.SIIGBF_INCACHEONLY | ShellNative.SIIGBF_BIGGERSIZEOK);
+
+    /// <summary>
+    /// The icon Windows shows for the file's type (never a thumbnail: nothing is extracted and cloud files are not
+    /// downloaded). For the filmstrip when no cached thumbnail exists.
+    /// </summary>
+    public static BgraImage? TryGetIcon(string path, int maxSize) =>
+        GetImage(path, maxSize, ShellNative.SIIGBF_ICONONLY | ShellNative.SIIGBF_BIGGERSIZEOK);
+
+    private static BgraImage? GetImage(string path, int maxSize, int flags)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
         if (ShellNative.SHCreateItemFromParsingName(path, 0, ShellNative.IidOf<IShellItemImageFactory>(), out nint factoryPointer) < 0)
@@ -31,7 +41,6 @@ public static partial class ShellThumbnail
         try
         {
             var size = new NativeSize { Width = maxSize, Height = maxSize };
-            int flags = ShellNative.SIIGBF_THUMBNAILONLY | ShellNative.SIIGBF_INCACHEONLY | ShellNative.SIIGBF_BIGGERSIZEOK;
             if (((IShellItemImageFactory)factoryObject).GetImage(size, flags, out nint bitmap) < 0 || bitmap == 0)
             {
                 return null;

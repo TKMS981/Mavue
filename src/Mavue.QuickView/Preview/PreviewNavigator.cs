@@ -33,6 +33,9 @@ public enum NavigationAction
 
     /// <summary>Single mode with Quick View focused: ask Explorer to move its selection by <see cref="NavigationResult.Delta"/>.</summary>
     MoveExplorerSelection,
+
+    /// <summary>Single mode, not pinned: ask Explorer to select <see cref="NavigationResult.Path"/> (it comes back as a selection change).</summary>
+    SelectInExplorer,
 }
 
 /// <summary>Outcome of a navigation step.</summary>
@@ -65,6 +68,53 @@ public sealed class PreviewNavigator
     /// <summary>Items Quick View can step through (the selection in display order).</summary>
     public IReadOnlyList<string> Items => _items;
 
+    /// <summary>
+    /// Pinned: the preview no longer follows Explorer's selection (SPEC §3.1 requirement 7). Navigation inside Quick View
+    /// (←/→ in a multi-selection, the filmstrip) still works. Cleared when Quick View closes.
+    /// </summary>
+    public bool IsPinned { get; private set; }
+
+    /// <summary>Pins or unpins what is shown; nothing happens while nothing is shown.</summary>
+    /// <returns>True when the state changed.</returns>
+    public bool SetPinned(bool pinned)
+    {
+        if (Mode == NavigationMode.None || pinned == IsPinned)
+        {
+            return false;
+        }
+
+        IsPinned = pinned;
+        return true;
+    }
+
+    /// <summary>
+    /// Goes to <paramref name="path"/>, chosen inside Quick View (the filmstrip). In a multi-selection that contains it,
+    /// or while pinned, Quick View shows it directly (Explorer's selection is not changed); otherwise Explorer is asked
+    /// to select it and Quick View follows as usual.
+    /// </summary>
+    public NavigationResult GoTo(string path)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(path);
+        if (Mode == NavigationMode.None || PathComparer.Equals(path, Current))
+        {
+            return NavigationResult.Nothing;
+        }
+
+        int index = IndexOf(_items, path);
+        if (Mode == NavigationMode.MultipleItems && index >= 0)
+        {
+            return MoveTo(index);
+        }
+
+        if (IsPinned)
+        {
+            Adopt([path], 0); // pinned: show the chosen file without touching Explorer
+            return new NavigationResult(NavigationAction.Show, Current);
+        }
+
+        return new NavigationResult(NavigationAction.SelectInExplorer, path);
+    }
+
     /// <summary>Starts from the selection at the moment Space was pressed.</summary>
     /// <param name="selection">Selected paths in display order.</param>
     /// <param name="focused">Path of the focused item, if any.</param>
@@ -86,9 +136,9 @@ public sealed class PreviewNavigator
     public NavigationResult OnSelectionChanged(IReadOnlyList<string> selection, string? focused)
     {
         ArgumentNullException.ThrowIfNull(selection);
-        if (Mode == NavigationMode.None)
+        if (Mode == NavigationMode.None || IsPinned)
         {
-            return NavigationResult.Nothing;
+            return NavigationResult.Nothing; // pinned: Explorer's selection is not followed
         }
 
         if (selection.Count == 0)
@@ -128,7 +178,8 @@ public sealed class PreviewNavigator
 
         if (Mode == NavigationMode.SingleItem)
         {
-            return new NavigationResult(NavigationAction.MoveExplorerSelection, Delta: Math.Sign(delta));
+            // Pinned: Explorer's selection is left alone (the host may step through its filmstrip instead).
+            return IsPinned ? NavigationResult.Nothing : new NavigationResult(NavigationAction.MoveExplorerSelection, Delta: Math.Sign(delta));
         }
 
         int target = Math.Clamp(Index + Math.Sign(delta), 0, _items.Count - 1);
@@ -140,6 +191,7 @@ public sealed class PreviewNavigator
     {
         _items = [];
         _explorerFocus = null;
+        IsPinned = false;
         Mode = NavigationMode.None;
         Current = null;
         Index = -1;

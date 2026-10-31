@@ -46,7 +46,7 @@ public readonly record struct PreviewKey
 public sealed class PreviewCache<T> : IDisposable
     where T : class
 {
-    private readonly long _budgetBytes;
+    private long _budgetBytes;
     private readonly Func<T, long> _sizeOf;
     private readonly Action<T>? _onEvicted;
     private readonly Dictionary<PreviewKey, LinkedListNode<(PreviewKey Key, T Value, long Bytes)>> _map = [];
@@ -65,6 +65,23 @@ public sealed class PreviewCache<T> : IDisposable
     }
 
     public int Count => _map.Count;
+
+    /// <summary>
+    /// The byte budget. Lowering it evicts least recently used values at once (the performance tier changed).
+    /// </summary>
+    public long BudgetBytes
+    {
+        get => _budgetBytes;
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value);
+            _budgetBytes = value;
+            while (Bytes > _budgetBytes && _lru.Last is { } oldest)
+            {
+                Remove(oldest);
+            }
+        }
+    }
 
     public long Bytes { get; private set; }
 

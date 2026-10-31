@@ -2,6 +2,8 @@
   <PropertyGroup>
     <TargetFramework>$(MavueWindowsTfm)</TargetFramework>
     <TargetPlatformMinVersion>$(MavueMinWindows)</TargetPlatformMinVersion>
+    <!-- RestartArgumentsTests read command lines back with CommandLineToArgvW (LibraryImport). -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Mavue.QuickView\Mavue.QuickView.csproj" />

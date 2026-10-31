@@ -286,6 +286,7 @@ internal static partial class ShellNative
 {
     public const uint SIGDN_FILESYSPATH = 0x80058000;
     public const int SIIGBF_BIGGERSIZEOK = 0x01;
+    public const int SIIGBF_ICONONLY = 0x04;
     public const int SIIGBF_THUMBNAILONLY = 0x08;
     public const int SIIGBF_INCACHEONLY = 0x10;
     public const int CSIDL_DESKTOP = 0x0000;

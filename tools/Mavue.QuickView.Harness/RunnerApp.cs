@@ -354,6 +354,9 @@ internal sealed partial class Runner
         var kinds = new List<string> { first?.Text("kind") ?? "?" };
         foreach (ushort key in new[] { VkRight, VkRight, VkRight, VkLeft })
         {
+            // A PDF reports its state again once its pages are known; let that land before the next key, or it is
+            // taken for the next key's result (seen as "Pdf → Pdf" with the next file one step late).
+            Thread.Sleep(600);
             int before = app.Events.Count;
             app.SendKey(key);
             AppEvent? state = app.WaitForState(s => s.Text("kind") is not ("Loading" or "None"), 4000, before);

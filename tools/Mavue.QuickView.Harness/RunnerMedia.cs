@@ -49,6 +49,10 @@ internal sealed partial class Runner
 
         Guarded("media-video", () => MediaVideo(files),
             "MP4 (H.264/AAC, 30 s: red/green/blue): picture on screen and sound from the host's audio session; Enter (Quick View focused) pauses and resumes, Ctrl+→ seeks +10 s (picture turns green), Ctrl+↓/↑ change the volume; plain ↓ still moves to the next file and stops the player; Esc closes and the player is released");
+        Guarded("media-wheel", () => MediaWheelScenario(files.Clip),
+            "Light media controls: the bar is shown over the video; the mouse wheel over Quick View seeks +5 s per notch (up = forward), Shift+wheel +30 s (kept inside the clip), two notches down −10 s; the wheel never moves to another file");
+        Guarded("audio-waveform", () => AudioWaveformScenario(files.Mp3),
+            "MP3: the waveform is computed after playback starts (low-priority thread, Media Foundation) and drawn above the bar; clicking its middle moves to the middle of the file");
         Guarded("media-esc-repeat", () => MediaEscRepeat(files, 20),
             "Diagnostics for the media-video flake, 20 times: Quick View activated (as after a click), Explorer ↓ image / ↑ video, Quick View activated again, Esc on Quick View closes it");
         Guarded("media-formats", () => MediaFormats(files),

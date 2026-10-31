@@ -30,6 +30,11 @@ public sealed class MediaSession : IDisposable
     private readonly MediaSource _source;
     private bool _disposed;
 
+    // Seeking: one seek at a time; while it runs only the latest request is kept (wheel and slider drags).
+    private TimeSpan? _seekPending;
+    private TimeSpan? _seekTarget;
+    private long _seekStarted;
+
     private MediaSession(MediaSource source, bool audioOnly, DispatcherQueue dispatcher)
     {
         _dispatcher = dispatcher;
@@ -49,6 +54,7 @@ public sealed class MediaSession : IDisposable
             OnUiThread(() => Failed?.Invoke(this, error, hresult));
         };
         Player.MediaEnded += (_, _) => OnUiThread(() => StateChanged?.Invoke(this, MediaStates.Ended));
+        Player.PlaybackSession.SeekCompleted += (_, _) => OnUiThread(OnSeekCompleted);
         Player.PlaybackSession.PlaybackStateChanged += (session, _) =>
         {
             string state = session.PlaybackState.ToString();
@@ -128,6 +134,63 @@ public sealed class MediaSession : IDisposable
         }
 
         return (session.Position, Player.Volume);
+    }
+
+    /// <summary>Current position (the target of a seek still running, so repeated steps add up).</summary>
+    public TimeSpan Position => _disposed ? TimeSpan.Zero : _seekPending ?? _seekTarget ?? Player.PlaybackSession.Position;
+
+    /// <summary>Muted (the volume is kept).</summary>
+    public bool IsMuted
+    {
+        get => !_disposed && Player.IsMuted;
+        set
+        {
+            if (!_disposed)
+            {
+                Player.IsMuted = value;
+            }
+        }
+    }
+
+    public double Volume => _disposed ? 0 : Player.Volume;
+
+    /// <summary>
+    /// Seeks to <paramref name="target"/> (kept inside the duration). At most one seek runs at a time: while it runs,
+    /// later requests replace each other and only the last is applied when it completes (UI thread).
+    /// </summary>
+    /// <returns>The position that will be reached.</returns>
+    public TimeSpan RequestSeek(TimeSpan target)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        target = MediaControlMath.Seek(TimeSpan.Zero, target, Player.PlaybackSession.NaturalDuration);
+        bool running = _seekTarget is not null && System.Diagnostics.Stopwatch.GetElapsedTime(_seekStarted) < TimeSpan.FromSeconds(1);
+        if (running)
+        {
+            _seekPending = target; // a seek that never reports completion stops blocking after a second
+            return target;
+        }
+
+        StartSeek(target);
+        return target;
+    }
+
+    private void StartSeek(TimeSpan target)
+    {
+        _seekPending = null;
+        _seekTarget = target;
+        _seekStarted = System.Diagnostics.Stopwatch.GetTimestamp();
+        Player.PlaybackSession.Position = target;
+    }
+
+    private void OnSeekCompleted()
+    {
+        if (_seekPending is { } next)
+        {
+            StartSeek(next);
+            return;
+        }
+
+        _seekTarget = null;
     }
 
     /// <summary>Stops playback and releases the player and the file. Later events are dropped.</summary>

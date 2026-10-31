@@ -1,163 +1,84 @@
 using System.Globalization;
-using System.Runtime.InteropServices;
-using System.Runtime.InteropServices.WindowsRuntime;
 using Mavue.Core.Formats;
-using Mavue.Core.Viewing;
-using Mavue.Image.Wic;
-using Mavue.QuickView.Diagnostics;
-using Mavue.QuickView.Preview;
 using Mavue.Core.Settings;
+using Mavue.Core.Viewing;
+using Mavue.QuickView.Diagnostics;
+using Mavue.QuickView.Host.Content;
+using Mavue.QuickView.Host.Presentation;
+using Mavue.QuickView.Host.Performance;
+using Mavue.QuickView.Preview;
 using Mavue.QuickView.Shell;
 using Mavue.QuickView.Trigger;
 using Mavue.Shell;
 using Mavue.Viewer;
-using Mavue.Viewer.Controls;
-using Mavue.Viewer.Playback;
-using Mavue.Viewer.Rendering;
-using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
-using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.Windows.ApplicationModel.Resources;
-using Windows.Data.Pdf;
 using Windows.Graphics;
-using Windows.Graphics.Imaging;
-using Windows.Storage;
-using Windows.Storage.Streams;
 
 namespace Mavue.QuickView.Host;
 
 /// <summary>
-/// Shows, fills and hides the Quick View window. All members run on the UI thread except
-/// <see cref="HandleEscapeFromHook"/>, which is called on the keyboard hook thread.
+/// Coordinates one Quick View session (docs/ARCHITECTURE.md §4.7): Space and context-menu requests, following the
+/// Explorer selection (single and multi-selection, tabs), the keys taken by the hook, and the life cycle of the shown
+/// item (staged loading, re-planning on resize, closing). What an item looks like is decided by the content its file
+/// routes to (<see cref="PreviewContentRouting"/>, <see cref="IPreviewContent"/>); how the window appears is
+/// <see cref="QuickViewPresence"/>; resource limits and idle memory are <see cref="ResidentResources"/>.
+/// The controller never branches on file types.
+/// All members run on the UI thread except <see cref="HandleEscapeFromHook"/> and
+/// <see cref="HandleNavigationKeyFromHook"/>, which are called on the keyboard hook thread.
 /// </summary>
-internal sealed class QuickViewController : IDisposable
+internal sealed class QuickViewController : IPreviewHost, IDisposable
 {
-    // Windows that briefly take the foreground while the user switches windows (Alt+Tab, Win+Tab,
-    // taskbar). Hiding on these would close Quick View in the middle of a switch back to Explorer.
-    private static readonly HashSet<string> TransientForegroundClasses = new(StringComparer.Ordinal)
-    {
-        "XamlExplorerHostIslandWindow",
-        "MultitaskingViewFrame",
-        "ForegroundStaging",
-        "TaskSwitcherWnd",
-        "Shell_TrayWnd",
-        "Shell_SecondaryTrayWnd",
-    };
+    /// <summary>How long the previous item's image may stay while the next one loads (avoids flicker).</summary>
+    private static readonly TimeSpan StaleImageGrace = TimeSpan.FromMilliseconds(120);
 
-    private static readonly ResourceLoader Strings = new();
-
-    private const uint NoActivateFlags = NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE;
+    private static readonly long ExternalMergeWindowTicks = System.Diagnostics.Stopwatch.Frequency * 2;
 
     private readonly QuickViewWindow _window;
     private readonly QuickViewTimeline _timeline;
     private readonly HostOptions _options;
     private readonly DispatcherQueue _dispatcher;
+    private readonly ResourceLoader _strings = new();
     private readonly StaThread _shellThread = new("Mavue.QuickView.ShellItems");
-    private CancellationTokenSource? _loading;
+    private readonly QuickViewPresence _presence;
+    private readonly QuickViewSettingsStore _settings;
+    private readonly ResidentResources _resources;
+    private readonly PreviewContentSet _contents;
+    private readonly NeighborPrefetcher _prefetcher;
+    private readonly QuickViewFileActions _fileActions;
+    private readonly PixelInspector _inspector;
+    private readonly FilmstripPresenter _filmstrip;
     private readonly PreviewNavigator _navigator = new();
+    private readonly WinEventWatcher _focusWatcher = new();
+    private readonly bool _pdfDocumentView;
+    private CancellationTokenSource? _loading;
     private SelectionWorker? _worker;
     private KeyboardHook? _hook;
     private string? _currentPath;
     private long _currentRequest;
     private bool _visible;
     private nint _owner;
-    private volatile bool _visibleWithoutActivation;
-    private bool _topmost;
+    private nint _ownerForHook;
     private bool? _lastHookProbe;
     private nint _followedView;
-    private readonly WinEventWatcher _focusWatcher = new();
+    private FileFacts? _currentFacts;
+    private IPreviewContent? _active;
 
-    // Decoded neighbors for instant stepping. Cleared when Quick View closes to keep idle memory low.
-    private const long CacheBudgetBytes = 192L * 1024 * 1024;
-    private const long MaxPrefetchFileBytes = 64L * 1024 * 1024;
-
-    // Background decoding of very large neighbors raised the peak working set to ~800 MB (measured);
-    // only modest images are prefetched. The pixel count is checked from the header before decoding.
-    private const long MaxPrefetchSourcePixels = 40_000_000;
-    private readonly PreviewCache<DecodedImage> _cache = new(
-        CacheBudgetBytes,
-        d => d.Bitmap is { } b ? (long)b.PixelWidth * b.PixelHeight * 4 : 0,
-        d => d.Bitmap?.Dispose());
-    private CancellationTokenSource? _prefetch;
-
-    // The bitmap behind the displayed full image. It is a private copy: cached bitmaps are never handed
-    // to a SoftwareBitmapSource, because disposing a replaced source also closed the cached bitmap and a
-    // later cache hit then failed with E_INVALIDARG (measured with fast arrow-key navigation).
-    private SoftwareBitmap? _displayedBitmap;
-
-    // Request whose own thumbnail or image is on screen (as opposed to the previous item's).
-    private long _contentRequest;
-
-    /// <summary>How long the previous item's image may stay while the next one loads (avoids flicker).</summary>
-    private static readonly TimeSpan StaleImageGrace = TimeSpan.FromMilliseconds(120);
-
-    // Actual-size mode decodes full resolution; only small neighbors are prefetched then.
-    private const long MaxActualSizePrefetchPixels = 16_000_000;
-
-    private readonly string _settingsPath;
-    private ImageScaleMode _scaleMode;
-    private DateTime _settingsStamp;
+    // What the current item has put on screen (its own content or message, as opposed to the previous item's).
+    private readonly ItemDisplayState _display = new();
     private (uint Width, uint Height) _plannedArea;
     private DispatcherQueueTimer? _areaTimer;
-    private nint _ownerForHook;
 
-    // Context-menu requests: the --quickview process allowed us to take the foreground, so the next show
-    // activates normally instead of the passive panel. Without an owner, the window is placed near this.
-    private bool _grantedActivation;
+    // Context-menu requests without an Explorer view: the window is placed near this window.
     private nint _placeNear;
-
-    // PDF pages: the current page of the shown PDF. PageUp/PageDown (hook while Explorer has the keyboard,
-    // or the window when Quick View is active), the mouse wheel and the page buttons step through it; the
-    // arrow keys keep moving between files. Read on the hook thread through the volatile flags.
-    private readonly PdfPageCursor _pdfPages = new();
-    private volatile bool _pdfPaging;
-    private volatile bool _multiSelectionKeys;
-
-    // Animated GIF: at most one player, stopped whenever the shown content changes.
-    // Larger canvases keep the static first frame (copying a bigger canvas every frame would load the UI thread).
-    private const long MaxAnimatedGifPixels = 8_000_000;
-    private GifPlayer? _gif;
-
-    // Video/audio: one media session at a time, streaming the file (Media Foundation reads what it plays).
-    // Every content change (another file, a page, closing) stops and disposes it; events of a replaced session are ignored.
-    private MediaSession? _media;
     private long _lastExternalShowQpc = long.MinValue / 2;
 
-    // Zoom and rotation chosen in the window for the current item (reset for every other item). _viewZoom null:
-    // the size from the settings. What is shown is described by its size at 100 % (upright, physical pixels) and
-    // the factor it is shown at, so a zoom step is applied at once by resizing the element and refined shortly after.
-    private ZoomSetting? _viewZoom;
-    private ViewOrientation _orientation;
-    private (double Width, double Height) _shownSource;
-    private double _shownFactor;
-    private ShownContent _shown;
-    private DispatcherQueueTimer? _zoomTimer;
-    private FileFacts? _currentFacts;
-
-    // PDF with PDFium: the session shared with Mavue.App (continuous / two-page / single layouts, find, selection,
-    // outline, links, presentation) and the shared PDF controls. Without pdfium.dll PDFs stay single page images.
-    private readonly PdfSession _pdf = new();
-    private readonly PdfSearchBar _pdfSearch;
-    private readonly PdfSidebar _pdfSidebar;
-    private PdfLayoutMode _pdfLayout = PdfLayoutMode.Continuous;
-    private bool _pdfSidebarOpen;
-    private long _pdfRequest;
-    private bool _pdfFirstFrameMarked;
-    private PdfPresentationWindow? _presentation;
-    private IRandomAccessStream? _svgStream;
-
-    /// <summary>What the window shows (for zoom and rotation).</summary>
-    private enum ShownContent
-    {
-        None,
-        Raster,
-        Pdf,
-        Gif,
-        Svg,
-    }
-    private static readonly long ExternalMergeWindowTicks = System.Diagnostics.Stopwatch.Frequency * 2;
+    // Keys the hook takes while Quick View is shown passively: PageUp/PageDown for paged content, ←/→ in a
+    // multi-selection. Read on the hook thread.
+    private volatile bool _paging;
+    private volatile bool _multiSelectionKeys;
+    private volatile bool _pinned; // the navigator's pin state, for the hook thread
 
     public QuickViewController(QuickViewWindow window, QuickViewTimeline timeline, HostOptions options)
     {
@@ -165,40 +86,104 @@ internal sealed class QuickViewController : IDisposable
         _timeline = timeline;
         _options = options;
         _dispatcher = DispatcherQueue.GetForCurrentThread();
+        _presence = new QuickViewPresence(window, timeline, options);
+        _settings = new QuickViewSettingsStore(options.SettingsPath ?? QuickViewSettings.DefaultPath, timeline, _dispatcher);
+        _settings.ReloadIfChanged(force: true);
+        _resources = new ResidentResources(timeline, options.IdleTrim);
+        _resources.Refresh();
+        _window.SetBackdrop(UseBackdrop(_resources.Policy)); // decided before the first Space (prewarm draws it)
+        _pdfDocumentView = PdfSession.IsAvailable && options.Decoder == DecoderMode.WinRt;
+
+        var services = new PreviewServices(window, timeline, _dispatcher, options, _strings, _shellThread, _settings, _resources, new SurfaceImageView(window, timeline));
+        _contents = new PreviewContentSet(services, this);
+        _prefetcher = new NeighborPrefetcher(_contents, _resources, timeline, ReadNeighborsAsync, () => _active, _pdfDocumentView);
+        _fileActions = new QuickViewFileActions(window, timeline, this, () => _active, () => _currentFacts?.Format ?? FileFormat.Unknown, reason => Hide(_currentRequest, reason, restoreOwner: false));
+
+        // Phase 1 (docs/ARCHITECTURE.md §4.7.8): inspector, filmstrip, pin and drag out. Each works only while Quick
+        // View is shown and its feature is on.
+        _inspector = new PixelInspector(window, timeline, services.ImageView, () => _active, () => CurrentRequest);
+        _filmstrip = new FilmstripPresenter(window, timeline, _resources, () => _worker);
+        _filmstrip.ItemInvoked += OnFilmstripInvoked;
+        _window.FilmstripToggled += on =>
+        {
+            _filmstrip.SetEnabled(on);
+            _settings.FilmstripVisible = on;
+            _settings.Save(s => s with { ShowFilmstrip = on });
+            if (on && _visible && _currentPath is { } path)
+            {
+                _filmstrip.OnItemShowing(path, _navigator);
+                _filmstrip.OnItemShown();
+            }
+        };
+        _window.InspectorToggled += on =>
+        {
+            _inspector.SetEnabled(on);
+            _settings.PixelInspectorOn = on;
+            _settings.Save(s => s with { ShowPixelInspector = on });
+        };
+        _window.PinToggled += SetPinned;
+        _window.TransparencyGridToggled += on =>
+        {
+            _window.SetTransparencyGridOn(on);
+            _settings.TransparencyGridOn = on;
+            _settings.Save(s => s with { ShowTransparencyGrid = on });
+        };
+        _resources.PolicyChanged += policy => _window.SetBackdrop(UseBackdrop(policy));
+        _window.FileDragStarting += args => _fileActions.PrepareDrag(args, _currentFacts);
+        _window.ImagePointerMoved += pointer =>
+        {
+            if (_visible)
+            {
+                _inspector.OnPointer(pointer);
+            }
+        };
+
+        // Generic window commands go to the content showing the current item; content-specific ones (PDF tools, media
+        // keys) are subscribed by that content itself.
         _window.CloseRequested += () => Hide(_currentRequest, "window-key-or-close", restoreOwner: true);
         _window.NavigateRequested += delta => Step(delta, "window-arrow");
         _window.PageRequested += (delta, source) => StepPage(delta, source);
-        _window.MediaCommandRequested += OnMediaCommand;
-        _window.ZoomRequested += OnZoomRequested;
-        _window.RotateRequested += OnRotateRequested;
-        _window.FileCommandRequested += OnFileCommand;
-        _pdfSearch = new PdfSearchBar(Strings.GetString) { Session = _pdf, Trace = PdfTrace };
-        _pdfSidebar = new PdfSidebar(Strings.GetString) { Session = _pdf, Trace = PdfTrace };
-        _pdfSearch.Closed += () =>
+        _window.ZoomRequested += (command, wheelDelta, anchor) =>
         {
-            _window.SetSearchVisible(false);
-            _window.FocusContent();
+            if (_visible)
+            {
+                (_active as IViewTransformContent)?.Zoom(command, wheelDelta, anchor);
+            }
         };
-        _window.AttachPdfControls(_pdfSearch, _pdfSidebar);
-        _window.PdfCommandRequested += OnPdfCommand;
-        _window.DocumentWheelHandler = OnDocumentWheel;
-        _pdf.Trace = PdfTrace;
-        _pdf.ViewChanged += OnPdfViewChanged;
-        _pdf.UriRequested += uri =>
+        _window.RotateRequested += quarterTurns =>
         {
-            bool opened = !_options.NoLaunch && ShellActions.OpenUri(uri);
-            _timeline.Mark(_currentRequest, "uri-opened", QuickViewTimeline.Now, new Dictionary<string, object?> { ["uri"] = uri, ["opened"] = opened });
+            if (_visible)
+            {
+                (_active as IViewTransformContent)?.Rotate(quarterTurns);
+            }
         };
+        _window.FileCommandRequested += _fileActions.Execute;
         _window.KeyReceived += key => _timeline.Mark(_currentRequest, "window-key", QuickViewTimeline.Now, new Dictionary<string, object?>
         {
             ["key"] = key.ToString(),
             ["focus"] = _window.FocusDescription(),
         });
-        _settingsPath = options.SettingsPath ?? QuickViewSettings.DefaultPath;
-        ReloadSettingsIfChanged(force: true);
         _window.ImageAreaChanged += OnImageAreaChanged;
         _focusWatcher.EventRaised += (_, hwnd, _, _) => OnOwnerFocusChanged(hwnd);
     }
+
+    // IPreviewHost
+    public bool IsVisible => _visible;
+
+    public string? CurrentPath => _currentPath;
+
+    public long CurrentRequest => Interlocked.Read(ref _currentRequest);
+
+    public ItemDisplayState Display => _display;
+
+    public (uint Width, uint Height) PlannedArea
+    {
+        get => _plannedArea;
+        set => _plannedArea = value;
+    }
+
+    /// <summary>Limits and memory of the resident process (also asked by the App for diagnostics).</summary>
+    public ResidentResources Resources => _resources;
 
     private AppWindow AppWindow => _window.AppWindow;
 
@@ -211,12 +196,11 @@ internal sealed class QuickViewController : IDisposable
 
     public void Dispose()
     {
-        ReplaceSvgStream(null);
-        StopGif();
-        StopMedia("exit");
-        _prefetch?.Cancel();
-        _prefetch?.Dispose();
-        _cache.Dispose();
+        _prefetcher.Dispose();
+        _filmstrip.Dispose();
+        _inspector.Dispose();
+        _contents.Dispose();
+        _resources.Dispose();
         _focusWatcher.Dispose();
         _loading?.Cancel();
         _loading?.Dispose();
@@ -225,23 +209,14 @@ internal sealed class QuickViewController : IDisposable
     }
 
     /// <summary>
-    /// Renders the hidden window once (cloaked, so nothing is visible) so the first Space press does
-    /// not pay for XAML tree creation, swap chain setup and DWM registration.
+    /// Renders the hidden window once so the first Space press does not pay for XAML/DWM setup, and initializes the
+    /// shell thumbnail path (the first thumbnail-cache lookup in a process costs ~60 ms, measured).
     /// </summary>
     public async Task PrewarmAsync()
     {
         long start = QuickViewTimeline.Now;
-        PlaceWindow(0);
-        int cloak = 1;
-        NativeMethods.DwmSetWindowAttribute(_window.Handle, NativeMethods.DWMWA_CLOAK, ref cloak, sizeof(int));
-        AppWindow.Show(false);
-        await NextFrameAsync();
-        AppWindow.Hide();
-        cloak = 0;
-        NativeMethods.DwmSetWindowAttribute(_window.Handle, NativeMethods.DWMWA_CLOAK, ref cloak, sizeof(int));
-
-        // The first thumbnail-cache lookup in a process costs ~60 ms of shell initialization (measured).
-        string self = System.Environment.ProcessPath ?? string.Empty;
+        await _presence.PrewarmAsync();
+        string self = Environment.ProcessPath ?? string.Empty;
         await _shellThread.InvokeAsync(() => File.Exists(self) ? ShellThumbnail.TryGetCached(self, 32) : null);
         _timeline.Mark(0, "prewarmed", QuickViewTimeline.Now, new Dictionary<string, object?> { ["startQpc"] = start });
     }
@@ -331,7 +306,7 @@ internal sealed class QuickViewController : IDisposable
         _lastHookProbe = null;
         _followedView = view;
         _placeNear = owner != 0 ? owner : foreground;
-        _grantedActivation = true;
+        _presence.GrantedActivation = true;
         _lastExternalShowQpc = QuickViewTimeline.Now;
         MarkNavigation(requestId, "context-menu");
         Show(requestId, start.Path!);
@@ -340,6 +315,262 @@ internal sealed class QuickViewController : IDisposable
         {
             WatchOwnerFocus();
         }
+    }
+
+    /// <summary>Explorer's selection changed while Quick View is open (DShellFolderViewEvents).</summary>
+    public void OnExplorerSelectionChanged(ViewSelection selection, long eventQpc, long readQpc)
+    {
+        if (!_visible)
+        {
+            return;
+        }
+
+        Apply(_navigator.OnSelectionChanged(selection.Paths, selection.FocusedPath), "explorer-selection", eventQpc, readQpc);
+    }
+
+    /// <summary>The Explorer window or tab Quick View follows was closed (a pinned preview stays).</summary>
+    public void OnExplorerViewClosed()
+    {
+        if (_visible && _navigator.IsPinned)
+        {
+            _timeline.Mark(_currentRequest, "explorer-closed-pinned", QuickViewTimeline.Now);
+            return;
+        }
+
+        Hide(_currentRequest, "explorer-closed", restoreOwner: false);
+    }
+
+    /// <summary>
+    /// Hook thread: ←/→ while a multi-selection is previewed passively (steps inside the selection and swallows the
+    /// key so Explorer keeps the selection intact), and PageUp/PageDown while paged content is shown.
+    /// </summary>
+    public bool HandleNavigationKeyFromHook(int virtualKey, nint foreground)
+    {
+        const int VkPageUp = 0x21;
+        const int VkPageDown = 0x22;
+        const int VkLeft = 0x25;
+        const int VkRight = 0x27;
+        if (foreground != Volatile.Read(ref _ownerForHook) || !_presence.IsPassive)
+        {
+            return false;
+        }
+
+        long qpc = QuickViewTimeline.Now;
+        if (virtualKey is VkPageUp or VkPageDown)
+        {
+            if (!_paging)
+            {
+                return false; // nothing paged: Explorer keeps PageUp/PageDown
+            }
+
+            // Swallowed even at the first/last page: otherwise Explorer would move its selection by a screen.
+            int pageDelta = virtualKey == VkPageUp ? -1 : 1;
+            _dispatcher.TryEnqueue(DispatcherQueuePriority.High, () => StepPage(pageDelta, "hook-page", qpc));
+            return true;
+        }
+
+        if (virtualKey is not (VkLeft or VkRight) || !_multiSelectionKeys)
+        {
+            return false;
+        }
+
+        int delta = virtualKey == VkLeft ? -1 : 1;
+        _dispatcher.TryEnqueue(DispatcherQueuePriority.High, () => Step(delta, "hook-arrow", qpc));
+        return true;
+    }
+
+    /// <summary>Called on the hook thread for Escape. Only used when the window is shown without activation.</summary>
+    public bool HandleEscapeFromHook(nint foreground)
+    {
+        if (!_presence.IsPassive || _pinned || foreground != Volatile.Read(ref _ownerForHook))
+        {
+            return false; // pinned: Esc in Explorer belongs to Explorer
+        }
+
+        long request = Interlocked.Read(ref _currentRequest);
+        _dispatcher.TryEnqueue(DispatcherQueuePriority.High, () => Hide(request, "escape-hook", restoreOwner: false));
+        return true;
+    }
+
+    /// <summary>Hides Quick View when the user switches to an unrelated application.</summary>
+    public void OnForegroundChanged(nint foreground)
+    {
+        if (!_visible || foreground == 0)
+        {
+            return;
+        }
+
+        nint root = NativeMethods.GetAncestor(foreground, NativeMethods.GA_ROOT);
+        if (foreground == _window.Handle || root == _window.Handle)
+        {
+            _timeline.Mark(_currentRequest, "window-activated", QuickViewTimeline.Now, new Dictionary<string, object?>
+            {
+                ["focus"] = _window.FocusDescription(),
+                ["firstActivation"] = _presence.IsPassive,
+            });
+            if (_presence.IsPassive)
+            {
+                _presence.IsPassive = false; // user clicked into Quick View: normal window behavior from now on
+                _window.FocusContent();
+                UpdateNavigationKeys();
+            }
+
+            return;
+        }
+
+        if (root == _owner || foreground == _owner)
+        {
+            return; // back to the Explorer window Quick View belongs to: stay open
+        }
+
+        if (QuickViewPresence.ProcessIdOf(root) == Environment.ProcessId)
+        {
+            // A window of Quick View's own process: its content (the PDF presentation) or the WinUI windows behind a
+            // click on its controls (seen when the filmstrip and the pin button are clicked). Never another app.
+            _timeline.Mark(_currentRequest, "foreground-own", QuickViewTimeline.Now, new Dictionary<string, object?>
+            {
+                ["class"] = Interop.WindowClass.Of(root),
+                ["auxiliary"] = _contents.AnyAuxiliaryWindow,
+                ["ownedByQuickView"] = NativeMethods.GetAncestor(root, 3 /* GA_ROOTOWNER */) == _window.Handle,
+            });
+            return;
+        }
+
+        string windowClass = Interop.WindowClass.Of(root);
+        if (QuickViewPresence.IsTransient(windowClass))
+        {
+            _timeline.Mark(_currentRequest, "foreground-transient", QuickViewTimeline.Now, new Dictionary<string, object?> { ["class"] = windowClass });
+            return;
+        }
+
+        _timeline.Mark(_currentRequest, "foreground-other", QuickViewTimeline.Now, new Dictionary<string, object?>
+        {
+            ["class"] = windowClass,
+            ["process"] = QuickViewPresence.ProcessNameOf(root),
+            ["ownProcess"] = QuickViewPresence.ProcessIdOf(root) == Environment.ProcessId,
+            ["pinned"] = _navigator.IsPinned,
+        });
+        if (_navigator.IsPinned)
+        {
+            return; // a pinned preview stays while the user works in another application
+        }
+
+        Hide(_currentRequest, "foreground-other-app", restoreOwner: false);
+    }
+
+    // IPreviewHost
+    public void AdoptRequest(long requestId)
+    {
+        Interlocked.Exchange(ref _currentRequest, requestId);
+        _display.MarkContent(requestId);
+    }
+
+    /// <summary>Physical pixels per device-independent pixel for the window's current monitor.</summary>
+    public double DisplayScale()
+    {
+        uint dpi = NativeMethods.GetDpiForWindow(_window.Handle);
+        return dpi > 0 ? dpi / 96.0 : _window.RasterizationScale;
+    }
+
+    /// <summary>
+    /// Image area in physical pixels, from the window's real client size and DPI. The XAML layout is not
+    /// used: right after the window moves to a monitor with another scale it still describes the old
+    /// size, which made images decode for the wrong area (measured with three monitors).
+    /// </summary>
+    public (uint Width, uint Height) ImageArea()
+    {
+        SizeInt32 client = AppWindow.ClientSize;
+        double scale = DisplayScale();
+        (double chromeWidth, double chromeHeight) = _window.ImageChromeDip();
+        return ((uint)Math.Max(1, Math.Floor(client.Width - (chromeWidth * scale))), (uint)Math.Max(1, Math.Floor(client.Height - (chromeHeight * scale))));
+    }
+
+    public void SetInfo(string text)
+    {
+        string position = _navigator.Mode == NavigationMode.MultipleItems
+            ? string.Format(CultureInfo.CurrentCulture, _strings.GetString("QuickView_Position"), _navigator.Index + 1, _navigator.Items.Count) + " · "
+            : string.Empty;
+        _window.SetInfo(position + text);
+    }
+
+    public void SetPaging(bool multiPage, bool canPrevious, bool canNext)
+    {
+        _paging = _visible && multiPage;
+        _window.SetPageControls(_paging, canPrevious, canNext);
+        UpdateNavigationKeys();
+    }
+
+    public void MarkNavigation(long requestId, string source) =>
+        _timeline.Mark(requestId, "nav", QuickViewTimeline.Now, new Dictionary<string, object?>
+        {
+            ["source"] = source,
+            ["mode"] = _navigator.Mode.ToString(),
+            ["index"] = _navigator.Index,
+            ["count"] = _navigator.Items.Count,
+        });
+
+    public void ShowCurrentAgain(long requestId)
+    {
+        if (_currentPath is { } path)
+        {
+            ShowNext(requestId, path, sameItem: true);
+        }
+    }
+
+    public void StartPrefetch(uint areaWidth, uint areaHeight) => _prefetcher.Start(areaWidth, areaHeight);
+
+    /// <summary>Mica behind the chrome, except on Low-tier machines (and when switched off for measurement).</summary>
+    private bool UseBackdrop(PreviewResourcePolicy policy) => policy.Tier != PerformanceTier.Low && !_options.NoBackdrop;
+
+    public Task ShowInfoCardAsync(PreviewItem item, string messageResource, CancellationToken cancellation)
+    {
+        if (cancellation.IsCancellationRequested || !_visible || item.RequestId != CurrentRequest)
+        {
+            return Task.CompletedTask;
+        }
+
+        _active = _contents.Universal;
+        return _contents.Universal.ShowCardAsync(item, messageResource, cancellation);
+    }
+
+    /// <summary>Pin on/off (button or P): a pinned preview does not follow Explorer and stays when another app is used.</summary>
+    private void SetPinned(bool pinned)
+    {
+        if (!_visible || !_navigator.SetPinned(pinned))
+        {
+            _window.SetPinned(_navigator.IsPinned);
+            return;
+        }
+
+        _pinned = pinned;
+        _window.SetPinned(pinned);
+        _filmstrip.SetPinned(pinned);
+        UpdateNavigationKeys();
+        _timeline.Mark(_currentRequest, "pin", QuickViewTimeline.Now, new Dictionary<string, object?> { ["pinned"] = pinned });
+        if (!pinned)
+        {
+            _worker?.RefreshSelection(); // follow Explorer again from its current selection
+        }
+    }
+
+    /// <summary>A file of the filmstrip was clicked.</summary>
+    private void OnFilmstripInvoked(FilmstripItem item)
+    {
+        if (!_visible)
+        {
+            return;
+        }
+
+        NavigationResult result = _navigator.GoTo(item.Path);
+        if (result.Action == NavigationAction.SelectInExplorer)
+        {
+            // Following Explorer: select it there, and Quick View follows the selection as usual.
+            _timeline.Mark(_currentRequest, "filmstrip-select", QuickViewTimeline.Now, new Dictionary<string, object?> { ["viewIndex"] = item.ViewIndex });
+            _worker?.SelectInView(item.ViewIndex, item.Path);
+            return;
+        }
+
+        Apply(result, "filmstrip", null, null);
     }
 
     /// <summary>
@@ -390,113 +621,30 @@ internal sealed class QuickViewController : IDisposable
         _worker?.Rebind(_owner, parent);
     }
 
-    /// <summary>Explorer's selection changed while Quick View is open (DShellFolderViewEvents).</summary>
-    public void OnExplorerSelectionChanged(ViewSelection selection, long eventQpc, long readQpc)
-    {
-        if (!_visible)
-        {
-            return;
-        }
-
-        Apply(_navigator.OnSelectionChanged(selection.Paths, selection.FocusedPath), "explorer-selection", eventQpc, readQpc);
-    }
-
-    /// <summary>The Explorer window or tab Quick View follows was closed.</summary>
-    public void OnExplorerViewClosed() => Hide(_currentRequest, "explorer-closed", restoreOwner: false);
-
-    /// <summary>
-    /// Hook thread: ←/→ while a multi-selection is previewed passively. Steps inside the selection
-    /// and swallows the key so Explorer keeps the selection intact.
-    /// </summary>
-    public bool HandleNavigationKeyFromHook(int virtualKey, nint foreground)
-    {
-        const int VkPageUp = 0x21;
-        const int VkPageDown = 0x22;
-        const int VkLeft = 0x25;
-        const int VkRight = 0x27;
-        if (foreground != Volatile.Read(ref _ownerForHook) || !_visibleWithoutActivation)
-        {
-            return false;
-        }
-
-        long qpc = QuickViewTimeline.Now;
-        if (virtualKey is VkPageUp or VkPageDown)
-        {
-            if (!_pdfPaging)
-            {
-                return false; // not a multi-page PDF: Explorer keeps PageUp/PageDown
-            }
-
-            // Swallowed even at the first/last page: otherwise Explorer would move its selection by a screen.
-            int pageDelta = virtualKey == VkPageUp ? -1 : 1;
-            _dispatcher.TryEnqueue(DispatcherQueuePriority.High, () => StepPage(pageDelta, "hook-page", qpc));
-            return true;
-        }
-
-        if (virtualKey is not (VkLeft or VkRight) || !_multiSelectionKeys)
-        {
-            return false;
-        }
-
-        int delta = virtualKey == VkLeft ? -1 : 1;
-        _dispatcher.TryEnqueue(DispatcherQueuePriority.High, () => Step(delta, "hook-arrow", qpc));
-        return true;
-    }
-
-    /// <summary>Previous/next page of the shown PDF. Past the first or last page nothing happens.</summary>
+    /// <summary>Previous/next page of the shown item (paged content only; otherwise nothing happens).</summary>
     private void StepPage(int delta, string source, long? inputQpc = null)
     {
-        if (!_visible || _currentPath is not { } path || !_pdfPages.IsMultiPage)
+        if (_visible)
         {
-            return;
+            (_active as IPagedContent)?.StepPage(delta, source, inputQpc);
         }
-
-        if (_pdf.IsOpen)
-        {
-            StepPdfPage(delta, source, inputQpc, target: null);
-            return;
-        }
-
-        if (!_pdfPages.TryStep(delta))
-        {
-            _timeline.Mark(_currentRequest, "pdf-page-edge", QuickViewTimeline.Now, new Dictionary<string, object?>
-            {
-                ["index"] = _pdfPages.Index,
-                ["count"] = _pdfPages.Count,
-                ["source"] = source,
-            });
-            return;
-        }
-
-        long id = SelectionWorker.NextRequestId();
-        if (inputQpc is { } input)
-        {
-            _timeline.Mark(id, "nav-input", input);
-        }
-
-        _timeline.Mark(id, "pdf-page", QuickViewTimeline.Now, new Dictionary<string, object?>
-        {
-            ["index"] = _pdfPages.Index,
-            ["count"] = _pdfPages.Count,
-            ["source"] = source,
-        });
-        MarkNavigation(id, "pdf-page");
-        UpdatePageControls();
-        _window.Surface.ScrollToTop();
-        ShowNext(id, path, sameItem: true);
-    }
-
-    private void UpdatePageControls()
-    {
-        _pdfPaging = _visible && _pdfPages.IsMultiPage;
-        _window.SetPageControls(_pdfPaging, _pdfPages.CanStep(-1), _pdfPages.CanStep(+1));
-        UpdateNavigationKeys();
     }
 
     private void Step(int delta, string source, long? inputQpc = null)
     {
         if (!_visible)
         {
+            return;
+        }
+
+        if (_navigator.IsPinned && _navigator.Mode == NavigationMode.SingleItem)
+        {
+            // Pinned: step through the filmstrip's files inside Quick View; Explorer is left alone.
+            if (_filmstrip.Model.Neighbor(Math.Sign(delta)) is { } neighbor)
+            {
+                Apply(_navigator.GoTo(neighbor.Path), source, inputQpc, null);
+            }
+
             return;
         }
 
@@ -535,16 +683,7 @@ internal sealed class QuickViewController : IDisposable
         UpdateNavigationKeys();
     }
 
-    private void MarkNavigation(long requestId, string source) =>
-        _timeline.Mark(requestId, "nav", QuickViewTimeline.Now, new Dictionary<string, object?>
-        {
-            ["source"] = source,
-            ["mode"] = _navigator.Mode.ToString(),
-            ["index"] = _navigator.Index,
-            ["count"] = _navigator.Items.Count,
-        });
-
-    /// <summary>Arms ←/→ interception only while a multi-selection is shown and Explorer has the keyboard.</summary>
+    /// <summary>Arms hook interception only while Quick View is shown passively and there is something to take.</summary>
     private void UpdateNavigationKeys()
     {
         if (_hook is null)
@@ -552,30 +691,90 @@ internal sealed class QuickViewController : IDisposable
             return;
         }
 
-        bool passive = _visible && _visibleWithoutActivation;
+        bool passive = _visible && _presence.IsPassive && !_navigator.IsPinned; // pinned: Explorer keeps its keys
         _multiSelectionKeys = passive && _navigator.Mode == NavigationMode.MultipleItems;
-        _hook.NavigationKeyHandler = _multiSelectionKeys || (passive && _pdfPaging) ? HandleNavigationKeyFromHook : null;
+        _hook.NavigationKeyHandler = _multiSelectionKeys || (passive && _paging) ? HandleNavigationKeyFromHook : null;
+    }
+
+    private Task<(string? Previous, string? Next)> ReadNeighborsAsync()
+    {
+        if (_navigator.Mode == NavigationMode.MultipleItems)
+        {
+            return Task.FromResult((Neighbor(-1), Neighbor(+1)));
+        }
+
+        if (_navigator.IsPinned)
+        {
+            // Explorer's focus has moved on; the files around a pinned one are the filmstrip's.
+            return Task.FromResult((_filmstrip.Model.Neighbor(-1)?.Path, _filmstrip.Model.Neighbor(+1)?.Path));
+        }
+
+        return _worker is null ? Task.FromResult<(string?, string?)>((null, null)) : _worker.ReadNeighborsAsync();
+    }
+
+    private string? Neighbor(int delta)
+    {
+        int index = _navigator.Index + delta;
+        return index >= 0 && index < _navigator.Items.Count ? _navigator.Items[index] : null;
+    }
+
+    /// <summary>First item of a session: places and shows the window, then loads the item.</summary>
+    private void Show(long requestId, string path)
+    {
+        _contents.Reset(ContentReset.NewItem, "show");
+        BeginLoad(requestId, path);
+
+        if (!_visible)
+        {
+            _settings.ReloadIfChanged();
+            _resources.Refresh();
+
+            // Before the image area is measured (the filmstrip takes a row).
+            _filmstrip.SetEnabled(_settings.FilmstripVisible);
+            _inspector.SetEnabled(_settings.PixelInspectorOn);
+            _window.SetTransparencyGridOn(_settings.TransparencyGridOn);
+            _window.SetBackdrop(UseBackdrop(_resources.Policy)); // solid chrome on modest machines
+            _window.SetPinned(false);
+        }
+
+        _inspector.OnItemChanged();
+        _filmstrip.OnItemShowing(path, _navigator);
+        string fileName = Path.GetFileName(path);
+        _window.ResetContent(fileName);
+        _window.Title = string.Format(CultureInfo.CurrentCulture, _strings.GetString("QuickView_WindowTitle"), fileName);
+        if (!_visible)
+        {
+            _presence.Place(_owner != 0 ? _owner : _placeNear, requestId);
+            _window.SetOpenInMavueAvailable(ShellActions.FindMavueExecutable() is not null);
+        }
+
+        _timeline.Mark(requestId, "show-call", QuickViewTimeline.Now);
+        _presence.Activate(requestId, _owner, _lastHookProbe);
+        _visible = true;
+        if (!_presence.IsPassive)
+        {
+            _window.FocusContent();
+        }
+
+        _ = MarkNextFrameAsync(requestId, "first-frame");
+        _ = CheckForegroundLaterAsync(requestId);
+        _ = LoadAsync(requestId, path, _loading!.Token);
     }
 
     /// <summary>Shows another item in the already visible window, keeping the previous image until the new one is ready.</summary>
-    /// <param name="sameItem">Re-showing the current file (e.g. new window size): keep its image until the new one is ready.</param>
+    /// <param name="sameItem">Re-showing the current file (e.g. new window size): keep its image, zoom and page.</param>
     private void ShowNext(long requestId, string path, bool sameItem = false)
     {
-        StopGif();
-        StopMedia("next-item");
+        _contents.Reset(sameItem ? ContentReset.Reload : ContentReset.NewItem, "next-item");
         if (!sameItem)
         {
-            _pdfPages.Reset(); // another file starts at its first page
-            UpdatePageControls();
-            ResetView();
+            SetPaging(false, false, false);
+            _inspector.OnItemChanged();
+            _filmstrip.OnItemShowing(path, _navigator);
         }
 
-        _prefetch?.Cancel();
-        _loading?.Cancel();
-        _loading?.Dispose();
-        _loading = new CancellationTokenSource();
-        _currentPath = path;
-        Interlocked.Exchange(ref _currentRequest, requestId);
+        _prefetcher.Cancel();
+        BeginLoad(requestId, path);
 
         string fileName = Path.GetFileName(path);
         _window.BeginNextItem(fileName);
@@ -584,10 +783,136 @@ internal sealed class QuickViewController : IDisposable
             _ = ClearStaleImageAsync(requestId);
         }
 
-        _window.Title = string.Format(CultureInfo.CurrentCulture, Strings.GetString("QuickView_WindowTitle"), fileName);
+        _window.Title = string.Format(CultureInfo.CurrentCulture, _strings.GetString("QuickView_WindowTitle"), fileName);
         _timeline.Mark(requestId, "show-call", QuickViewTimeline.Now);
         _ = MarkNextFrameAsync(requestId, "first-frame");
-        _ = LoadAsync(requestId, path, _loading.Token);
+        _ = LoadAsync(requestId, path, _loading!.Token);
+    }
+
+    private void BeginLoad(long requestId, string path)
+    {
+        _loading?.Cancel();
+        _loading?.Dispose();
+        _loading = new CancellationTokenSource();
+        _currentPath = path;
+        Interlocked.Exchange(ref _currentRequest, requestId);
+    }
+
+    /// <param name="closeSession">False when a new Explorer subscription was already opened for the next show.</param>
+    private void Hide(long requestId, string reason, bool restoreOwner, bool closeSession = true)
+    {
+        if (!_visible)
+        {
+            return;
+        }
+
+        _loading?.Cancel();
+        (bool wasForeground, bool? ownerRestored) = _presence.Hide(_owner, restoreOwner);
+        _visible = false;
+        _currentPath = null;
+        _window.Surface.ClearImages();
+        _display.Clear();
+        _navigator.Reset();
+        if (closeSession)
+        {
+            _worker?.CloseSession();
+        }
+
+        _placeNear = 0;
+        _prefetcher.Cancel();
+        _filmstrip.OnHidden();
+        _inspector.OnHidden();
+        _pinned = false;
+        _window.SetPinned(false);
+        _contents.Reset(ContentReset.Hidden, "hidden");
+        _active = null;
+        SetPaging(false, false, false);
+        _focusWatcher.Stop();
+        _followedView = 0;
+        UpdateNavigationKeys();
+
+        _timeline.Mark(requestId, "hidden", QuickViewTimeline.Now, new Dictionary<string, object?>
+        {
+            ["reason"] = reason,
+            ["wasForeground"] = wasForeground,
+            ["ownerRestored"] = ownerRestored,
+            ["ownerIsForegroundAfter"] = NativeMethods.GetForegroundWindow() == _owner,
+        });
+        _ = _resources.TrimAfterHideAsync(requestId, () => _visible);
+    }
+
+    /// <summary>
+    /// Stage 1 of every item: file facts (attributes, size, format; no decoding), then the content its file routes to
+    /// takes over (thumbnail, full quality, playback, document).
+    /// </summary>
+    private async Task LoadAsync(long requestId, string path, CancellationToken cancellation)
+    {
+        (uint areaWidth, uint areaHeight) = ImageArea();
+        _plannedArea = (areaWidth, areaHeight);
+        ImageScaleMode mode = _settings.ScaleMode;
+        FileFacts? read = null;
+        try
+        {
+            FileFacts facts = await Task.Run(() => FileFacts.Read(path), cancellation);
+            read = facts;
+            _timeline.Mark(requestId, "info", QuickViewTimeline.Now, new Dictionary<string, object?>
+            {
+                ["format"] = facts.Format.ToString(),
+                ["extension"] = Path.GetExtension(path).ToLowerInvariant(),
+                ["bytes"] = facts.Length,
+                ["access"] = facts.Access.ToString(),
+            });
+            SetInfo(PreviewInfoText.For(_strings, facts, null));
+            _currentFacts = facts;
+
+            IPreviewContent content = _contents[PreviewContentRouting.Choose(facts, _pdfDocumentView, Path.GetExtension(path))];
+            _active = content;
+            await content.ShowAsync(new PreviewItem(requestId, path, facts, areaWidth, areaHeight, mode), cancellation);
+            MarkFinished(requestId, cancellation);
+        }
+        catch (OperationCanceledException)
+        {
+            // Navigation or hide superseded this request.
+        }
+        catch (Exception ex)
+        {
+            // Malformed or hostile files must never take the resident process down.
+            _timeline.Mark(requestId, "error", QuickViewTimeline.Now, new Dictionary<string, object?> { ["type"] = ex.GetType().Name, ["hresult"] = ex.HResult });
+            if (!cancellation.IsCancellationRequested)
+            {
+                _window.Surface.ShowStatusOnly(_strings.GetString("QuickView_Error_Failed"));
+                _display.MarkMessage(requestId);
+                await ShowErrorCardAsync(new PreviewItem(requestId, path, read ?? new FileFacts(0, 0, FileFormat.Unknown, PreviewAccess.Allowed), areaWidth, areaHeight, mode), cancellation);
+                MarkFinished(requestId, cancellation);
+            }
+        }
+    }
+
+    /// <summary>After a failure: the information card with the "could not be previewed" message (never throws).</summary>
+    private async Task ShowErrorCardAsync(PreviewItem item, CancellationToken cancellation)
+    {
+        try
+        {
+            await ShowInfoCardAsync(item, "QuickView_Error_Failed", cancellation);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // The message is already on screen.
+        }
+    }
+
+    /// <summary>
+    /// The item's own result (content or a message such as "unsupported") is on screen: the stale-image guard must
+    /// not replace it with "loading" afterwards.
+    /// </summary>
+    private void MarkFinished(long requestId, CancellationToken cancellation)
+    {
+        if (!cancellation.IsCancellationRequested && _visible && Interlocked.Read(ref _currentRequest) == requestId)
+        {
+            _display.MarkContent(requestId);
+            _inspector.OnContentShown();
+            _filmstrip.OnItemShown(); // after the item is on screen: the preview comes first
+        }
     }
 
     /// <summary>
@@ -597,38 +922,11 @@ internal sealed class QuickViewController : IDisposable
     private async Task ClearStaleImageAsync(long requestId)
     {
         await Task.Delay(StaleImageGrace);
-        if (_visible && Interlocked.Read(ref _currentRequest) == requestId && _contentRequest != requestId)
+        if (_visible && _display.NeedsStaleClear(Interlocked.Read(ref _currentRequest), requestId))
         {
-            _window.Surface.ShowStatusOnly(Strings.GetString("QuickView_Loading"));
+            _window.Surface.ShowStatusOnly(_strings.GetString("QuickView_Loading"));
             _timeline.Mark(requestId, "stale-cleared", QuickViewTimeline.Now);
         }
-    }
-
-    /// <summary>Decode/display plan for one item (see <see cref="DisplaySizing"/>).</summary>
-    /// <param name="DisplayElementSize">Element size for a zoomed item (the bitmap may be smaller and stretched); null: the bitmap's own size.</param>
-    private readonly record struct Plan(DecodeBox Box, (double Width, double Height)? ExpectedElementSize, bool Scrollable, double? PdfActualScale, (double Width, double Height)? DisplayElementSize = null)
-    {
-        public static Plan Unknown => new(new DecodeBox(1, 1), null, false, null);
-    }
-
-    /// <summary>Physical pixels per device-independent pixel for the window's current monitor.</summary>
-    private double DisplayScale()
-    {
-        uint dpi = NativeMethods.GetDpiForWindow(_window.Handle);
-        return dpi > 0 ? dpi / 96.0 : _window.RasterizationScale;
-    }
-
-    /// <summary>
-    /// Image area in physical pixels, from the window's real client size and DPI. The XAML layout is not
-    /// used: right after the window moves to a monitor with another scale it still describes the old
-    /// size, which made images decode for the wrong area (measured with three monitors).
-    /// </summary>
-    private (uint Width, uint Height) ImageArea()
-    {
-        SizeInt32 client = AppWindow.ClientSize;
-        double scale = DisplayScale();
-        (double chromeWidth, double chromeHeight) = _window.ImageChromeDip();
-        return ((uint)Math.Max(1, Math.Floor(client.Width - (chromeWidth * scale))), (uint)Math.Max(1, Math.Floor(client.Height - (chromeHeight * scale))));
     }
 
     /// <summary>The window was resized or changed monitor while visible: re-plan the current item if its area changed.</summary>
@@ -651,15 +949,9 @@ internal sealed class QuickViewController : IDisposable
         timer.IsRepeating = false;
         timer.Tick += (_, _) =>
         {
-            if (_media is not null)
+            if (_active is { } active && active.OnAreaChanged() != AreaResponse.ReloadIfChanged)
             {
-                UpdateVideoLayout(); // the player scales by itself; only the no-enlarge limit changes
                 return;
-            }
-
-            if (_pdf.IsOpen)
-            {
-                return; // the PDF view lays itself out
             }
 
             (uint width, uint height) = ImageArea();
@@ -674,1723 +966,9 @@ internal sealed class QuickViewController : IDisposable
         return timer;
     }
 
-    /// <summary>
-    /// Reads the image size from the header (no pixel decoding; never for cloud placeholders, which would
-    /// download) and decides the decode box and the element size for the placeholder.
-    /// </summary>
-    private async Task<Plan> PlanAsync(string path, FileFacts facts, ImageScaleMode mode, uint areaWidth, uint areaHeight, CancellationToken cancellation)
-    {
-        if (_viewZoom is not null || !_orientation.IsIdentity)
-        {
-            return await PlanViewAsync(path, facts, mode, areaWidth, areaHeight, cancellation);
-        }
-
-        double rasterization = DisplayScale();
-        if (facts.Format == FileFormat.Pdf)
-        {
-            bool actual = mode == ImageScaleMode.ActualSize;
-            return new Plan(new DecodeBox(areaWidth, areaHeight), null, actual, actual ? rasterization : null);
-        }
-
-        (uint Width, uint Height)? source = facts.Access == PreviewAccess.Allowed
-            ? await Task.Run(() => WicPreviewDecoder.TryReadDimensions(path), cancellation)
-            : null;
-        if (source is not { } size)
-        {
-            return new Plan(new DecodeBox(areaWidth, areaHeight), null, false, null);
-        }
-
-        DecodeBox box = DisplaySizing.DecodeBoxFor(mode, areaWidth, areaHeight, size.Width, size.Height);
-        (uint expectedWidth, uint expectedHeight) = DisplaySizing.ExpectedDisplayPixels(mode, areaWidth, areaHeight, size.Width, size.Height);
-        bool scrollable = mode == ImageScaleMode.ActualSize && !box.ActualSizeRefused;
-        return new Plan(box, DisplaySizing.ElementSize(expectedWidth, expectedHeight, rasterization), scrollable, null);
-    }
-
-    /// <summary>
-    /// Plan for an item the user zoomed or turned in the window: the factor comes from <see cref="_viewZoom"/> (or the
-    /// setting), the decode box is the displayed size (the source size when enlarged), and the element gets the
-    /// displayed size even when the bitmap is smaller (the screen stretches it).
-    /// </summary>
-    private async Task<Plan> PlanViewAsync(string path, FileFacts facts, ImageScaleMode mode, uint areaWidth, uint areaHeight, CancellationToken cancellation)
-    {
-        double rasterization = DisplayScale();
-        ZoomSetting zoom = _viewZoom ?? ZoomSetting.For(mode);
-        (uint swappedWidth, uint swappedHeight) = _orientation.Oriented(areaWidth, areaHeight);
-        if (facts.Format == FileFormat.Pdf)
-        {
-            if (_shown != ShownContent.Pdf || _shownSource.Width <= 0)
-            {
-                return new Plan(new DecodeBox(swappedWidth, swappedHeight), null, false, null);
-            }
-
-            (double ow, double oh) = _orientation.Oriented(_shownSource.Width, _shownSource.Height);
-            double pdfFactor = ViewerZoom.FactorFor(zoom, ow, oh, areaWidth, areaHeight, allowEnlarge: true);
-            (uint pw, uint ph) = ViewerZoom.DisplaySize(ow, oh, pdfFactor);
-            (double, double) pdfElement = DisplaySizing.ElementSize(pw, ph, rasterization);
-            return new Plan(new DecodeBox(swappedWidth, swappedHeight), pdfElement, pw > areaWidth + 1 || ph > areaHeight + 1, rasterization * pdfFactor, pdfElement);
-        }
-
-        (uint Width, uint Height)? source = facts.Access == PreviewAccess.Allowed
-            ? await Task.Run(() => WicPreviewDecoder.TryReadDimensions(path), cancellation)
-            : null;
-        if (source is not { } size)
-        {
-            return new Plan(new DecodeBox(swappedWidth, swappedHeight), null, false, null);
-        }
-
-        (uint sw, uint sh) = _orientation.Oriented(size.Width, size.Height);
-        double factor = ViewerZoom.FactorFor(zoom, sw, sh, areaWidth, areaHeight);
-        (uint dw, uint dh) = ViewerZoom.DisplaySize(size.Width, size.Height, factor);
-        (uint decodeWidth, uint decodeHeight) = ViewerZoom.DecodeSize(size.Width, size.Height, dw, dh, DisplaySizing.MaxActualSizePixels);
-        (uint displayWidth, uint displayHeight) = _orientation.Oriented(dw, dh);
-        (double, double) element = DisplaySizing.ElementSize(displayWidth, displayHeight, rasterization);
-        return new Plan(new DecodeBox(decodeWidth, decodeHeight), element, displayWidth > areaWidth + 1 || displayHeight > areaHeight + 1, null, element);
-    }
-
-    /// <summary>
-    /// The image scale is chosen in settings (written by a settings UI or by hand), not in the Quick View
-    /// window. The resident process re-reads the file when Quick View opens and the file has changed,
-    /// so a change applies from the next Space without restarting (one timestamp check per open).
-    /// </summary>
-    private void ReloadSettingsIfChanged(bool force = false)
-    {
-        DateTime stamp;
-        try
-        {
-            stamp = File.GetLastWriteTimeUtc(_settingsPath); // 1601-01-01 when the file does not exist
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
-        {
-            return;
-        }
-
-        if (!force && stamp == _settingsStamp)
-        {
-            return;
-        }
-
-        _settingsStamp = stamp;
-        ImageScaleMode previous = _scaleMode;
-        QuickViewSettings settings = QuickViewSettings.Load(_settingsPath);
-        _scaleMode = settings.ImageScale;
-        _pdfLayout = settings.PdfLayout;
-        _pdfSidebarOpen = settings.ShowPdfSidebar;
-        if (!force && previous != _scaleMode)
-        {
-            _cache.Clear(); // decoded for the other mode's box
-        }
-
-        _timeline.Mark(0, "settings-loaded", QuickViewTimeline.Now, new Dictionary<string, object?> { ["imageScale"] = _scaleMode.ToString(), ["pdfLayout"] = _pdfLayout.ToString() });
-    }
-
-    private void SetInfo(string text)
-    {
-        string position = _navigator.Mode == NavigationMode.MultipleItems
-            ? string.Format(CultureInfo.CurrentCulture, Strings.GetString("QuickView_Position"), _navigator.Index + 1, _navigator.Items.Count) + " · "
-            : string.Empty;
-        _window.SetInfo(position + text);
-    }
-
-    /// <summary>Called on the hook thread for Escape. Only used when the window is shown without activation.</summary>
-    public bool HandleEscapeFromHook(nint foreground)
-    {
-        if (!_visibleWithoutActivation || foreground != Volatile.Read(ref _ownerForHook))
-        {
-            return false;
-        }
-
-        long request = Interlocked.Read(ref _currentRequest);
-        _dispatcher.TryEnqueue(DispatcherQueuePriority.High, () => Hide(request, "escape-hook", restoreOwner: false));
-        return true;
-    }
-
-    /// <summary>Hides Quick View when the user switches to an unrelated application.</summary>
-    public void OnForegroundChanged(nint foreground)
-    {
-        if (!_visible || foreground == 0)
-        {
-            return;
-        }
-
-        if (foreground == _window.Handle)
-        {
-            _timeline.Mark(_currentRequest, "window-activated", QuickViewTimeline.Now, new Dictionary<string, object?>
-            {
-                ["focus"] = _window.FocusDescription(),
-                ["firstActivation"] = _visibleWithoutActivation,
-            });
-            if (_visibleWithoutActivation)
-            {
-                _visibleWithoutActivation = false; // user clicked into Quick View: normal window behavior from now on
-                _window.FocusContent();
-                UpdateNavigationKeys();
-            }
-
-            return;
-        }
-
-        nint root = NativeMethods.GetAncestor(foreground, NativeMethods.GA_ROOT);
-        if (root == _owner || foreground == _owner)
-        {
-            return; // back to the Explorer window Quick View belongs to: stay open
-        }
-
-        if (_presentation is not null && ProcessIdOf(root) == Environment.ProcessId)
-        {
-            return; // Quick View's own presentation window
-        }
-
-        string windowClass = Interop.WindowClass.Of(root);
-        if (TransientForegroundClasses.Contains(windowClass))
-        {
-            _timeline.Mark(_currentRequest, "foreground-transient", QuickViewTimeline.Now, new Dictionary<string, object?> { ["class"] = windowClass });
-            return;
-        }
-
-        _timeline.Mark(_currentRequest, "foreground-other", QuickViewTimeline.Now, new Dictionary<string, object?>
-        {
-            ["class"] = windowClass,
-            ["process"] = ProcessNameOf(root),
-            ["ownProcess"] = ProcessIdOf(root) == Environment.ProcessId,
-        });
-        Hide(_currentRequest, "foreground-other-app", restoreOwner: false);
-    }
-
-    private static int ProcessIdOf(nint window)
-    {
-        _ = NativeMethods.GetWindowThreadProcessId(window, out uint pid);
-        return (int)pid;
-    }
-
-    /// <summary>Diagnostics only (which application took the foreground).</summary>
-    private static string ProcessNameOf(nint window)
-    {
-        try
-        {
-            using var process = System.Diagnostics.Process.GetProcessById(ProcessIdOf(window));
-            return process.ProcessName;
-        }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
-        {
-            return "?";
-        }
-    }
-
-    private void Show(long requestId, string path)
-    {
-        StopGif();
-        StopMedia("show");
-        _pdfPages.Reset();
-        ResetView();
-        _loading?.Cancel();
-        _loading?.Dispose();
-        _loading = new CancellationTokenSource();
-        _currentPath = path;
-        Interlocked.Exchange(ref _currentRequest, requestId);
-
-        if (!_visible)
-        {
-            ReloadSettingsIfChanged();
-        }
-
-        string fileName = Path.GetFileName(path);
-        _window.ResetContent(fileName);
-        _window.Title = string.Format(CultureInfo.CurrentCulture, Strings.GetString("QuickView_WindowTitle"), fileName);
-        if (!_visible)
-        {
-            PlaceWindow(_owner != 0 ? _owner : _placeNear);
-            _window.SetOpenInMavueAvailable(ShellActions.FindMavueExecutable() is not null);
-        }
-
-        _timeline.Mark(requestId, "show-call", QuickViewTimeline.Now);
-        Activate(requestId);
-        _visible = true;
-        if (!_visibleWithoutActivation)
-        {
-            _window.FocusContent();
-        }
-
-        _ = MarkNextFrameAsync(requestId, "first-frame");
-        _ = CheckForegroundLaterAsync(requestId);
-        _ = LoadAsync(requestId, path, _loading.Token);
-    }
-
-    private void Activate(long requestId)
-    {
-        nint hwnd = _window.Handle;
-        bool? setForegroundResult = null;
-        int lastError = 0;
-        bool attached = false;
-
-        bool fellBack = false;
-        string mode = _options.Activation.ToString();
-        if (_grantedActivation)
-        {
-            // Context menu: the requesting process (started by Explorer from the user's click) called
-            // AllowSetForegroundWindow for us, so a normal activation is legitimate here.
-            _grantedActivation = false;
-            mode = "Granted";
-            AppWindow.Show(true);
-            if (NativeMethods.GetForegroundWindow() != hwnd)
-            {
-                setForegroundResult = NativeMethods.SetForegroundWindow(hwnd);
-                lastError = Marshal.GetLastPInvokeError();
-            }
-
-            if (NativeMethods.GetForegroundWindow() != hwnd)
-            {
-                // The right was not honored: fall back to the passive panel so the window is at least visible on top.
-                NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0, NoActivateFlags | NativeMethods.SWP_SHOWWINDOW);
-                _topmost = true;
-                _visibleWithoutActivation = true;
-                fellBack = true;
-            }
-        }
-        else
-        {
-            switch (_options.Activation)
-            {
-                case ActivationMode.Auto:
-                    if (_lastHookProbe == true)
-                    {
-                        // The hook callback reserved foreground rights while the Space event was processed.
-                        AppWindow.Show(true);
-                        if (NativeMethods.GetForegroundWindow() != hwnd)
-                        {
-                            setForegroundResult = NativeMethods.SetForegroundWindow(hwnd);
-                            lastError = Marshal.GetLastPInvokeError();
-                        }
-                    }
-
-                    if (NativeMethods.GetForegroundWindow() != hwnd)
-                    {
-                        // No rights: show passively. Attempting activation here would only flash the taskbar.
-                        NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_TOP, 0, 0, 0, 0, NoActivateFlags | NativeMethods.SWP_SHOWWINDOW);
-                        _visibleWithoutActivation = true;
-                        fellBack = true;
-                    }
-
-                    break;
-
-                case ActivationMode.AppWindowShow:
-                    AppWindow.Show(true);
-                    break;
-
-                case ActivationMode.SetForeground:
-                case ActivationMode.HookGrant:
-                    AppWindow.Show(true);
-                    if (NativeMethods.GetForegroundWindow() != hwnd)
-                    {
-                        setForegroundResult = NativeMethods.SetForegroundWindow(hwnd);
-                        lastError = Marshal.GetLastPInvokeError();
-                    }
-
-                    break;
-
-                case ActivationMode.AttachThreadInput:
-                    AppWindow.Show(true);
-                    if (NativeMethods.GetForegroundWindow() != hwnd)
-                    {
-                        uint foregroundThread = NativeMethods.GetWindowThreadProcessId(NativeMethods.GetForegroundWindow(), out _);
-                        uint thisThread = NativeMethods.GetCurrentThreadId();
-                        attached = foregroundThread != thisThread && NativeMethods.AttachThreadInput(thisThread, foregroundThread, true);
-                        setForegroundResult = NativeMethods.SetForegroundWindow(hwnd);
-                        lastError = Marshal.GetLastPInvokeError();
-                        if (attached)
-                        {
-                            NativeMethods.AttachThreadInput(thisThread, foregroundThread, false);
-                        }
-                    }
-
-                    break;
-
-                case ActivationMode.NoActivate:
-                    // Shown and raised to the top of the (non-topmost) z-order without activation.
-                    setForegroundResult = NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_TOP, 0, 0, 0, 0, NoActivateFlags | NativeMethods.SWP_SHOWWINDOW);
-                    _visibleWithoutActivation = true;
-                    break;
-
-                case ActivationMode.Panel:
-                    setForegroundResult = NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0, NoActivateFlags | NativeMethods.SWP_SHOWWINDOW);
-                    _topmost = true;
-                    _visibleWithoutActivation = true;
-                    break;
-
-                case ActivationMode.NoActivateTopmost:
-                    // Comparison: momentary topmost, then back to the normal band (still above Explorer).
-                    NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0, NoActivateFlags | NativeMethods.SWP_SHOWWINDOW);
-                    setForegroundResult = NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_NOTOPMOST, 0, 0, 0, 0, NoActivateFlags);
-                    _visibleWithoutActivation = true;
-                    break;
-            }
-        }
-
-        _timeline.Mark(requestId, "shown", QuickViewTimeline.Now, new Dictionary<string, object?>
-        {
-            ["mode"] = mode,
-            ["aboveOwner"] = IsAbove(hwnd, _owner),
-            ["isForeground"] = NativeMethods.GetForegroundWindow() == hwnd,
-            ["setForegroundResult"] = setForegroundResult,
-            ["lastError"] = lastError,
-            ["attached"] = attached,
-            ["fellBackToNoActivate"] = fellBack,
-        });
-    }
-
-    /// <param name="closeSession">False when a new Explorer subscription was already opened for the next show.</param>
-    private void Hide(long requestId, string reason, bool restoreOwner, bool closeSession = true)
-    {
-        if (!_visible)
-        {
-            return;
-        }
-
-        _loading?.Cancel();
-        nint hwnd = _window.Handle;
-        bool wasForeground = NativeMethods.GetForegroundWindow() == hwnd;
-        bool? ownerRestored = null;
-
-        // While still foreground we may hand activation back explicitly; afterwards we could not.
-        if (restoreOwner && wasForeground && NativeMethods.IsWindow(_owner))
-        {
-            ownerRestored = NativeMethods.SetForegroundWindow(_owner);
-        }
-
-        if (_topmost)
-        {
-            // Leave the topmost band before hiding so the window can never linger above other apps.
-            NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_NOTOPMOST, 0, 0, 0, 0, NoActivateFlags);
-            _topmost = false;
-        }
-
-        AppWindow.Hide();
-        _visible = false;
-        _visibleWithoutActivation = false;
-        _currentPath = null;
-        _window.Surface.ClearImages();
-        _displayedBitmap?.Dispose();
-        _displayedBitmap = null;
-        _contentRequest = 0;
-        _navigator.Reset();
-        if (closeSession)
-        {
-            _worker?.CloseSession();
-        }
-
-        _placeNear = 0;
-        StopGif();
-        StopMedia("hidden");
-        _pdfPages.Reset();
-        UpdatePageControls();
-        ResetView();
-        _focusWatcher.Stop();
-        _followedView = 0;
-        _prefetch?.Cancel();
-        _cache.Clear();
-        UpdateNavigationKeys();
-
-        _timeline.Mark(requestId, "hidden", QuickViewTimeline.Now, new Dictionary<string, object?>
-        {
-            ["reason"] = reason,
-            ["wasForeground"] = wasForeground,
-            ["ownerRestored"] = ownerRestored,
-            ["ownerIsForegroundAfter"] = NativeMethods.GetForegroundWindow() == _owner,
-        });
-        _ = TrimAfterHideAsync(requestId);
-    }
-
-    /// <summary>
-    /// Records (and optionally trims) the resident memory once Quick View has been hidden for a moment.
-    /// Decoding creates large short-lived buffers; while hidden the process should give that memory back.
-    /// </summary>
-    private async Task TrimAfterHideAsync(long requestId)
-    {
-        await Task.Delay(1000);
-        if (_visible)
-        {
-            return;
-        }
-
-        Dictionary<string, object?> before = MemorySnapshot();
-        if (_options.IdleTrim)
-        {
-            System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
-            GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
-            GC.WaitForPendingFinalizers();
-        }
-
-        Dictionary<string, object?> after = MemorySnapshot();
-        foreach ((string k, object? v) in after)
-        {
-            before["after_" + k] = v;
-        }
-
-        before["trimmed"] = _options.IdleTrim;
-        _timeline.Mark(requestId, "idle-memory", QuickViewTimeline.Now, before);
-    }
-
-    internal static Dictionary<string, object?> MemorySnapshot()
-    {
-        GCMemoryInfo gc = GC.GetGCMemoryInfo();
-        using var self = System.Diagnostics.Process.GetCurrentProcess();
-        return new Dictionary<string, object?>
-        {
-            ["managedHeapMb"] = Math.Round(gc.HeapSizeBytes / 1048576.0, 1),
-            ["managedCommittedMb"] = Math.Round(gc.TotalCommittedBytes / 1048576.0, 1),
-            ["workingSetMb"] = Math.Round(self.WorkingSet64 / 1048576.0, 1),
-            ["privateMb"] = Math.Round(self.PrivateMemorySize64 / 1048576.0, 1),
-        };
-    }
-
-    /// <summary>True if <paramref name="window"/> is above <paramref name="other"/> in the z-order.</summary>
-    private static bool IsAbove(nint window, nint other)
-    {
-        if (other == 0)
-        {
-            return true;
-        }
-
-        // Walk down from the window; finding the other window below means we are above it.
-        for (nint next = NativeMethods.GetWindow(window, NativeMethods.GW_HWNDNEXT); next != 0; next = NativeMethods.GetWindow(next, NativeMethods.GW_HWNDNEXT))
-        {
-            if (next == other)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private void PlaceWindow(nint owner)
-    {
-        DisplayArea area = owner != 0
-            ? DisplayArea.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(owner), DisplayAreaFallback.Nearest)
-            : DisplayArea.Primary;
-        RectInt32 work = area.WorkArea;
-        int width = (int)(work.Width * 0.7);
-        int height = (int)(work.Height * 0.75);
-        var target = new RectInt32(work.X + ((work.Width - width) / 2), work.Y + ((work.Height - height) / 2), width, height);
-        AppWindow.MoveAndResize(target);
-        if (AppWindow.Size.Width != width || AppWindow.Size.Height != height)
-        {
-            // Moving to a monitor with another scale makes Windows resize the window for the new DPI during
-            // the move (WM_DPICHANGED), overriding the requested size; on the new monitor it sticks.
-            AppWindow.MoveAndResize(target);
-        }
-
-        _timeline.Mark(_currentRequest, "placed", QuickViewTimeline.Now, new Dictionary<string, object?>
-        {
-            ["width"] = AppWindow.Size.Width,
-            ["height"] = AppWindow.Size.Height,
-            ["dpi"] = NativeMethods.GetDpiForWindow(_window.Handle),
-        });
-    }
-
-    private async Task LoadAsync(long requestId, string path, CancellationToken cancellation)
-    {
-        try
-        {
-            (uint areaWidth, uint areaHeight) = ImageArea();
-            _plannedArea = (areaWidth, areaHeight);
-            ImageScaleMode mode = _scaleMode;
-
-            // 1. File facts (attributes, size, format) without decoding.
-            FileFacts facts = await Task.Run(() => FileFacts.Read(path), cancellation);
-            _timeline.Mark(requestId, "info", QuickViewTimeline.Now, new Dictionary<string, object?>
-            {
-                ["format"] = facts.Format.ToString(),
-                ["extension"] = Path.GetExtension(path).ToLowerInvariant(),
-                ["bytes"] = facts.Length,
-                ["access"] = facts.Access.ToString(),
-            });
-            SetInfo(FormatInfo(facts, null));
-            _currentFacts = facts;
-
-            if (facts.Access == PreviewAccess.NotAFile)
-            {
-                _window.Surface.ShowStatusOnly(Strings.GetString("QuickView_Error_NotFile"));
-                return;
-            }
-
-            if (FileFormatKinds.IsMedia(facts.Format))
-            {
-                if (facts.Access == PreviewAccess.CloudPlaceholder)
-                {
-                    _window.Surface.ShowStatusOnly(Strings.GetString("QuickView_Error_CloudPlaceholder")); // playing would download it
-                    return;
-                }
-
-                await StartMediaAsync(requestId, path, facts, cancellation);
-                return;
-            }
-
-            if (facts.Format == FileFormat.Svg)
-            {
-                await ShowSvgAsync(requestId, path, facts, areaWidth, areaHeight, cancellation);
-                return;
-            }
-
-            if (facts.Format == FileFormat.Pdf && facts.Access == PreviewAccess.Allowed && PdfSession.IsAvailable && _options.Decoder == DecoderMode.WinRt)
-            {
-                await ShowPdfSessionAsync(requestId, path, facts, areaWidth, areaHeight, cancellation);
-                return;
-            }
-
-            // Display box: decode exactly the pixels that will be shown (no second resample in the UI),
-            // never enlarging small images; actual-size mode decodes the source size.
-            Plan plan = await PlanAsync(path, facts, mode, areaWidth, areaHeight, cancellation);
-            uint viewportWidth = plan.Box.Width;
-            uint viewportHeight = plan.Box.Height;
-
-            // A zoomed item is decoded for its zoom only (the cache holds the sizes navigation needs).
-            bool cacheable = facts.Access == PreviewAccess.Allowed && _options.Decoder == DecoderMode.WinRt && _viewZoom is null;
-            int page = facts.Format == FileFormat.Pdf ? _pdfPages.Index : 0;
-            PreviewKey key = PreviewKey.Create(path, facts.Length, facts.LastWriteUtc, viewportWidth, viewportHeight, page);
-            if (cacheable && _cache.TryGet(key, out DecodedImage? cached) && cached?.Bitmap is not null)
-            {
-                await ShowFullAsync(requestId, facts, cached, "cache", plan, cancellation);
-                await StartGifAsync(requestId, path, facts, plan, areaWidth, areaHeight, cancellation);
-                StartPrefetch(areaWidth, areaHeight);
-                return;
-            }
-
-            // 2. Cached shell thumbnail (never extracts, never hydrates cloud files).
-            int thumbnailSize = (int)Math.Min(1024, Math.Max(areaWidth, areaHeight));
-            // The shell thumbnail of a PDF shows its first page; other pages go straight to the rendered page.
-            Task<BgraImage?> thumbnailTask = page > 0
-                ? Task.FromResult<BgraImage?>(null)
-                : _shellThread.InvokeAsync(() => ShellThumbnail.TryGetCached(path, thumbnailSize));
-
-            if (facts.Access == PreviewAccess.CloudPlaceholder)
-            {
-                _window.Surface.ShowStatusOnly(Strings.GetString("QuickView_Error_CloudPlaceholder"));
-                await ShowThumbnailAsync(requestId, thumbnailTask, plan, null, cancellation);
-                return;
-            }
-
-            if (_options.Decoder == DecoderMode.Xaml && facts.Format != FileFormat.Pdf)
-            {
-                _window.Surface.SetImageBox(null, scrollable: false); // comparison path keeps the original "fit" layout
-                Task xamlThumbnail = ShowThumbnailAsync(requestId, thumbnailTask, Plan.Unknown, () => _window.Surface.HasFullImage, cancellation);
-                await LoadWithXamlDecoderAsync(requestId, path, facts, areaWidth, areaHeight, cancellation);
-                await xamlThumbnail;
-                return;
-            }
-
-            // 3. Full quality in the background; 4. swap in when ready.
-            Task<DecodedImage> fullTask = facts.Format == FileFormat.Pdf
-                ? PdfRendering.RenderAsync(path, viewportWidth, viewportHeight, cancellation, plan.PdfActualScale, page)
-                : ImageDecoding.DecodeAsync(path, viewportWidth, viewportHeight, Interpolation(_options.Interpolation), PreferWic(facts), cancellation);
-
-            Task thumbnailShown = ShowThumbnailAsync(requestId, thumbnailTask, plan, () => _window.Surface.HasFullImage, cancellation);
-            DecodedImage full = await fullTask;
-
-            // Keep the work even if the user already moved on: stepping back is then instant.
-            if (full.Reason is null && cacheable)
-            {
-                _cache.Add(key, full);
-            }
-
-            cancellation.ThrowIfCancellationRequested();
-
-            if (full.Reason is { } reason)
-            {
-                _window.Surface.ShowStatusOnly(Strings.GetString(ReasonToResource(reason)));
-                _timeline.Mark(requestId, "full-skipped", QuickViewTimeline.Now, new Dictionary<string, object?> { ["reason"] = full.Reason });
-                await thumbnailShown;
-                return;
-            }
-
-            await ShowFullAsync(requestId, facts, full, full.Decoder, plan, cancellation);
-            await StartGifAsync(requestId, path, facts, plan, areaWidth, areaHeight, cancellation);
-            StartPrefetch(areaWidth, areaHeight);
-        }
-        catch (OperationCanceledException)
-        {
-            // Navigation or hide superseded this request.
-        }
-        catch (Exception ex)
-        {
-            // Malformed or hostile files must never take the resident process down.
-            _timeline.Mark(requestId, "error", QuickViewTimeline.Now, new Dictionary<string, object?> { ["type"] = ex.GetType().Name, ["hresult"] = ex.HResult });
-            if (!cancellation.IsCancellationRequested)
-            {
-                _window.Surface.ShowStatusOnly(Strings.GetString("QuickView_Error_Failed"));
-            }
-        }
-    }
-
-    private async Task ShowFullAsync(long requestId, FileFacts facts, DecodedImage full, string decoder, Plan plan, CancellationToken cancellation)
-    {
-        SoftwareBitmap display = SoftwareBitmapPixels.Orient(full.Bitmap!, _orientation); // a private copy (see _displayedBitmap)
-        ImageSource source;
-        try
-        {
-            source = await CreateSourceAsync(display);
-            cancellation.ThrowIfCancellationRequested();
-        }
-        catch
-        {
-            display.Dispose();
-            throw;
-        }
-
-        (double Width, double Height) element = plan.DisplayElementSize ?? DisplaySizing.ElementSize((uint)display.PixelWidth, (uint)display.PixelHeight, DisplayScale());
-        _window.Surface.SetImageBox(element, plan.Scrollable);
-        _window.Surface.SetFullImage(source);
-        bool pdf = full.PageCount > 0;
-        RecordShown(
-            pdf ? ShownContent.Pdf : ShownContent.Raster,
-            pdf ? (full.SourceWidth * DisplayScale(), full.SourceHeight * DisplayScale()) : (full.SourceWidth, full.SourceHeight),
-            element.Width);
-        SoftwareBitmap? previous = _displayedBitmap;
-        _displayedBitmap = display;
-        previous?.Dispose();
-        _contentRequest = requestId;
-        if (full.PageCount > 0)
-        {
-            _pdfPages.SetCount(full.PageCount);
-            UpdatePageControls();
-        }
-
-        SetInfo(FormatInfo(facts, full) + (plan.Box.ActualSizeRefused ? " · " + Strings.GetString("QuickView_ActualSizeTooLarge") : string.Empty));
-        _timeline.Mark(requestId, "full-set", QuickViewTimeline.Now, new Dictionary<string, object?>
-        {
-            ["sourceWidth"] = full.SourceWidth,
-            ["sourceHeight"] = full.SourceHeight,
-            ["decodedWidth"] = full.Bitmap!.PixelWidth,
-            ["decodedHeight"] = full.Bitmap.PixelHeight,
-            ["decodeMs"] = decoder == "cache" ? 0 : full.DecodeMilliseconds,
-            ["decoder"] = decoder,
-            ["areaWidth"] = _plannedArea.Width,
-            ["areaHeight"] = _plannedArea.Height,
-            ["layoutAreaWidth"] = _window.LayoutImageAreaPixels().Width,
-            ["layoutAreaHeight"] = _window.LayoutImageAreaPixels().Height,
-            ["dpi"] = NativeMethods.GetDpiForWindow(_window.Handle),
-            ["pageIndex"] = full.PageIndex,
-            ["pageCount"] = full.PageCount,
-        });
-        await NextFrameAsync();
-        if (!cancellation.IsCancellationRequested)
-        {
-            _timeline.Mark(requestId, "full-visible", QuickViewTimeline.Now);
-        }
-    }
-
-    /// <summary>
-    /// Decodes the neighbors of the shown item in the background (next first), so the next step is
-    /// instant. Cancelled by any navigation or by closing; never runs while the current item decodes.
-    /// </summary>
-    private async void StartPrefetch(uint areaWidth, uint areaHeight)
-    {
-        _prefetch?.Cancel();
-        _prefetch?.Dispose();
-        _prefetch = new CancellationTokenSource();
-        CancellationToken cancellation = _prefetch.Token;
-        try
-        {
-            // A multi-page PDF: the next and previous pages first (page turns are the likely next step).
-            if (_pdfPages.IsMultiPage && _currentPath is { } document)
-            {
-                int[] pages = [_pdfPages.Index + 1, _pdfPages.Index - 1];
-                int count = _pdfPages.Count;
-                foreach (int neighborPage in pages.Where(p => p >= 0 && p < count))
-                {
-                    await PrefetchPdfPageAsync(document, neighborPage, areaWidth, areaHeight, cancellation);
-                }
-            }
-
-            (string? previous, string? next) = _navigator.Mode == NavigationMode.MultipleItems
-                ? (Neighbor(-1), Neighbor(+1))
-                : _worker is null ? (null, null) : await _worker.ReadNeighborsAsync();
-
-            foreach (string? path in new[] { next, previous })
-            {
-                if (path is null || cancellation.IsCancellationRequested)
-                {
-                    continue;
-                }
-
-                FileFacts facts = await Task.Run(() => FileFacts.Read(path), cancellation);
-                if (facts.Access != PreviewAccess.Allowed || facts.Length > MaxPrefetchFileBytes || FileFormatKinds.IsMedia(facts.Format) ||
-                    (facts.Format == FileFormat.Pdf && PdfSession.IsAvailable))
-                {
-                    continue;
-                }
-
-                Plan plan = await PlanAsync(path, facts, _scaleMode, areaWidth, areaHeight, cancellation);
-                PreviewKey key = PreviewKey.Create(path, facts.Length, facts.LastWriteUtc, plan.Box.Width, plan.Box.Height);
-                long pixelBudget = _scaleMode == ImageScaleMode.ActualSize ? MaxActualSizePrefetchPixels : MaxPrefetchSourcePixels;
-                if (_cache.Contains(key))
-                {
-                    continue;
-                }
-
-                DecodedImage decoded = facts.Format == FileFormat.Pdf
-                    ? await PdfRendering.RenderAsync(path, plan.Box.Width, plan.Box.Height, cancellation, plan.PdfActualScale)
-                    : await ImageDecoding.DecodeAsync(path, plan.Box.Width, plan.Box.Height, Interpolation(_options.Interpolation), PreferWic(facts), cancellation, pixelBudget);
-                if (decoded.Reason is null && _visible)
-                {
-                    _cache.Add(key, decoded);
-                    _timeline.Mark(0, "prefetched", QuickViewTimeline.Now, new Dictionary<string, object?>
-                    {
-                        ["decodeMs"] = decoded.DecodeMilliseconds,
-                        ["cacheBytes"] = _cache.Bytes,
-                        ["cacheCount"] = _cache.Count,
-                    });
-                }
-                else
-                {
-                    decoded.Bitmap?.Dispose();
-                }
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // Superseded by navigation or closing.
-        }
-        catch (Exception ex)
-        {
-            // Prefetch is an optimization; failures (hostile/broken neighbor files) are ignored.
-            _timeline.Mark(0, "prefetch-error", QuickViewTimeline.Now, new Dictionary<string, object?> { ["type"] = ex.GetType().Name });
-        }
-    }
-
-    /// <summary>
-    /// After a GIF's first frame is on screen: if the file has several frames, replace it with an animation.
-    /// The static first frame stays when the file has one frame, cannot be read as an animation, or is very large.
-    /// </summary>
-    private async Task StartGifAsync(long requestId, string path, FileFacts facts, Plan plan, uint areaWidth, uint areaHeight, CancellationToken cancellation)
-    {
-        if (facts.Format != FileFormat.Gif || facts.Access != PreviewAccess.Allowed)
-        {
-            return;
-        }
-
-        Mavue.Image.Gif.GifAnimationReader? reader = await Mavue.Image.Gif.GifAnimationReader.OpenAsync(path, cancellation);
-        if (reader is null)
-        {
-            return;
-        }
-
-        if (reader.FrameCount < 2 || (long)reader.Width * reader.Height > MaxAnimatedGifPixels ||
-            cancellation.IsCancellationRequested || !_visible || _contentRequest != requestId)
-        {
-            reader.Dispose();
-            return;
-        }
-
-        StopGif();
-        var player = new GifPlayer(reader, Trace(requestId), _orientation);
-        _gif = player;
-
-        // The animation is sized from the logical screen (the first frame may cover only part of it).
-        (uint displayWidth, uint displayHeight) = DisplaySizing.ExpectedDisplayPixels(_scaleMode, areaWidth, areaHeight, (uint)reader.Width, (uint)reader.Height);
-        bool scrollable = plan.Scrollable;
-        if (_viewZoom is not null || !_orientation.IsIdentity)
-        {
-            (int ow, int oh) = _orientation.Oriented(reader.Width, reader.Height);
-            double factor = ViewerZoom.FactorFor(_viewZoom ?? ZoomSetting.For(_scaleMode), ow, oh, areaWidth, areaHeight);
-            (displayWidth, displayHeight) = ViewerZoom.DisplaySize(ow, oh, factor);
-            scrollable = displayWidth > areaWidth + 1 || displayHeight > areaHeight + 1;
-        }
-
-        (double Width, double Height) element = DisplaySizing.ElementSize(displayWidth, displayHeight, DisplayScale());
-        _window.Surface.SetImageBox(element, scrollable);
-        RecordShown(ShownContent.Gif, (reader.Width, reader.Height), element.Width);
-        _window.Surface.SetFullImage(player.Source);
-        SoftwareBitmap? still = _displayedBitmap;
-        _displayedBitmap = null; // the still frame's source was just replaced; free its pixels too
-        still?.Dispose();
-        player.Start();
-    }
-
-    /// <summary>Plays a video or audio file with Windows' media pipeline (MediaPlayerElement + Media Foundation).</summary>
-    private async Task StartMediaAsync(long requestId, string path, FileFacts facts, CancellationToken cancellation)
-    {
-        StopMedia("replace");
-        bool audio = FileFormatKinds.IsAudio(facts.Format);
-        MediaSession session = await MediaSession.OpenAsync(path, audio, _dispatcher, cancellation);
-        if (cancellation.IsCancellationRequested)
-        {
-            session.Dispose();
-            cancellation.ThrowIfCancellationRequested();
-        }
-
-        _media = session;
-        session.Opened += s => OnMediaOpened(s, requestId, facts);
-        session.Failed += (s, error, hresult) => OnMediaFailed(s, requestId, error, hresult);
-        session.StateChanged += (s, state) => OnMediaState(s, requestId, state);
-        _timeline.Mark(requestId, "media-open", QuickViewTimeline.Now, new Dictionary<string, object?> { ["kind"] = audio ? "audio" : "video", ["player"] = session.Id });
-        _window.Surface.ShowMedia(session.Player);
-        RecordShown(ShownContent.None, default, 0);
-        _contentRequest = requestId; // the previous item's picture is gone; no "stale image" clearing needed
-        if (audio)
-        {
-            _window.Surface.SetAudioLayout();
-        }
-
-        _window.Surface.SetStatus(Strings.GetString("QuickView_Loading"));
-        session.Start();
-    }
-
-    private async void OnMediaOpened(MediaSession session, long requestId, FileFacts facts)
-    {
-        if (!ReferenceEquals(session, _media))
-        {
-            return;
-        }
-
-        TimeSpan duration = session.Duration;
-        _window.Surface.SetStatus(string.Empty);
-        if (session.HasVideo)
-        {
-            UpdateVideoLayout();
-            SetInfo(string.Format(CultureInfo.CurrentCulture, Strings.GetString("QuickView_InfoVideo"), facts.Format, session.NaturalSize.Width, session.NaturalSize.Height, MediaControlMath.FormatDuration(duration), ByteSizeText.Format(facts.Length)));
-        }
-        else
-        {
-            _window.Surface.SetAudioLayout();
-            SetInfo(string.Format(CultureInfo.CurrentCulture, Strings.GetString("QuickView_InfoAudio"), facts.Format, MediaControlMath.FormatDuration(duration), ByteSizeText.Format(facts.Length)));
-        }
-
-        _contentRequest = requestId;
-        _timeline.Mark(requestId, "media-opened", QuickViewTimeline.Now, new Dictionary<string, object?>
-        {
-            ["kind"] = session.HasVideo ? "video" : "audio",
-            ["player"] = session.Id,
-            ["width"] = session.NaturalSize.Width,
-            ["height"] = session.NaturalSize.Height,
-            ["durationMs"] = Math.Round(duration.TotalMilliseconds),
-        });
-        await NextFrameAsync();
-        if (ReferenceEquals(session, _media))
-        {
-            _timeline.Mark(requestId, "full-visible", QuickViewTimeline.Now);
-        }
-    }
-
-    private void OnMediaFailed(MediaSession session, long requestId, string error, int hresult)
-    {
-        if (!ReferenceEquals(session, _media))
-        {
-            return;
-        }
-
-        // Missing codec, unsupported container or a damaged file: say so; the resident process carries on.
-        _timeline.Mark(requestId, "media-failed", QuickViewTimeline.Now, new Dictionary<string, object?> { ["error"] = error, ["hresult"] = hresult, ["player"] = session.Id });
-        StopMedia("failed");
-        _window.Surface.ShowStatusOnly(Strings.GetString("QuickView_Error_Media"));
-        _timeline.Mark(requestId, "full-skipped", QuickViewTimeline.Now, new Dictionary<string, object?> { ["reason"] = "media-failed" });
-    }
-
-    private void OnMediaState(MediaSession session, long requestId, string state)
-    {
-        if (!ReferenceEquals(session, _media))
-        {
-            return;
-        }
-
-        string? text = state switch
-        {
-            "Playing" => Strings.GetString("QuickView_MediaPlaying"),
-            "Paused" => Strings.GetString("QuickView_MediaPaused"),
-            MediaStates.Ended => Strings.GetString("QuickView_MediaEnded"),
-            _ => null,
-        };
-        if (text is not null)
-        {
-            _window.Surface.SetAudioState(text);
-        }
-
-        _timeline.Mark(requestId, "media-state", QuickViewTimeline.Now, new Dictionary<string, object?> { ["state"] = state, ["player"] = session.Id });
-    }
-
-    /// <summary>Enter, Ctrl+←/→ and Ctrl+↑/↓ while the Quick View window has the keyboard.</summary>
-    private void OnMediaCommand(MediaCommand command)
-    {
-        if (_media is not { } session)
-        {
-            return;
-        }
-
-        (TimeSpan position, double volume) = session.Execute(command);
-        _timeline.Mark(_currentRequest, "media-command", QuickViewTimeline.Now, new Dictionary<string, object?>
-        {
-            ["command"] = command.ToString(),
-            ["positionMs"] = Math.Round(position.TotalMilliseconds),
-            ["volume"] = Math.Round(volume, 2),
-            ["player"] = session.Id,
-        });
-    }
-
-    /// <summary>Video fits the area and is never enlarged (same rule as images).</summary>
-    private void UpdateVideoLayout()
-    {
-        if (_media is not { HasVideo: true } session)
-        {
-            return;
-        }
-
-        (uint areaWidth, uint areaHeight) = ImageArea();
-        (uint width, uint height) = DisplaySizing.ExpectedDisplayPixels(ImageScaleMode.FitNoUpscale, areaWidth, areaHeight, session.NaturalSize.Width, session.NaturalSize.Height);
-        (double w, double h) = DisplaySizing.ElementSize(width, height, DisplayScale());
-        _window.Surface.SetVideoLayout(w, h);
-    }
-
-    /// <summary>Forgets the zoom and rotation of the previous item; the controls are shown again for what comes next.</summary>
-    private void ResetView()
-    {
-        ClosePdf();
-        _zoomTimer?.Stop();
-        _viewZoom = null;
-        _orientation = ViewOrientation.Identity;
-        _shown = ShownContent.None;
-        _shownSource = default;
-        _shownFactor = 0;
-        ReplaceSvgStream(null);
-    }
-
-    /// <summary>Records what is on screen (size at 100 % and element width) and updates the zoom controls.</summary>
-    private void RecordShown(ShownContent content, (double Width, double Height) source, double elementWidth)
-    {
-        _shown = content;
-        _shownSource = source;
-        (double orientedWidth, _) = (content == ShownContent.Svg ? ViewOrientation.Identity : _orientation).Oriented(source.Width, source.Height);
-        _shownFactor = orientedWidth > 0 ? elementWidth * DisplayScale() / orientedWidth : 0;
-        _window.SetViewControls(content != ShownContent.None, content is ShownContent.Raster or ShownContent.Pdf or ShownContent.Gif, _shownFactor > 0 ? ViewerZoom.Percent(_shownFactor) : string.Empty);
-    }
-
-    /// <summary>
-    /// Zoom from the window. Applied at once by resizing what is shown (around the pointer for the wheel); a raster image
-    /// or PDF page is decoded again at the new size once zooming pauses.
-    /// </summary>
-    private void OnZoomRequested(QuickViewZoomCommand command, int wheelDelta, Windows.Foundation.Point? anchor)
-    {
-        if (_visible && _pdf.IsOpen)
-        {
-            ZoomSetting zoom = command switch
-            {
-                QuickViewZoomCommand.Fit => ZoomSetting.For(_scaleMode),
-                QuickViewZoomCommand.ActualSize => ZoomSetting.ActualSize,
-                QuickViewZoomCommand.In => new ZoomSetting(ZoomMode.Custom, ViewerZoom.StepIn(_pdf.Factor)),
-                QuickViewZoomCommand.Out => new ZoomSetting(ZoomMode.Custom, ViewerZoom.StepOut(_pdf.Factor)),
-                _ => new ZoomSetting(ZoomMode.Custom, ViewerZoom.Wheel(_pdf.Factor, wheelDelta)),
-            };
-            _viewZoom = zoom.Mode == ZoomMode.Custom ? zoom : null;
-            _pdf.SetZoom(zoom.Mode == ZoomMode.Custom ? zoom with { Factor = ViewerZoom.Clamp(zoom.Factor, 10_000, 10_000) } : zoom, anchor);
-            _timeline.Mark(_currentRequest, "zoom", QuickViewTimeline.Now, new Dictionary<string, object?> { ["command"] = command.ToString(), ["factor"] = Math.Round(_pdf.Factor, 4), ["pdf"] = true });
-            return;
-        }
-
-        if (!_visible || _currentPath is null || _shown == ShownContent.None || _shownFactor <= 0)
-        {
-            return;
-        }
-
-        ViewOrientation orientation = _shown == ShownContent.Svg ? ViewOrientation.Identity : _orientation;
-        (double width, double height) = orientation.Oriented(_shownSource.Width, _shownSource.Height);
-        (uint areaWidth, uint areaHeight) = ImageArea();
-        double factor;
-        if (command == QuickViewZoomCommand.Fit)
-        {
-            _viewZoom = null; // back to the size from the settings
-            factor = ViewerZoom.FactorFor(ZoomSetting.For(_scaleMode), width, height, areaWidth, areaHeight, allowEnlarge: _shown == ShownContent.Pdf);
-        }
-        else
-        {
-            double target = command switch
-            {
-                QuickViewZoomCommand.In => ViewerZoom.StepIn(_shownFactor),
-                QuickViewZoomCommand.Out => ViewerZoom.StepOut(_shownFactor),
-                QuickViewZoomCommand.ActualSize => 1,
-                _ => ViewerZoom.Wheel(_shownFactor, wheelDelta),
-            };
-            factor = ViewerZoom.Clamp(target, width, height);
-            _viewZoom = new ZoomSetting(ZoomMode.Custom, factor);
-        }
-
-        (uint displayWidth, uint displayHeight) = ViewerZoom.DisplaySize(width, height, factor);
-        (double, double) element = DisplaySizing.ElementSize(displayWidth, displayHeight, DisplayScale());
-        _window.Surface.ZoomImage(element, anchor ?? _window.Surface.ViewportCenter);
-        _shownFactor = factor;
-        _window.SetViewControls(true, _shown is ShownContent.Raster or ShownContent.Pdf or ShownContent.Gif, ViewerZoom.Percent(factor));
-        _timeline.Mark(_currentRequest, "zoom", QuickViewTimeline.Now, new Dictionary<string, object?>
-        {
-            ["command"] = command.ToString(),
-            ["factor"] = Math.Round(factor, 4),
-            ["width"] = displayWidth,
-            ["height"] = displayHeight,
-        });
-        if (_shown is ShownContent.Raster or ShownContent.Pdf)
-        {
-            _zoomTimer ??= CreateZoomTimer();
-            _zoomTimer.Stop();
-            _zoomTimer.Start();
-        }
-    }
-
-    private DispatcherQueueTimer CreateZoomTimer()
-    {
-        DispatcherQueueTimer timer = _dispatcher.CreateTimer();
-        timer.Interval = TimeSpan.FromMilliseconds(180);
-        timer.IsRepeating = false;
-        timer.Tick += (_, _) =>
-        {
-            if (_visible && _currentPath is { } path && _shown is ShownContent.Raster or ShownContent.Pdf)
-            {
-                long id = SelectionWorker.NextRequestId();
-                MarkNavigation(id, "zoom-refine");
-                ShowNext(id, path, sameItem: true);
-            }
-        };
-        return timer;
-    }
-
-    /// <summary>Turns the image, GIF or PDF page a quarter (the file is not changed) and draws it again.</summary>
-    private void OnRotateRequested(int quarterTurns)
-    {
-        if (_visible && _pdf.IsOpen)
-        {
-            _pdf.Rotate(quarterTurns);
-            _timeline.Mark(_currentRequest, "rotate", QuickViewTimeline.Now, new Dictionary<string, object?> { ["quarterTurns"] = _pdf.QuarterTurns, ["pdf"] = true });
-            return;
-        }
-
-        if (!_visible || _currentPath is not { } path || _shown is not (ShownContent.Raster or ShownContent.Pdf or ShownContent.Gif))
-        {
-            return;
-        }
-
-        _orientation = quarterTurns > 0 ? _orientation.RotateClockwise() : _orientation.RotateCounterClockwise();
-        long id = SelectionWorker.NextRequestId();
-        _timeline.Mark(id, "rotate", QuickViewTimeline.Now, new Dictionary<string, object?> { ["quarterTurns"] = _orientation.QuarterTurns });
-        MarkNavigation(id, "rotate");
-        ShowNext(id, path, sameItem: true);
-    }
-
-    private async void OnFileCommand(QuickViewFileCommand command)
-    {
-        if (!_visible || _currentPath is not { } path)
-        {
-            return;
-        }
-
-        _timeline.Mark(_currentRequest, "file-command", QuickViewTimeline.Now, new Dictionary<string, object?> { ["command"] = command.ToString() });
-        try
-        {
-            switch (command)
-            {
-                case QuickViewFileCommand.OpenInMavue:
-                    // Started while Quick View is the active window, so Mavue may take the foreground; then Quick View closes.
-                    if (ShellActions.LaunchMavue([path]))
-                    {
-                        Hide(_currentRequest, "open-in-mavue", restoreOwner: false);
-                    }
-
-                    break;
-                case QuickViewFileCommand.OpenWith:
-                    if (_media is { IsPlaying: true } playing)
-                    {
-                        playing.Execute(MediaCommand.TogglePlay);
-                    }
-
-                    await ShellActions.OpenWithAsync(_window.Handle, path);
-                    break;
-                case QuickViewFileCommand.Copy when _pdf.HasSelection:
-                    await _pdf.CopySelectionAsync();
-                    break;
-                case QuickViewFileCommand.Copy:
-                    await ShellActions.CopyToClipboardAsync(path, _currentFacts?.Format ?? FileFormat.Unknown);
-                    break;
-                case QuickViewFileCommand.ToggleAnimation:
-                    _gif?.TogglePause();
-                    break;
-            }
-        }
-        catch (Exception ex) when (ex is COMException or UnauthorizedAccessException or FileNotFoundException or IOException)
-        {
-            _timeline.Mark(_currentRequest, "file-command-error", QuickViewTimeline.Now, new Dictionary<string, object?> { ["type"] = ex.GetType().Name, ["hresult"] = ex.HResult });
-        }
-    }
-
-    /// <summary>
-    /// SVG through XAML's SvgImageSource (Direct2D), drawn at the element's size: 100 % is the drawing's own size at
-    /// 96 dpi on this monitor; small drawings are not enlarged. Never for cloud placeholders (reading would download).
-    /// </summary>
-    private async Task ShowSvgAsync(long requestId, string path, FileFacts facts, uint areaWidth, uint areaHeight, CancellationToken cancellation)
-    {
-        if (facts.Access != PreviewAccess.Allowed)
-        {
-            _window.Surface.ShowStatusOnly(Strings.GetString("QuickView_Error_CloudPlaceholder"));
-            return;
-        }
-
-        if (facts.Length > MaxPrefetchFileBytes)
-        {
-            _window.Surface.ShowStatusOnly(Strings.GetString("QuickView_Error_TooLarge"));
-            return;
-        }
-
-        (double Width, double Height)? intrinsic = await Task.Run(() => SvgDimensions.TryRead(path), cancellation);
-        byte[] content = await File.ReadAllBytesAsync(path, cancellation);
-        if (intrinsic is not { } size)
-        {
-            _window.Surface.ShowStatusOnly(Strings.GetString("QuickView_Error_Failed"));
-            _timeline.Mark(requestId, "full-skipped", QuickViewTimeline.Now, new Dictionary<string, object?> { ["reason"] = "svg-invalid" });
-            return;
-        }
-
-        var stream = new InMemoryRandomAccessStream();
-        await stream.WriteAsync(content.AsBuffer());
-        stream.Seek(0);
-        var svg = new SvgImageSource();
-        SvgImageSourceLoadStatus status = await svg.SetSourceAsync(stream);
-        if (cancellation.IsCancellationRequested || status != SvgImageSourceLoadStatus.Success)
-        {
-            stream.Dispose();
-            cancellation.ThrowIfCancellationRequested();
-            _window.Surface.ShowStatusOnly(Strings.GetString("QuickView_Error_Failed"));
-            _timeline.Mark(requestId, "full-skipped", QuickViewTimeline.Now, new Dictionary<string, object?> { ["reason"] = "svg-" + status });
-            return;
-        }
-
-        double scale = DisplayScale();
-        (double sourceWidth, double sourceHeight) = (size.Width * scale, size.Height * scale);
-        double factor = ViewerZoom.FactorFor(_viewZoom ?? ZoomSetting.For(_scaleMode), sourceWidth, sourceHeight, areaWidth, areaHeight);
-        (uint displayWidth, uint displayHeight) = ViewerZoom.DisplaySize(sourceWidth, sourceHeight, factor);
-        (double, double) element = DisplaySizing.ElementSize(displayWidth, displayHeight, scale);
-        _window.Surface.SetImageBox(element, displayWidth > areaWidth + 1 || displayHeight > areaHeight + 1);
-        _window.Surface.SetFullImage(svg);
-        SoftwareBitmap? previous = _displayedBitmap;
-        _displayedBitmap = null;
-        previous?.Dispose();
-        ReplaceSvgStream(stream);
-        _contentRequest = requestId;
-        RecordShown(ShownContent.Svg, (sourceWidth, sourceHeight), element.Item1);
-        SetInfo(string.Format(CultureInfo.CurrentCulture, Strings.GetString("QuickView_InfoImage"), facts.Format, Math.Round(size.Width), Math.Round(size.Height), ByteSizeText.Format(facts.Length)));
-        _timeline.Mark(requestId, "full-set", QuickViewTimeline.Now, new Dictionary<string, object?> { ["decoder"] = "svg", ["sourceWidth"] = size.Width, ["sourceHeight"] = size.Height });
-        await NextFrameAsync();
-        if (!cancellation.IsCancellationRequested)
-        {
-            _timeline.Mark(requestId, "full-visible", QuickViewTimeline.Now);
-        }
-    }
-
-    /// <summary>
-    /// A PDF through the shared <see cref="PdfSession"/>: the document view replaces the image area; pages are drawn
-    /// in the background near the screen only. The timing log gets the same marks as an image (full-set when the
-    /// current page is drawn, then full-visible), so latency and E2E checks apply unchanged.
-    /// </summary>
-    private async Task ShowPdfSessionAsync(long requestId, string path, FileFacts facts, uint areaWidth, uint areaHeight, CancellationToken cancellation)
-    {
-        StopGif();
-        ReplaceSvgStream(null);
-        _window.Surface.ShowDocument(_pdf.View);
-        SoftwareBitmap? previous = _displayedBitmap;
-        _displayedBitmap = null;
-        previous?.Dispose();
-        _pdfRequest = requestId;
-        _pdfFirstFrameMarked = false;
-        ZoomSetting zoom = _viewZoom ?? ZoomSetting.For(_scaleMode);
-        PdfSessionOpenResult result = await _pdf.OpenAsync(path, zoom, _pdfLayout, cancellation);
-        if (result == PdfSessionOpenResult.Cancelled)
-        {
-            cancellation.ThrowIfCancellationRequested();
-            return;
-        }
-
-        if (result != PdfSessionOpenResult.Opened)
-        {
-            ClosePdf();
-            _window.Surface.ShowStatusOnly(Strings.GetString(result == PdfSessionOpenResult.Password ? "QuickView_Error_PdfPassword" : "QuickView_Error_Failed"));
-            _timeline.Mark(requestId, "full-skipped", QuickViewTimeline.Now, new Dictionary<string, object?> { ["reason"] = result.ToString() });
-            return;
-        }
-
-        _contentRequest = requestId;
-        _plannedArea = (areaWidth, areaHeight);
-        _pdfPages.Reset();
-        _pdfPages.SetCount(_pdf.PageCount);
-        UpdatePageControls();
-        _window.SetPdfTools(true, _pdfSidebarOpen, _pdf.Layout);
-        RecordShown(ShownContent.None, default, 0);
-        _window.SetViewControls(true, true, ViewerZoom.Percent(_pdf.Factor));
-        OnPdfViewChanged();
-        StartPrefetch(areaWidth, areaHeight);
-    }
-
-    /// <summary>Page steps of a PDF in the session (keys, hook, buttons, page box), logged like a page render.</summary>
-    private void StepPdfPage(int delta, string source, long? inputQpc, int? target)
-    {
-        int before = _pdf.CurrentPage;
-        bool moved;
-        if (target is { } page)
-        {
-            moved = page >= 0 && page < _pdf.PageCount && page != before;
-            if (moved)
-            {
-                _pdf.GoToPage(page);
-            }
-        }
-        else
-        {
-            moved = _pdf.StepPage(delta);
-        }
-
-        if (!moved)
-        {
-            _timeline.Mark(_currentRequest, "pdf-page-edge", QuickViewTimeline.Now, new Dictionary<string, object?> { ["index"] = before, ["count"] = _pdf.PageCount, ["source"] = source });
-            return;
-        }
-
-        LogPdfPageMove(source, inputQpc);
-    }
-
-    /// <summary>The wheel over the PDF: a page turn in the single-page layout (logged like the page keys).</summary>
-    private bool OnDocumentWheel(int delta)
-    {
-        int before = _pdf.CurrentPage;
-        bool used = _pdf.HandleWheel(delta);
-        if (used && _pdf.CurrentPage != before)
-        {
-            LogPdfPageMove("wheel", null);
-        }
-
-        return used;
-    }
-
-    /// <summary>A page move of the session as a request of its own (nav "pdf-page", full-set, full-visible).</summary>
-    private void LogPdfPageMove(string source, long? inputQpc)
-    {
-        long id = SelectionWorker.NextRequestId();
-        if (inputQpc is { } input)
-        {
-            _timeline.Mark(id, "nav-input", input);
-        }
-
-        _timeline.Mark(id, "pdf-page", QuickViewTimeline.Now, new Dictionary<string, object?> { ["index"] = _pdf.CurrentPage, ["count"] = _pdf.PageCount, ["source"] = source });
-        MarkNavigation(id, "pdf-page");
-        Interlocked.Exchange(ref _currentRequest, id);
-        _contentRequest = id;
-        _pdfRequest = id;
-        _pdfFirstFrameMarked = false;
-        _ = MarkPdfPageShownAsync(id, rendered: null);
-    }
-
-    /// <summary>full-set / full-visible for the page now current (after it is drawn, or at once when already drawn).</summary>
-    private async Task MarkPdfPageShownAsync(long requestId, (int Width, int Height)? rendered)
-    {
-        if (_pdfFirstFrameMarked || requestId != _pdfRequest)
-        {
-            return;
-        }
-
-        _pdfFirstFrameMarked = true;
-        int page = _pdf.CurrentPage;
-        (double width, double height) = _pdf.PageSizeDips(page);
-        (int layoutWidth, int layoutHeight) = _window.LayoutImageAreaPixels();
-        _timeline.Mark(requestId, "full-set", QuickViewTimeline.Now, new Dictionary<string, object?>
-        {
-            ["sourceWidth"] = Math.Round(width),
-            ["sourceHeight"] = Math.Round(height),
-            ["decodedWidth"] = rendered?.Width,
-            ["decodedHeight"] = rendered?.Height,
-            ["decodeMs"] = 0,
-            ["decoder"] = "pdfium-view",
-            ["areaWidth"] = _plannedArea.Width,
-            ["areaHeight"] = _plannedArea.Height,
-            ["layoutAreaWidth"] = layoutWidth,
-            ["layoutAreaHeight"] = layoutHeight,
-            ["dpi"] = NativeMethods.GetDpiForWindow(_window.Handle),
-            ["pageIndex"] = page,
-            ["pageCount"] = _pdf.PageCount,
-            ["layout"] = _pdf.Layout.ToString(),
-        });
-        await NextFrameAsync();
-        if (requestId == _pdfRequest)
-        {
-            _timeline.Mark(requestId, "full-visible", QuickViewTimeline.Now);
-        }
-    }
-
-    /// <summary>
-    /// Session diagnostics into the timing log: the first drawn current page completes the request (full-set /
-    /// full-visible), and page positions are logged for tests (window client, physical pixels).
-    /// </summary>
-    private void PdfTrace(string name, IReadOnlyDictionary<string, object?> detail)
-    {
-        long request = Interlocked.Read(ref _currentRequest);
-        _timeline.Mark(request, name, QuickViewTimeline.Now, detail);
-        if (name is not ("pdf-rendered" or "pdf-scrolled") || !detail.TryGetValue("page", out object? value) || value is not int page)
-        {
-            return;
-        }
-
-        if (name == "pdf-rendered" && page == _pdf.CurrentPage && detail.TryGetValue("width", out object? w) && w is int width && detail.TryGetValue("height", out object? h) && h is int height)
-        {
-            _ = MarkPdfPageShownAsync(_pdfRequest, (width, height));
-        }
-
-        _dispatcher.TryEnqueue(DispatcherQueuePriority.Low, () =>
-        {
-            foreach (int p in name == "pdf-scrolled" ? new[] { page, page + 1 } : [page])
-            {
-                if (_pdf.PageRectInWindow(p) is { } rect)
-                {
-                    _timeline.Mark(Interlocked.Read(ref _currentRequest), "pdf-geometry", QuickViewTimeline.Now, new Dictionary<string, object?>
-                    {
-                        ["page"] = p,
-                        ["x"] = Math.Round(rect.X),
-                        ["y"] = Math.Round(rect.Y),
-                        ["width"] = Math.Round(rect.Width),
-                        ["height"] = Math.Round(rect.Height),
-                    });
-                }
-            }
-        });
-    }
-
-    /// <summary>The session's page, zoom or layout changed: info line, page box, buttons, hook keys.</summary>
-    private void OnPdfViewChanged()
-    {
-        if (!_visible || !_pdf.IsOpen || _currentFacts is not { } facts)
-        {
-            return;
-        }
-
-        int page = _pdf.CurrentPage;
-        _pdfPages.Reset();
-        _pdfPages.SetCount(_pdf.PageCount);
-        _pdfPages.TryStep(page);
-        _pdfPaging = _visible && _pdf.PageCount > 1;
-        _window.SetPageControls(_pdfPaging, _pdf.CanStepPage(-1), _pdf.CanStepPage(+1));
-        UpdateNavigationKeys();
-        _window.SetPageNumber(page, _pdf.PageCount);
-        _window.SetViewControls(true, true, ViewerZoom.Percent(_pdf.Factor));
-        _window.SetPdfTools(true, _pdfSidebarOpen, _pdf.Layout);
-        string size = ByteSizeText.Format(facts.Length);
-        SetInfo(_pdf.PageCount > 1
-            ? string.Format(CultureInfo.CurrentCulture, Strings.GetString("QuickView_InfoPdfPage"), page + 1, _pdf.PageCount, size)
-            : string.Format(CultureInfo.CurrentCulture, Strings.GetString("QuickView_InfoPdf"), _pdf.PageCount, size));
-    }
-
-    private async void OnPdfCommand(QuickViewPdfCommand command, int argument)
-    {
-        if (!_visible || !_pdf.IsOpen)
-        {
-            return;
-        }
-
-        _timeline.Mark(_currentRequest, "pdf-command", QuickViewTimeline.Now, new Dictionary<string, object?> { ["command"] = command.ToString(), ["argument"] = argument });
-        switch (command)
-        {
-            case QuickViewPdfCommand.Find:
-                _window.SetSearchVisible(true);
-                _pdfSearch.Open();
-                break;
-            case QuickViewPdfCommand.FindNext:
-                await _pdfSearch.FindAsync(argument);
-                break;
-            case QuickViewPdfCommand.Sidebar:
-                _pdfSidebarOpen = argument != 0;
-                _window.SetPdfTools(true, _pdfSidebarOpen, _pdf.Layout);
-                SaveQuickViewSettings(s => s with { ShowPdfSidebar = _pdfSidebarOpen });
-                break;
-            case QuickViewPdfCommand.Layout:
-                _pdfLayout = (PdfLayoutMode)argument;
-                _pdf.SetLayout(_pdfLayout);
-                _window.SetPdfTools(true, _pdfSidebarOpen, _pdfLayout);
-                _timeline.Mark(_currentRequest, "pdf-layout", QuickViewTimeline.Now, new Dictionary<string, object?> { ["mode"] = _pdfLayout.ToString() });
-                SaveQuickViewSettings(s => s with { PdfLayout = _pdfLayout });
-                break;
-            case QuickViewPdfCommand.GoToPage:
-                StepPdfPage(0, "page-box", null, argument);
-                break;
-            case QuickViewPdfCommand.FocusPageBox:
-                _window.FocusPageBox();
-                break;
-            case QuickViewPdfCommand.SelectAll:
-                await _pdf.SelectAllAsync();
-                break;
-            case QuickViewPdfCommand.Presentation:
-                StartPresentation();
-                break;
-        }
-    }
-
-    /// <summary>Presents the PDF full screen on Quick View's monitor; Quick View stays open behind it.</summary>
-    private void StartPresentation()
-    {
-        _presentation?.Close();
-        _presentation = PdfPresentationWindow.Start(_pdf, _window.Handle, Strings.GetString("Pdf_PresentationHint"), PdfTrace);
-        if (_presentation is { } window)
-        {
-            window.Closed += (_, _) =>
-            {
-                if (ReferenceEquals(_presentation, window))
-                {
-                    _presentation = null;
-                }
-            };
-        }
-    }
-
-    /// <summary>Remembers a PDF choice in the Quick View settings (the file is re-read before writing).</summary>
-    private void SaveQuickViewSettings(Func<QuickViewSettings, QuickViewSettings> change)
-    {
-        string path = _settingsPath;
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await change(QuickViewSettings.Load(path)).SaveAsync(path);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                // The choice applies to this session only.
-            }
-        }).ContinueWith(_ => _dispatcher.TryEnqueue(() =>
-        {
-            try
-            {
-                _settingsStamp = File.GetLastWriteTimeUtc(path); // our own write is not a change to re-read
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
-            {
-                // Re-read next time; harmless.
-            }
-        }), TaskScheduler.Default);
-    }
-
-    /// <summary>Closes the PDF of the session and its tools (another item, hide, failure).</summary>
-    private void ClosePdf()
-    {
-        _presentation?.Close();
-        _presentation = null;
-        _pdfSearch.Close();
-        _window.SetSearchVisible(false);
-        if (_pdf.IsOpen)
-        {
-            _pdf.Close();
-        }
-
-        if (_window.Surface.ShowsDocument)
-        {
-            _window.Surface.ClearDocument();
-        }
-
-        _window.SetPdfTools(false, _pdfSidebarOpen, _pdfLayout);
-    }
-
-    private void ReplaceSvgStream(IRandomAccessStream? stream)
-    {
-        IRandomAccessStream? previous = _svgStream;
-        _svgStream = stream;
-        if (!ReferenceEquals(previous, stream))
-        {
-            previous?.Dispose();
-        }
-    }
-
-    private void StopMedia(string reason)
-    {
-        if (_media is not { } session)
-        {
-            return;
-        }
-
-        _media = null;
-        _window.Surface.ClearMedia();
-        session.Dispose();
-        _timeline.Mark(_currentRequest, "media-stop", QuickViewTimeline.Now, new Dictionary<string, object?> { ["reason"] = reason, ["player"] = session.Id });
-    }
-
-    /// <summary>GIF/media playback events go to the timing log under the request that started them.</summary>
-    private PlaybackTrace Trace(long requestId) => (name, detail) => _timeline.Mark(requestId, name, QuickViewTimeline.Now, detail);
-
-    private void StopGif()
-    {
-        _gif?.Dispose();
-        _gif = null;
-    }
-
-    private async Task PrefetchPdfPageAsync(string path, int page, uint areaWidth, uint areaHeight, CancellationToken cancellation)
-    {
-        FileFacts facts = await Task.Run(() => FileFacts.Read(path), cancellation);
-        if (facts.Access != PreviewAccess.Allowed || facts.Format != FileFormat.Pdf)
-        {
-            return;
-        }
-
-        Plan plan = await PlanAsync(path, facts, _scaleMode, areaWidth, areaHeight, cancellation);
-        PreviewKey key = PreviewKey.Create(path, facts.Length, facts.LastWriteUtc, plan.Box.Width, plan.Box.Height, page);
-        if (_cache.Contains(key))
-        {
-            return;
-        }
-
-        DecodedImage decoded = await PdfRendering.RenderAsync(path, plan.Box.Width, plan.Box.Height, cancellation, plan.PdfActualScale, page);
-        if (decoded.Reason is null && _visible)
-        {
-            _cache.Add(key, decoded);
-            _timeline.Mark(0, "prefetched", QuickViewTimeline.Now, new Dictionary<string, object?>
-            {
-                ["decodeMs"] = decoded.DecodeMilliseconds,
-                ["pdfPage"] = page,
-                ["cacheBytes"] = _cache.Bytes,
-                ["cacheCount"] = _cache.Count,
-            });
-        }
-        else
-        {
-            decoded.Bitmap?.Dispose();
-        }
-    }
-
-    private string? Neighbor(int delta)
-    {
-        int index = _navigator.Index + delta;
-        return index >= 0 && index < _navigator.Items.Count ? _navigator.Items[index] : null;
-    }
-
-    private async Task ShowThumbnailAsync(long requestId, Task<BgraImage?> thumbnailTask, Plan plan, Func<bool>? superseded, CancellationToken cancellation)
-    {
-        BgraImage? thumbnail;
-        try
-        {
-            thumbnail = await thumbnailTask;
-        }
-        catch (Exception ex) when (ex is COMException or OperationCanceledException or OverflowException)
-        {
-            thumbnail = null;
-        }
-
-        if (cancellation.IsCancellationRequested || superseded?.Invoke() == true)
-        {
-            return;
-        }
-
-        _timeline.Mark(requestId, "thumbnail", QuickViewTimeline.Now, new Dictionary<string, object?>
-        {
-            ["cached"] = thumbnail is not null,
-            ["width"] = thumbnail?.Width ?? 0,
-            ["height"] = thumbnail?.Height ?? 0,
-        });
-        if (thumbnail is null)
-        {
-            _window.Surface.SetStatus(Strings.GetString("QuickView_Loading"));
-            return;
-        }
-
-        _window.Surface.SetImageBox(plan.ExpectedElementSize, plan.Scrollable);
-        _window.SetThumbnail(thumbnail);
-        _contentRequest = requestId;
-        await NextFrameAsync();
-        if (!cancellation.IsCancellationRequested && superseded?.Invoke() != true)
-        {
-            _timeline.Mark(requestId, "thumbnail-visible", QuickViewTimeline.Now);
-        }
-    }
-
-    private static async Task<ImageSource> CreateSourceAsync(SoftwareBitmap bitmap)
-    {
-        var source = new SoftwareBitmapSource();
-        await source.SetBitmapAsync(bitmap);
-        return source;
-    }
-
-    /// <summary>
-    /// Comparison path: XAML BitmapImage with DecodePixelWidth/Height. Decoding happens inside the XAML
-    /// image pipeline once the source is in the live tree; completion is signalled by ImageOpened.
-    /// </summary>
-    private async Task LoadWithXamlDecoderAsync(long requestId, string path, FileFacts facts, uint viewportWidth, uint viewportHeight, CancellationToken cancellation)
-    {
-        long start = QuickViewTimeline.Now;
-        IRandomAccessStream stream = await ImageDecoding.OpenReadAsync(path);
-        try
-        {
-            // Header only: dimensions for the decode size and the safety check.
-            (uint width, uint height) = await Task.Run(
-                async () =>
-                {
-                    BitmapDecoder header = await BitmapDecoder.CreateAsync(stream);
-                    return (header.OrientedPixelWidth, header.OrientedPixelHeight);
-                },
-                cancellation);
-            if (PreviewSafetyPolicy.CheckDimensions(width, height) != PreviewAccess.Allowed)
-            {
-                _window.Surface.ShowStatusOnly(Strings.GetString("QuickView_Error_TooLarge"));
-                return;
-            }
-
-            stream.Seek(0);
-            (uint fitWidth, uint fitHeight) = PreviewSizing.FitWithin(width, height, viewportWidth, viewportHeight);
-            var image = new BitmapImage
-            {
-                DecodePixelType = DecodePixelType.Physical,
-                DecodePixelWidth = (int)fitWidth,
-                DecodePixelHeight = (int)fitHeight,
-            };
-            var opened = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            image.ImageOpened += (_, _) => opened.TrySetResult(true);
-            image.ImageFailed += (_, _) => opened.TrySetResult(false);
-            await image.SetSourceAsync(stream);
-            _window.Surface.SetFullImagePending(image);
-            bool ok = await opened.Task;
-            cancellation.ThrowIfCancellationRequested();
-            if (!ok)
-            {
-                _window.Surface.ShowStatusOnly(Strings.GetString("QuickView_Error_Failed"));
-                return;
-            }
-
-            _window.Surface.CommitFullImage();
-            SetInfo(FormatInfo(facts, new DecodedImage(null, width, height, 0, "xaml-bitmapimage", 0, null)));
-            _timeline.Mark(requestId, "full-set", QuickViewTimeline.Now, new Dictionary<string, object?>
-            {
-                ["sourceWidth"] = width,
-                ["sourceHeight"] = height,
-                ["decodedWidth"] = fitWidth,
-                ["decodedHeight"] = fitHeight,
-                ["decodeMs"] = (QuickViewTimeline.Now - start) * 1000.0 / System.Diagnostics.Stopwatch.Frequency,
-                ["decoder"] = "xaml-bitmapimage",
-            });
-            await NextFrameAsync();
-            if (!cancellation.IsCancellationRequested)
-            {
-                _timeline.Mark(requestId, "full-visible", QuickViewTimeline.Now);
-            }
-        }
-        finally
-        {
-            stream.Dispose();
-        }
-    }
-
-    private static string ReasonToResource(string reason) => reason switch
-    {
-        "no-codec" => "QuickView_Error_Unsupported",
-        "too-large" => "QuickView_Error_TooLarge",
-        "password" => "QuickView_Error_PdfPassword",
-        _ => "QuickView_Error_Failed",
-    };
-
-    private static BitmapInterpolationMode Interpolation(string name) => name switch
-    {
-        "linear" => BitmapInterpolationMode.Linear,
-        "cubic" => BitmapInterpolationMode.Cubic,
-        "nearest" => BitmapInterpolationMode.NearestNeighbor,
-        _ => BitmapInterpolationMode.Fant,
-    };
-
-    /// <summary>JPEG goes through WIC directly (measured faster); other formats were as fast or faster via WinRT.</summary>
-    private bool PreferWic(FileFacts facts) => _options.UseWicForJpeg && facts.Format == FileFormat.Jpeg;
-
     private async Task MarkNextFrameAsync(long requestId, string mark)
     {
-        await NextFrameAsync();
+        await QuickViewPresence.NextFrameAsync();
         _timeline.Mark(requestId, mark, QuickViewTimeline.Now);
     }
 
@@ -2404,36 +982,5 @@ internal sealed class QuickViewController : IDisposable
                 ["isForeground"] = NativeMethods.GetForegroundWindow() == _window.Handle,
             });
         }
-    }
-
-    private static Task NextFrameAsync()
-    {
-        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        EventHandler<object>? handler = null;
-        handler = (_, _) =>
-        {
-            CompositionTarget.Rendering -= handler;
-            completion.TrySetResult();
-        };
-        CompositionTarget.Rendering += handler;
-        return completion.Task;
-    }
-
-    private static string FormatInfo(FileFacts facts, DecodedImage? decoded)
-    {
-        string size = ByteSizeText.Format(facts.Length);
-        if (decoded is { PageCount: > 1 } pages)
-        {
-            return string.Format(CultureInfo.CurrentCulture, Strings.GetString("QuickView_InfoPdfPage"), pages.PageIndex + 1, pages.PageCount, size);
-        }
-
-        if (decoded is { PageCount: > 0 } pdf)
-        {
-            return string.Format(CultureInfo.CurrentCulture, Strings.GetString("QuickView_InfoPdf"), pdf.PageCount, size);
-        }
-
-        return decoded is { SourceWidth: > 0 } image
-            ? string.Format(CultureInfo.CurrentCulture, Strings.GetString("QuickView_InfoImage"), facts.Format, image.SourceWidth, image.SourceHeight, size)
-            : string.Format(CultureInfo.CurrentCulture, Strings.GetString("QuickView_InfoBasic"), facts.Format, size);
     }
 }

@@ -59,4 +59,56 @@ internal static partial class NativeMethods
 
     [LibraryImport("dwmapi.dll")]
     public static partial int DwmSetWindowAttribute(nint hwnd, uint attribute, ref int value, int size);
+
+    public const int ASSOCSTR_FRIENDLYDOCNAME = 3;
+    public const int ASSOCSTR_CONTENTTYPE = 14;
+    public const uint ASSOCF_NOTRUNCATE = 0x20;
+
+    [LibraryImport("shlwapi.dll", EntryPoint = "AssocQueryStringW", StringMarshalling = StringMarshalling.Utf16)]
+    public static partial int AssocQueryString(uint flags, int str, string association, string? extra, [Out] char[] output, ref uint length);
+
+    /// <summary>A string Windows associates with an extension (type name, MIME type), or null. Reads the registry only.</summary>
+    public static string? AssociationString(string extension, int what)
+    {
+        if (string.IsNullOrEmpty(extension))
+        {
+            return null;
+        }
+
+        char[] buffer = new char[260];
+        uint length = (uint)buffer.Length;
+        return AssocQueryString(ASSOCF_NOTRUNCATE, what, extension, null, buffer, ref length) >= 0 && length > 1
+            ? new string(buffer, 0, (int)length - 1)
+            : null;
+    }
+
+    public const int SM_REMOTESESSION = 0x1000;
+
+    [LibraryImport("user32.dll")]
+    public static partial int GetSystemMetrics(int index);
+
+    /// <summary>Restart only after a crash or hang (not after updates or reboots).</summary>
+    public const uint RESTART_NO_PATCH = 0x4;
+    public const uint RESTART_NO_REBOOT = 0x8;
+
+    [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    public static partial int RegisterApplicationRestart(string? commandLineArgs, uint flags);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MEMORYSTATUSEX
+    {
+        public uint dwLength;
+        public uint dwMemoryLoad;
+        public ulong ullTotalPhys;
+        public ulong ullAvailPhys;
+        public ulong ullTotalPageFile;
+        public ulong ullAvailPageFile;
+        public ulong ullTotalVirtual;
+        public ulong ullAvailVirtual;
+        public ulong ullAvailExtendedVirtual;
+    }
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX buffer);
 }

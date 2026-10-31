@@ -131,6 +131,66 @@ public sealed class ExplorerViewSession : IDisposable
     }
 
     /// <summary>
+    /// A range of the view in display order for the filmstrip: the items within <paramref name="radius"/> of the
+    /// focused item (the file Quick View follows). Items without a file-system path (e.g. virtual folders) are left
+    /// out. Only the range is read, never the whole view.
+    /// </summary>
+    /// <returns>The items with their view positions, and the number of items in the whole view.</returns>
+    public (IReadOnlyList<(int Index, string Path)> Items, int ViewCount) ReadRange(int radius)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_view is not IFolderView2 folderView)
+        {
+            return ([], 0);
+        }
+
+        folderView.ItemCount(SvgioAllView, out int count);
+        if (count <= 0)
+        {
+            return ([], 0);
+        }
+
+        if (folderView.GetFocusedItem(out int focused) < 0 || focused < 0)
+        {
+            focused = 0;
+        }
+
+        int center = Math.Clamp(focused, 0, count - 1);
+        int first = Math.Max(0, center - radius);
+        int last = Math.Min(count - 1, center + radius);
+        var items = new List<(int, string)>(last - first + 1);
+        for (int i = first; i <= last; i++)
+        {
+            if (PathAt(folderView, i, count) is { } path)
+            {
+                items.Add((i, path));
+            }
+        }
+
+        return (items, count);
+    }
+
+    /// <summary>Selects the item at <paramref name="index"/> (only it) if it still has <paramref name="path"/>.</summary>
+    /// <returns>True if the selection was changed.</returns>
+    public bool SelectAt(int index, string path)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_view is not IFolderView2 folderView)
+        {
+            return false;
+        }
+
+        folderView.ItemCount(SvgioAllView, out int count);
+        if (!string.Equals(PathAt(folderView, index, count), path, StringComparison.OrdinalIgnoreCase))
+        {
+            return false; // the view changed (sorting, new files): do nothing rather than select another file
+        }
+
+        folderView.SelectItem(index, SvsiSelect | SvsiDeselectOthers | SvsiEnsureVisible | SvsiFocused);
+        return true;
+    }
+
+    /// <summary>
     /// Paths of the items before and after the focused item in display order (for prefetching).
     /// Null where there is no neighbor or it has no file-system path.
     /// </summary>

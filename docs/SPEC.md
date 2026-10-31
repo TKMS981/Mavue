@@ -66,6 +66,52 @@ Implement:
 
 Quick View startup speed is a major product requirement.
 
+## 3.1 Quick Preview extensions
+
+Quick View should become a universal preview layer: select any file in Explorer, press Space, and see its content
+(or at least its information) almost at once. The following are implementation targets in addition to the list
+above (approved 2026-10-06; plan and phases in `docs/ARCHITECTURE.md` §4.7):
+
+- Folder filmstrip
+- Pixel inspector in Quick View
+- Similar image search
+- Wheel zoom without Ctrl as a user setting
+- Video seek with the mouse wheel
+- Audio waveform
+- ZIP archive preview without extraction
+- Preview of images inside ZIP archives
+- Text preview
+- Code preview with syntax highlighting
+- Markdown preview
+- Safe HTML preview
+- Universal file information preview
+- EXIF inspector
+- Privacy check before sharing
+- Copy without private metadata
+- Drag out of Quick View
+- Preview pin
+- Quick View window design (light, dark, glass)
+- Adaptive performance tiers
+
+Requirements for all Quick Preview features ("Always Ready, Never Always Working"):
+
+1. Space → preview latency and the resident process's idle CPU and memory must not get worse. New work happens only
+   while Quick View is shown and only for the shown item (and, within limits, its neighbors).
+2. Every file type is shown by its own replaceable component; the Quick View controller does not branch on file types.
+   Heavy decoding or analysis can move to a separate, resource-limited process without changing the user interface.
+3. Every cache has an upper bound; every expensive operation can be cancelled; resources are released when Quick View
+   closes. Limits adapt automatically to the machine (no settings required from the user).
+4. Quick View only reads: it never modifies, moves or executes the previewed file, never accesses the network by
+   itself, never runs scripts from previewed content, never launches other programs without an explicit user action,
+   and never removes Mark-of-the-Web. Files it creates (for example a copy without private metadata) are new files
+   that keep the original's Mark-of-the-Web.
+5. Archives are previewed from their central directory without extraction, entries are read on demand, and archive
+   names and sizes are distrusted (path traversal, decompression bombs, abnormal compression ratios, resource
+   exhaustion). A file that cannot be previewed safely shows a clear message; Quick View itself keeps running.
+6. The mouse wheel keeps its meaning per content (zoom for images, scrolling for documents, seeking for media);
+   Ctrl+wheel zooms around the pointer everywhere it applies.
+7. Dragging out of Quick View copies by default; pinning keeps the current preview from following Explorer's selection.
+
 ---
 
 # 4. Image Formats

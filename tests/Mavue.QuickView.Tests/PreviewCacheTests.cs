@@ -131,4 +131,77 @@ public class PreviewCacheTests
         Assert.Equal(first, PreviewKey.Create(@"C:\A.PDF", 10, write, 800, 600, page: 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => PreviewKey.Create(@"C:\a.pdf", 10, write, 800, 600, page: -1));
     }
+
+    [Fact]
+    public void LoweringTheBudget_EvictsLeastRecentlyUsedAtOnce()
+    {
+        // The performance tier dropped (e.g. energy saver turned on while Quick View holds decoded images).
+        (var cache, var evicted) = NewCache(100);
+        cache.Add(Key("a"), new Blob("a", 30));
+        cache.Add(Key("b"), new Blob("b", 30));
+        cache.Add(Key("c"), new Blob("c", 30));
+        cache.TryGet(Key("a"), out _); // a is now the most recently used
+
+        cache.BudgetBytes = 60;
+
+        Assert.Equal(["b"], evicted);
+        Assert.Equal(60, cache.BudgetBytes);
+        Assert.Equal(60, cache.Bytes);
+        Assert.True(cache.Contains(Key("a")));
+        Assert.True(cache.Contains(Key("c")));
+    }
+
+    [Fact]
+    public void LoweringTheBudget_BelowEveryValue_EmptiesTheCache()
+    {
+        (var cache, var evicted) = NewCache(100);
+        cache.Add(Key("a"), new Blob("a", 30));
+        cache.Add(Key("b"), new Blob("b", 30));
+
+        cache.BudgetBytes = 10;
+
+        Assert.Equal(2, evicted.Count);
+        Assert.Equal(0, cache.Count);
+        Assert.Equal(0, cache.Bytes);
+    }
+
+    [Fact]
+    public void RaisingTheBudget_KeepsEverything_AndAllowsMore()
+    {
+        (var cache, var evicted) = NewCache(50);
+        cache.Add(Key("a"), new Blob("a", 30));
+
+        cache.BudgetBytes = 100;
+        cache.Add(Key("b"), new Blob("b", 60));
+
+        Assert.Empty(evicted);
+        Assert.Equal(90, cache.Bytes);
+    }
+
+    [Fact]
+    public void LoweredBudget_AppliesToLaterAdds()
+    {
+        (var cache, var evicted) = NewCache(100);
+        cache.BudgetBytes = 40;
+
+        cache.Add(Key("big"), new Blob("big", 50)); // larger than the new budget: not kept
+        cache.Add(Key("a"), new Blob("a", 30));
+        cache.Add(Key("b"), new Blob("b", 30));
+
+        Assert.Equal(["big", "a"], evicted);
+        Assert.Equal(30, cache.Bytes);
+    }
+
+    [Theory]
+    [InlineData(0L)]
+    [InlineData(-1L)]
+    public void Budget_MustBePositive(long budget)
+    {
+        (var cache, var evicted) = NewCache(100);
+        cache.Add(Key("a"), new Blob("a", 30));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => cache.BudgetBytes = budget);
+        Assert.Equal(100, cache.BudgetBytes);
+        Assert.Empty(evicted);
+    }
 }

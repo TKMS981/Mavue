@@ -90,6 +90,8 @@ public static class FileFormatDetector
         [".oga"] = FileFormat.OggAudio,
         [".opus"] = FileFormat.OggAudio,
         [".wma"] = FileFormat.WindowsMediaAudio,
+        [".zip"] = FileFormat.Zip,
+        [".cbz"] = FileFormat.Zip,
     };
 
     // ASF (WMV/WMA) header object GUID.

@@ -34,6 +34,10 @@ public sealed partial class ViewerSurface : UserControl
     private readonly MediaPlayerElement _media;
     private readonly TextBlock _status;
     private readonly Grid _root;
+    private readonly TransparencyGrid _transparencyGrid;
+    private bool _transparencyGridEnabled;
+    private bool _mayHaveTransparency;
+    private bool _hasImageBox;
     private UIElement? _document;
     private int _wheelAccumulated;
 
@@ -47,6 +51,8 @@ public sealed partial class ViewerSurface : UserControl
         _thumbnail = new XamlImage { Stretch = Stretch.Uniform };
         _full = new XamlImage { Stretch = Stretch.Uniform };
         var imageHost = new Grid { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        _transparencyGrid = new TransparencyGrid { Visibility = Visibility.Collapsed };
+        imageHost.Children.Add(_transparencyGrid);
         imageHost.Children.Add(_thumbnail);
         imageHost.Children.Add(_full);
         _scroller = new ScrollViewer
@@ -134,6 +140,24 @@ public sealed partial class ViewerSurface : UserControl
     /// </summary>
     public event Action? AreaChanged;
 
+    /// <summary>
+    /// Where the pointer is on the full image: the position and the image element's size, in device-independent
+    /// pixels; null when no full image is shown or the pointer is outside it.
+    /// </summary>
+    public (double X, double Y, double Width, double Height)? PointerOnImage(Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        ArgumentNullException.ThrowIfNull(e);
+        if (!HasFullImage || _full.ActualWidth <= 0 || _full.ActualHeight <= 0)
+        {
+            return null;
+        }
+
+        Windows.Foundation.Point point = e.GetCurrentPoint(_full).Position;
+        return point.X < 0 || point.Y < 0 || point.X >= _full.ActualWidth || point.Y >= _full.ActualHeight
+            ? null
+            : (point.X, point.Y, _full.ActualWidth, _full.ActualHeight);
+    }
+
     /// <summary>Element that gets keyboard focus back when the transport controls take it.</summary>
     public UIElement? KeyboardFocusTarget { get; set; }
 
@@ -194,6 +218,9 @@ public sealed partial class ViewerSurface : UserControl
                 image.Stretch = Stretch.Uniform;
             }
         }
+
+        _hasImageBox = size is not null;
+        UpdateTransparencyGrid();
 
         ScrollBarVisibility bar = scrollable ? ScrollBarVisibility.Auto : ScrollBarVisibility.Disabled;
         ScrollMode mode = scrollable ? ScrollMode.Auto : ScrollMode.Disabled;
@@ -317,6 +344,16 @@ public sealed partial class ViewerSurface : UserControl
         _media.SetMediaPlayer(player);
     }
 
+    /// <summary>
+    /// The host draws its own compact media controls (Quick View): the built-in transport controls are off and the
+    /// picture needs no minimum width for them. The main window keeps the built-in controls.
+    /// </summary>
+    public bool UseOwnMediaControls
+    {
+        get => !_media.AreTransportControlsEnabled;
+        set => _media.AreTransportControlsEnabled = !value;
+    }
+
     /// <summary>Video: the picture fits the area but is never enlarged beyond <paramref name="maxWidth"/> × <paramref name="maxHeight"/> (DIPs).</summary>
     public void SetVideoLayout(double maxWidth, double maxHeight)
     {
@@ -324,7 +361,7 @@ public sealed partial class ViewerSurface : UserControl
         _media.VerticalAlignment = VerticalAlignment.Center;
         _media.HorizontalAlignment = HorizontalAlignment.Center;
         _media.Height = double.NaN;
-        _media.MinWidth = 360; // room for the controls
+        _media.MinWidth = _media.AreTransportControlsEnabled ? 360 : 0; // room for the built-in controls
         _media.MaxWidth = maxWidth > 0 ? Math.Max(maxWidth, _media.MinWidth) : double.PositiveInfinity;
         _media.MaxHeight = maxHeight > 0 ? maxHeight : double.PositiveInfinity;
     }
@@ -470,7 +507,7 @@ public sealed partial class ViewerSurface : UserControl
     /// memory that is otherwise released only when the garbage collector finalizes them, which kept the resident
     /// Quick View process large after it closed (measured).
     /// </summary>
-    private static void ReplaceSource(XamlImage image, ImageSource? source)
+    private void ReplaceSource(XamlImage image, ImageSource? source)
     {
         ImageSource? previous = image.Source;
         image.Source = source;
@@ -478,5 +515,47 @@ public sealed partial class ViewerSurface : UserControl
         {
             disposable.Dispose();
         }
+
+        UpdateTransparencyGrid();
     }
+
+    /// <summary>
+    /// The checkerboard shows behind the image only when it is enabled, the shown format may have transparency, the
+    /// image has an explicit box (so the grid is exactly the image's size) and a picture is set (no checkerboard
+    /// flashes before the image arrives).
+    /// </summary>
+    private void UpdateTransparencyGrid()
+    {
+        bool show = _transparencyGridEnabled && _mayHaveTransparency && _hasImageBox && (_full.Source is not null || _thumbnail.Source is not null);
+        Visibility visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        if (_transparencyGrid.Visibility != visibility)
+        {
+            _transparencyGrid.Visibility = visibility;
+        }
+    }
+
+    /// <summary>Behind transparent images, a checkerboard (off by default; Quick View turns it on from its settings).</summary>
+    public bool TransparencyGridEnabled
+    {
+        get => _transparencyGridEnabled;
+        set
+        {
+            _transparencyGridEnabled = value;
+            UpdateTransparencyGrid();
+        }
+    }
+
+    /// <summary>The shown format can have transparent pixels (set before the image; JPEG and the like cannot).</summary>
+    public bool ImageMayHaveTransparency
+    {
+        get => _mayHaveTransparency;
+        set
+        {
+            _mayHaveTransparency = value;
+            UpdateTransparencyGrid();
+        }
+    }
+
+    /// <summary>The checkerboard's two cell colors (follow the theme).</summary>
+    public void SetTransparencyGridColors(Windows.UI.Color first, Windows.UI.Color second) => _transparencyGrid.SetColors(first, second);
 }

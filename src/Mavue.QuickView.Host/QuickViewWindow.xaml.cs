@@ -34,6 +34,14 @@ public sealed partial class QuickViewWindow : Window
 
         // handledEventsToo: the ScrollViewer marks wheel events handled even when it cannot scroll.
         Root.AddHandler(UIElement.PointerWheelChangedEvent, new PointerEventHandler(OnPointerWheelChanged), handledEventsToo: true);
+
+        // Pixel inspector: pointer over the image (only while the inspector is on). Drag out of the image (copy).
+        SurfaceHost.AddHandler(UIElement.PointerMovedEvent, new PointerEventHandler(OnSurfacePointerMoved), handledEventsToo: true);
+        SurfaceHost.PointerExited += (_, _) => ImagePointerMoved?.Invoke(null);
+
+        // Dragging the file out: from its name, or from the image while it fits (a larger image pans on drag).
+        WatchDragGesture(FileChip, _ => true);
+        WatchDragGesture(SurfaceHost, e => !Surface.IsPannable && Surface.PointerOnImage(e) is not null);
         var strings = new Microsoft.Windows.ApplicationModel.Resources.ResourceLoader();
         SetButtonText(PreviousPageButton, strings.GetString("QuickView_PreviousPage"));
         SetButtonText(NextPageButton, strings.GetString("QuickView_NextPage"));
@@ -41,9 +49,10 @@ public sealed partial class QuickViewWindow : Window
         SetButtonText(ZoomInButton, strings.GetString("QuickView_ZoomIn"));
         SetButtonText(ZoomFitButton, strings.GetString("QuickView_ZoomFit"));
         SetButtonText(RotateButton, strings.GetString("QuickView_Rotate"));
-        SetButtonText(OpenWithButton, strings.GetString("QuickView_OpenWith"));
-        OpenInMavueButton.Content = strings.GetString("QuickView_OpenInMavue");
+        OpenWithItem.Text = strings.GetString("QuickView_OpenWith");
         SetButtonText(OpenInMavueButton, strings.GetString("QuickView_OpenInMavue"));
+        SetButtonText(MoreButton, strings.GetString("QuickView_More"));
+        TransparencyGridItem.Text = strings.GetString("QuickView_TransparencyGrid");
         SetButtonText(SidebarButton, strings.GetString("QuickView_Sidebar"));
         SetButtonText(SearchButton, strings.GetString("QuickView_Search"));
         SetButtonText(PresentationButton, strings.GetString("QuickView_Presentation"));
@@ -53,6 +62,12 @@ public sealed partial class QuickViewWindow : Window
         LayoutContinuousItem.Text = strings.GetString("QuickView_LayoutContinuous") + "  (Ctrl+Shift+2)";
         LayoutTwoPagesItem.Text = strings.GetString("QuickView_LayoutTwoPages") + "  (Ctrl+Shift+3)";
         LayoutTwoPagesCoverItem.Text = strings.GetString("QuickView_LayoutTwoPagesCover") + "  (Ctrl+Shift+4)";
+        SetButtonText(FilmstripButton, strings.GetString("QuickView_Filmstrip"));
+        SetButtonText(InspectorButton, strings.GetString("QuickView_PixelInspector"));
+        _pinText = strings.GetString("QuickView_Pin");
+        _unpinText = strings.GetString("QuickView_Unpin");
+        SetButtonText(PinButton, _pinText);
+        SetButtonText(FileChip, strings.GetString("QuickView_DragFile"));
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(PageBox, strings.GetString("QuickView_PageBox"));
         _pageCountFormat = strings.GetString("QuickView_PageCount");
 
@@ -70,12 +85,65 @@ public sealed partial class QuickViewWindow : Window
             presenter.IsMinimizable = false;
         }
 
+        // Windows' own title bar stays as it is (it shows the file's name; Mica makes it and the tool bar one band).
+        // Extending content into it or recoloring its buttons cost ~10 ms on every show (measured 2026-10-30).
         AppWindow.TitleBar.PreferredTheme = TitleBarTheme.UseDefaultAppMode;
+
+        SetBackdrop(true);
         ApplyTheme(IsDarkTheme());
         _uiSettings.ColorValuesChanged += (_, _) => DispatcherQueue.TryEnqueue(() => ApplyTheme(IsDarkTheme()));
+        // ColorValuesChanged also reports high contrast turning on or off (AccessibilitySettings.HighContrastChanged
+        // cannot be subscribed to without a CoreWindow: 0x80070490).
+        InitializeToolbarKeyboard();
     }
 
     private readonly Windows.UI.ViewManagement.UISettings _uiSettings = new();
+    private readonly Windows.UI.ViewManagement.AccessibilitySettings _accessibility = new();
+    private bool _backdrop;
+    private bool _backdropWanted = true;
+
+    /// <summary>Height of the top bar in device-independent pixels (fixed, so the image area is known before layout).</summary>
+    public const double TopBarHeight = 44;
+
+    /// <summary>
+    /// Mica (Base: the least tinted by the wallpaper) behind the chrome — top bar and filmstrip — only; the stage
+    /// behind the image is always opaque. Off (solid chrome) for the Low performance tier and in high contrast;
+    /// Windows itself shows a solid color when transparency effects are off or energy saver is on.
+    /// </summary>
+    public void SetBackdrop(bool wanted)
+    {
+        _backdropWanted = wanted;
+        bool on = wanted && !_accessibility.HighContrast && Microsoft.UI.Composition.SystemBackdrops.MicaController.IsSupported();
+        if (on == _backdrop && (SystemBackdrop is not null) == on)
+        {
+            return;
+        }
+
+        _backdrop = on;
+        SystemBackdrop = on ? new MicaBackdrop { Kind = Microsoft.UI.Composition.SystemBackdrops.MicaKind.Base } : null;
+        ApplyChromeBackground();
+    }
+
+    /// <summary>True while Mica shows behind the chrome.</summary>
+    public bool HasBackdrop => _backdrop;
+
+    private void ApplyChromeBackground()
+    {
+        Brush chrome = _backdrop ? new SolidColorBrush(Colors.Transparent) : Themed("QvChromeSolidBrush");
+        TopBar.Background = chrome;
+        FilmstripHost.Background = chrome;
+        Root.Background = _backdrop ? new SolidColorBrush(Colors.Transparent) : Themed("QvChromeSolidBrush");
+    }
+
+    /// <summary>A brush of the window's theme dictionaries for the current theme (for contents that build their own UI).</summary>
+    public Brush ThemeBrush(string key) => Themed(key);
+
+    /// <summary>A brush of the window's theme dictionaries (Default = dark, Light, HighContrast) for the current theme.</summary>
+    private Brush Themed(string key)
+    {
+        string theme = _accessibility.HighContrast ? "HighContrast" : IsDark ? "Default" : "Light";
+        return (Brush)((ResourceDictionary)Root.Resources.ThemeDictionaries[theme])[key];
+    }
 
     /// <summary>The Windows app theme (Settings › Personalization › Colors › app mode).</summary>
     private static bool IsDarkTheme()
@@ -85,25 +153,25 @@ public sealed partial class QuickViewWindow : Window
     }
 
     /// <summary>
-    /// Dark: the original #1E1E1E window (also the harness's reference color for "image on screen"). Light: Windows'
-    /// light surfaces. Controls (PDF search box, sidebar, buttons) take the matching theme.
+    /// The Windows app theme: dark (stage #1E1E1E, also the harness's reference color for "image on screen"), light,
+    /// or high contrast (system colors, no backdrop). Colors come from the theme dictionaries in the XAML; the viewer
+    /// surface's texts follow. Windows' title bar follows the app mode by itself.
     /// </summary>
     public void ApplyTheme(bool dark)
     {
-        Windows.UI.Color C(uint argb) => ColorHelper.FromArgb((byte)(argb >> 24), (byte)(argb >> 16), (byte)(argb >> 8), (byte)argb);
-        Root.RequestedTheme = dark ? ElementTheme.Dark : ElementTheme.Light;
-        Root.Background = new SolidColorBrush(C(dark ? 0xFF1E1E1E : 0xFFF3F3F3));
-        SidebarHost.Background = new SolidColorBrush(C(dark ? 0xFF202020 : 0xFFEBEBEB));
-        InfoBar.Background = new SolidColorBrush(C(dark ? 0xFF181818 : 0xFFF9F9F9));
-        NameText.Foreground = new SolidColorBrush(C(dark ? 0xFFF2F2F2 : 0xFF1A1A1A));
-        var secondary = new SolidColorBrush(C(dark ? 0xFFB0B0B0 : 0xFF5C5C5C));
-        InfoText.Foreground = secondary;
-        PageCountText.Foreground = secondary;
-        var button = new SolidColorBrush(C(dark ? 0xFFE0E0E0 : 0xFF1A1A1A));
-        ZoomFitButton.Foreground = button;
-        OpenInMavueButton.Foreground = button;
-        Surface.SetTextColors(new SolidColorBrush(C(dark ? 0xFFE0E0E0 : 0xFF202020)), new SolidColorBrush(C(dark ? 0xFFD0D0D0 : 0xFF404040)));
         IsDark = dark;
+        Root.RequestedTheme = dark ? ElementTheme.Dark : ElementTheme.Light;
+        SetBackdrop(_backdropWanted); // off in high contrast, back on afterwards
+
+        ApplyChromeBackground();
+        Surface.SetTextColors(Themed("QvPrimaryTextBrush"), Themed("QvSecondaryTextBrush"));
+        Surface.SetTransparencyGridColors(CheckerColor("QvCheckerColor1"), CheckerColor("QvCheckerColor2"));
+    }
+
+    private Windows.UI.Color CheckerColor(string key)
+    {
+        string theme = _accessibility.HighContrast ? "HighContrast" : IsDark ? "Default" : "Light";
+        return (Windows.UI.Color)((ResourceDictionary)Root.Resources.ThemeDictionaries[theme])[key];
     }
 
     /// <summary>The theme Quick View currently shows.</summary>
@@ -138,6 +206,9 @@ public sealed partial class QuickViewWindow : Window
     /// layout); otherwise the view scrolls by itself.
     /// </summary>
     public Func<int, bool>? DocumentWheelHandler { get; set; }
+
+    /// <summary>Mouse wheel over video or audio (delta, Shift held); returns true when it was used (seeking).</summary>
+    public Func<int, bool, bool>? MediaWheelHandler { get; set; }
 
     /// <summary>Diagnostics: every key the window receives (before it is handled).</summary>
     public event Action<VirtualKey>? KeyReceived;
@@ -176,11 +247,14 @@ public sealed partial class QuickViewWindow : Window
     /// </summary>
     public (double Width, double Height) ImageChromeDip()
     {
-        double infoBar = InfoBar.ActualHeight > 0 ? InfoBar.ActualHeight : 56; // before the first layout
         double search = SearchHost.Visibility == Visibility.Visible ? SearchHost.ActualHeight : 0;
         double sidebar = SidebarHost.Visibility == Visibility.Visible ? SidebarHost.Width : 0;
-        return ((2 * ViewerSurface.ContentPadding) + sidebar, (2 * ViewerSurface.ContentPadding) + infoBar + search);
+        double filmstrip = FilmstripHost.Visibility == Visibility.Visible ? FilmstripHeight : 0;
+        return ((2 * ViewerSurface.ContentPadding) + sidebar, (2 * ViewerSurface.ContentPadding) + TopBarHeight + search + filmstrip);
     }
+
+    /// <summary>Height of the filmstrip row in device-independent pixels (fixed, so the image area is known before layout).</summary>
+    public const double FilmstripHeight = 88;
 
     public void ResetContent(string fileName)
     {
@@ -212,6 +286,296 @@ public sealed partial class QuickViewWindow : Window
     }
 
     public void FocusContent() => Root.Focus(FocusState.Programmatic);
+
+    private string _pinText = "Pin";
+    private string _unpinText = "Unpin";
+
+    /// <summary>The filmstrip was switched on or off (button or F).</summary>
+    public event Action<bool>? FilmstripToggled;
+
+    /// <summary>The pixel inspector was switched on or off (button or I).</summary>
+    public event Action<bool>? InspectorToggled;
+
+    /// <summary>Pin was switched on or off (button or P).</summary>
+    public event Action<bool>? PinToggled;
+
+    /// <summary>
+    /// A drag of the file starts (from its name, or from the image while it fits, after the pointer moved past the
+    /// system's drag distance): the handler puts the file on the data package or cancels.
+    /// </summary>
+    public event Action<DragStartingEventArgs>? FileDragStarting;
+
+    /// <summary>The pointer moved over the surface: its position on the full image and the image size (DIPs), or null outside it.</summary>
+    public event Action<(double X, double Y, double Width, double Height)?>? ImagePointerMoved;
+
+    /// <summary>The pixel inspector is on (pointer moves are reported only then).</summary>
+    public bool InspectorActive { get; private set; }
+
+    /// <summary>Places the filmstrip's element (once).</summary>
+    public void AttachFilmstrip(UIElement filmstrip) => FilmstripHost.Children.Add(filmstrip);
+
+    /// <summary>Shows or hides the filmstrip row and sets its button.</summary>
+    public void SetFilmstripVisible(bool visible)
+    {
+        FilmstripHost.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        FilmstripButton.IsChecked = visible;
+    }
+
+    /// <summary>The inspector applies to what is shown (a raster image): its button is offered.</summary>
+    public void SetInspectorAvailable(bool available)
+    {
+        InspectorButton.Visibility = available ? Visibility.Visible : Visibility.Collapsed;
+        if (!available)
+        {
+            HideInspectorPanel();
+        }
+    }
+
+    /// <summary>Sets the inspector's on/off state (the panel appears when the pointer is over the image).</summary>
+    public void SetInspectorOn(bool on)
+    {
+        InspectorActive = on;
+        InspectorButton.IsChecked = on;
+        if (!on)
+        {
+            HideInspectorPanel();
+        }
+    }
+
+    /// <summary>Shows the pixel under the pointer; <paramref name="color"/> null while its tile is being read.</summary>
+    public void ShowInspector(int x, int y, Core.Viewing.PixelColor? color)
+    {
+        InspectorPosition.Text = Core.Viewing.PixelInspection.PositionText(x, y);
+        if (color is { } c)
+        {
+            InspectorSwatch.Background = new SolidColorBrush(ColorHelper.FromArgb(c.A, c.R, c.G, c.B));
+            InspectorRgb.Text = Core.Viewing.PixelInspection.RgbText(c);
+            InspectorHex.Text = c.Hex;
+            InspectorAlpha.Text = Core.Viewing.PixelInspection.AlphaText(c);
+        }
+        else
+        {
+            InspectorSwatch.Background = null;
+            InspectorRgb.Text = "…";
+            InspectorHex.Text = string.Empty;
+            InspectorAlpha.Text = string.Empty;
+        }
+
+        // Keep the panel away from the pointer: the bottom-left corner, or the bottom-right when the pointer is there.
+        double panelWidth = InspectorPanel.ActualWidth > 0 ? InspectorPanel.ActualWidth : 220;
+        double panelHeight = InspectorPanel.ActualHeight > 0 ? InspectorPanel.ActualHeight : 90;
+        bool pointerInCorner = _pointerOnHost.X < panelWidth + 48 && _pointerOnHost.Y > SurfaceHost.ActualHeight - panelHeight - 48;
+        InspectorPanel.HorizontalAlignment = pointerInCorner ? HorizontalAlignment.Right : HorizontalAlignment.Left;
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(InspectorPanel, string.Join(", ", InspectorPosition.Text, InspectorRgb.Text, InspectorHex.Text, InspectorAlpha.Text));
+        InspectorPanel.Visibility = Visibility.Visible;
+    }
+
+    public void HideInspectorPanel() => InspectorPanel.Visibility = Visibility.Collapsed;
+
+    /// <summary>Shows the pin state on its button.</summary>
+    public void SetPinned(bool pinned)
+    {
+        PinButton.IsChecked = pinned;
+        PinButton.Content = pinned ? "" : ""; // filled pin while pinned
+        SetButtonText(PinButton, pinned ? _unpinText : _pinText);
+    }
+
+    /// <summary>Shows the information card over the surface, or removes it (null).</summary>
+    public void ShowCard(UIElement? card)
+    {
+        CardHost.Children.Clear();
+        if (card is not null)
+        {
+            CardHost.Children.Add(card);
+        }
+
+        CardHost.Visibility = card is null ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    /// <summary>True while the information card is shown.</summary>
+    public bool ShowsCard => CardHost.Visibility == Visibility.Visible;
+
+    /// <summary>What the card layer shows (a content removes only its own card).</summary>
+    public UIElement? CardContent => CardHost.Children.Count > 0 ? CardHost.Children[0] : null;
+
+    /// <summary>
+    /// Keys offered to the shown content before the window's own meaning (arrows: files, Space/Esc: close) applies;
+    /// returns true when the content used the key (e.g. arrows step through the images of an archive).
+    /// </summary>
+    public Func<VirtualKey, bool>? ContentKeyHandler { get; set; }
+
+    /// <summary>Closes Quick View as Space/Esc would (for content controls that take those keys first).</summary>
+    public void RequestClose() => CloseRequested?.Invoke();
+
+    private Windows.Foundation.Point _pointerOnHost;
+
+    private void OnSurfacePointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (!InspectorActive)
+        {
+            return;
+        }
+
+        _pointerOnHost = e.GetCurrentPoint(SurfaceHost).Position;
+        ImagePointerMoved?.Invoke(Surface.PointerOnImage(e));
+    }
+
+    /// <summary>
+    /// Detects a drag on <paramref name="element"/>: a left-button press accepted by <paramref name="canStart"/>, then a
+    /// move beyond the system's drag rectangle (SM_CXDRAG/SM_CYDRAG). A click without moving stays a click.
+    /// </summary>
+    private void WatchDragGesture(UIElement element, Func<PointerRoutedEventArgs, bool> canStart)
+    {
+        uint? pointer = null;
+        Windows.Foundation.Point start = default;
+        element.DragStarting += (_, args) => FileDragStarting?.Invoke(args);
+        element.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler((_, e) =>
+        {
+            Microsoft.UI.Input.PointerPoint point = e.GetCurrentPoint(Root);
+            pointer = e.Pointer.PointerDeviceType == Microsoft.UI.Input.PointerDeviceType.Mouse && point.Properties.IsLeftButtonPressed && canStart(e)
+                ? e.Pointer.PointerId
+                : null;
+            start = point.Position;
+            if (pointer is not null && element == FileChip)
+            {
+                FileChip.CapturePointer(e.Pointer); // the name is small: keep receiving moves once the pointer leaves it
+            }
+        }), handledEventsToo: true);
+        element.AddHandler(UIElement.PointerMovedEvent, new PointerEventHandler((_, e) =>
+        {
+            if (pointer != e.Pointer.PointerId)
+            {
+                return;
+            }
+
+            Microsoft.UI.Input.PointerPoint point = e.GetCurrentPoint(Root);
+            if (!point.Properties.IsLeftButtonPressed)
+            {
+                pointer = null;
+                return;
+            }
+
+            double scale = RasterizationScale > 0 ? RasterizationScale : 1;
+            double dx = Math.Abs(point.Position.X - start.X) * scale, dy = Math.Abs(point.Position.Y - start.Y) * scale;
+            if (dx > NativeMethods.GetSystemMetrics(68 /* SM_CXDRAG */) || dy > NativeMethods.GetSystemMetrics(69 /* SM_CYDRAG */))
+            {
+                pointer = null;
+                element.ReleasePointerCaptures();
+                e.Handled = true;
+
+                // WinUI's own drag (an OLE drag loop does not work in a WinUI process: WinUI turns on mouse-in-pointer,
+                // measured 2026-10-29). DragStarting below puts the file on the data package.
+                _ = element.StartDragAsync(e.GetCurrentPoint(element));
+            }
+        }), handledEventsToo: true);
+        element.AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler((_, _) => pointer = null), handledEventsToo: true);
+    }
+
+    private void OnFilmstripClick(object sender, RoutedEventArgs e) => FromButton(() => FilmstripToggled?.Invoke(FilmstripButton.IsChecked == true));
+
+    private void OnInspectorClick(object sender, RoutedEventArgs e) => FromButton(() => InspectorToggled?.Invoke(InspectorButton.IsChecked == true));
+
+    private void OnPinClick(object sender, RoutedEventArgs e) => FromButton(() => PinToggled?.Invoke(PinButton.IsChecked == true));
+
+    /// <summary>The checkerboard behind transparent images was switched on or off (the "…" menu).</summary>
+    public event Action<bool>? TransparencyGridToggled;
+
+    /// <summary>Shows the checkerboard setting in the menu and applies it to the surface.</summary>
+    public void SetTransparencyGridOn(bool on)
+    {
+        TransparencyGridItem.IsChecked = on;
+        Surface.TransparencyGridEnabled = on;
+    }
+
+    private void OnTransparencyGridClick(object sender, RoutedEventArgs e) => FromButton(() => TransparencyGridToggled?.Invoke(TransparencyGridItem.IsChecked));
+
+    /// <summary>The top bar's tools are reached with F6 (they are not tab stops otherwise, so Space and Esc stay with the window).</summary>
+    private void InitializeToolbarKeyboard()
+    {
+        ToolBar.TabFocusNavigation = Microsoft.UI.Xaml.Input.KeyboardNavigationMode.Cycle;
+        ToolBar.LostFocus += (_, _) => DispatcherQueue.TryEnqueue(() =>
+        {
+            if (!FocusIsInToolbar())
+            {
+                SetToolbarTabStops(false);
+            }
+        });
+    }
+
+    private void EnterToolbar()
+    {
+        SetToolbarTabStops(true);
+        Microsoft.UI.Xaml.Controls.Control? first = ToolbarControls().FirstOrDefault(c => c.Visibility == Visibility.Visible && c.IsEnabled && IsShown(c));
+        first?.Focus(FocusState.Keyboard);
+    }
+
+    private bool FocusIsInToolbar()
+    {
+        if (Root.XamlRoot is null || Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(Root.XamlRoot) is not DependencyObject focused)
+        {
+            return false;
+        }
+
+        for (DependencyObject? node = focused; node is not null; node = VisualTreeHelper.GetParent(node))
+        {
+            if (ReferenceEquals(node, ToolBar))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void SetToolbarTabStops(bool on)
+    {
+        foreach (Microsoft.UI.Xaml.Controls.Control control in ToolbarControls())
+        {
+            if (control is not Microsoft.UI.Xaml.Controls.TextBox)
+            {
+                control.IsTabStop = on;
+            }
+        }
+    }
+
+    /// <summary>The buttons of the top bar in visual order (also those inside the groups).</summary>
+    private List<Microsoft.UI.Xaml.Controls.Control> ToolbarControls()
+    {
+        var found = new List<Microsoft.UI.Xaml.Controls.Control>();
+        void Walk(DependencyObject node)
+        {
+            int count = VisualTreeHelper.GetChildrenCount(node);
+            for (int i = 0; i < count; i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(node, i);
+                if (child is Microsoft.UI.Xaml.Controls.Primitives.ButtonBase or Microsoft.UI.Xaml.Controls.TextBox)
+                {
+                    found.Add((Microsoft.UI.Xaml.Controls.Control)child);
+                }
+                else
+                {
+                    Walk(child);
+                }
+            }
+        }
+
+        Walk(ToolBar);
+        return found;
+    }
+
+    /// <summary>The element and all its ancestors up to the bar are visible.</summary>
+    private bool IsShown(UIElement element)
+    {
+        for (DependencyObject? node = element; node is not null && !ReferenceEquals(node, ToolBar); node = VisualTreeHelper.GetParent(node))
+        {
+            if (node is UIElement { Visibility: Visibility.Collapsed })
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     /// <summary>Shows the zoom and rotate buttons (images, GIFs, PDF pages, SVG) with the current zoom, or hides them.</summary>
     public void SetViewControls(bool zoomable, bool rotatable, string zoomText)
@@ -272,7 +636,7 @@ public sealed partial class QuickViewWindow : Window
         Surface.ResetWheel();
     }
 
-    private static void SetButtonText(Microsoft.UI.Xaml.Controls.Primitives.ButtonBase button, string text)
+    private static void SetButtonText(UIElement button, string text)
     {
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, text);
         Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(button, text);
@@ -406,6 +770,17 @@ public sealed partial class QuickViewWindow : Window
             return;
         }
 
+        if (Surface.ShowsMedia && MediaWheelHandler is { } mediaWheel)
+        {
+            // The wheel seeks over video and audio (up = forward); Shift for larger steps.
+            if (mediaWheel(e.GetCurrentPoint(Root).Properties.MouseWheelDelta, e.KeyModifiers.HasFlag(VirtualKeyModifiers.Shift)))
+            {
+                e.Handled = true;
+            }
+
+            return;
+        }
+
         if (Surface.ShowsDocument)
         {
             if (DocumentWheelHandler?.Invoke(e.GetCurrentPoint(Root).Properties.MouseWheelDelta) == true)
@@ -437,6 +812,24 @@ public sealed partial class QuickViewWindow : Window
     private void OnRootKeyDown(object sender, KeyRoutedEventArgs e)
     {
         KeyReceived?.Invoke(e.Key);
+
+        // F6: into the top bar's tools and back; Esc in the tools returns to the content (it does not close).
+        if (e.Key == VirtualKey.F6 || (e.Key == VirtualKey.Escape && FocusIsInToolbar()))
+        {
+            e.Handled = true;
+            if (e.Key == VirtualKey.F6 && !FocusIsInToolbar())
+            {
+                EnterToolbar();
+            }
+            else
+            {
+                SetToolbarTabStops(false);
+                FocusContent();
+            }
+
+            return;
+        }
+
         if (e.Handled || IsTyping)
         {
             return; // the find box or the page box has the keyboard (Space types a space there)
@@ -488,6 +881,24 @@ public sealed partial class QuickViewWindow : Window
                 e.Handled = true;
                 FileCommandRequested?.Invoke(QuickViewFileCommand.ToggleAnimation);
                 return;
+            case VirtualKey.F when !control && !e.KeyStatus.WasKeyDown:
+                e.Handled = true;
+                FilmstripToggled?.Invoke(FilmstripHost.Visibility != Visibility.Visible);
+                return;
+            case VirtualKey.I when !control && !e.KeyStatus.WasKeyDown && InspectorButton.Visibility == Visibility.Visible:
+                e.Handled = true;
+                InspectorToggled?.Invoke(!InspectorActive);
+                return;
+            case VirtualKey.P when !control && !e.KeyStatus.WasKeyDown:
+                e.Handled = true;
+                PinToggled?.Invoke(PinButton.IsChecked != true);
+                return;
+        }
+
+        if (!control && ContentKeyHandler?.Invoke(e.Key) == true)
+        {
+            e.Handled = true;
+            return;
         }
 
         switch (e.Key)

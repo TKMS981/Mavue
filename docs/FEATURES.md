@@ -4,7 +4,7 @@
 > 本表は SPEC から機械抽出した項目に状態を付与したもの。**SPEC の項目は削除しない**。
 > 「Implemented」は中核動作が機能する場合のみ、「Tested」は SPEC §31 の Definition of Done を満たす場合のみ使用する。
 
-最終更新: 2026-10-04（MSIX の Explorer 連携の原因特定、上段メニューの Explorer 再起動直後の失敗を修正、配布物の整合チェック。配布物の完成: ランタイム同梱・ZIP インストーラー・MSIX の実機確認・ライセンス同梱（X.08）。2026-10-03 配布準備: MSIX・署名・32 ビット・テーマ・DPI・暗号化 PDF・PDF プレビュー切替、未実装項目の整理。それ以前: Explorer のプレビューウィンドウ・サムネイル（F03.20/26/27、F22.07–10）。それ以前: Quick View の PDF を本体と共通化: 連続/見開き（表紙単独）・検索・選択とコピー・目次/しおり・リンク・プレゼンテーション。それ以前: PDF ビューア: PDFium 導入、検索・結果一覧・文字選択とコピー・目次・リンク・連続/見開き/単一ページ。それ以前: 主要閲覧機能: 拡大縮小・パン・回転/反転・PDF サムネイル/ページ指定・GIF 一時停止/コマ送り・SVG・RAW 判定・情報パネル・コピー/貼り付け・最近使ったファイル・設定（外観/表示サイズ/Windows 統合）・ウィンドウ位置の保存・「プログラムから開く」/「Mavue で開く」/既定のアプリ登録、Quick View の拡大/回転/ファイル操作）
+最終更新: 2026-10-30（Quick Preview Phase 3: ZIP Preview（F03.34/35）、動画・音声のホイールシーク・軽い操作バー・音声の波形（F03.32/33）を Implemented。Quick Preview Phase 2: ウィンドウのデザイン F03.46・市松模様 F05.12 を In Progress（ダークで実機確認、ライト/ハイコントラストは未確認）。2026-10-29: Quick Preview Phase 1: フィルムストリップ・ピクセル Inspector・Universal Preview の情報カード・外へのドラッグ（コピーのみ）・Pin を Implemented（F03.28/29/40/44/45）。Ctrl なしのホイールズーム（F03.31）は今回の対象外で Planned のまま。2026-10-06: Quick Preview 拡張: SPEC §3.1 の 20 項目を追加（F03.28–F03.47、Planned。性能段階の枠組みのみ In Progress）。Phase 0 で Quick View の内部を形式ごとの表示部品に分割（ARCHITECTURE §4.7、既存機能の変更なし）。2026-10-04: MSIX の Explorer 連携の原因特定、上段メニューの Explorer 再起動直後の失敗を修正、配布物の整合チェック。配布物の完成: ランタイム同梱・ZIP インストーラー・MSIX の実機確認・ライセンス同梱（X.08）。2026-10-03 配布準備: MSIX・署名・32 ビット・テーマ・DPI・暗号化 PDF・PDF プレビュー切替、未実装項目の整理。それ以前: Explorer のプレビューウィンドウ・サムネイル（F03.20/26/27、F22.07–10）。それ以前: Quick View の PDF を本体と共通化: 連続/見開き（表紙単独）・検索・選択とコピー・目次/しおり・リンク・プレゼンテーション。それ以前: PDF ビューア: PDFium 導入、検索・結果一覧・文字選択とコピー・目次・リンク・連続/見開き/単一ページ。それ以前: 主要閲覧機能: 拡大縮小・パン・回転/反転・PDF サムネイル/ページ指定・GIF 一時停止/コマ送り・SVG・RAW 判定・情報パネル・コピー/貼り付け・最近使ったファイル・設定（外観/表示サイズ/Windows 統合）・ウィンドウ位置の保存・「プログラムから開く」/「Mavue で開く」/既定のアプリ登録、Quick View の拡大/回転/ファイル操作）
 
 状態: **Planned** / **Investigating** / **In Progress** / **Implemented** / **Tested** / **Blocked** / **Excluded (SPEC §29)** / **Backlog (SPEC §16)**
 
@@ -32,8 +32,8 @@
 | F03.14 | Print | Planned |  |
 | F03.15 | Markup from Quick View | Planned |  |
 | F03.16 | GIF preview | In Progress | アニメーション再生（F20.01）。E2E `gif-animation` |
-| F03.17 | Audio preview | In Progress | MediaPlayerElement（Media Foundation）で再生。音符アイコン＋再生状態（再生中/一時停止/再生終了）＋標準の操作バー。E2E `media-switch`/`media-formats` で MP3・WAV・M4A・WMA・FLAC の再生と音声出力（ホストの音声セッションのピーク値）を確認 |
-| F03.18 | Video preview | In Progress | MediaPlayerElement で映像＋音声。拡大しない（画像と同じ規則）。E2E `media-video` で MP4（H.264/AAC）の画面上の映像・音声・一時停止・シーク・音量、`media-formats` で WMV を確認 |
+| F03.17 | Audio preview | In Progress | MediaPlayerElement（Media Foundation）で再生。音符アイコン＋再生状態（再生中/一時停止/再生終了）＋標準の操作バー。E2E `media-switch`/`media-formats` で MP3・WAV・M4A・WMA・FLAC の再生と音声出力（ホストの音声セッションのピーク値）を確認。2026-10-30: Quick View は軽い操作バー（再生/一時停止・位置・シーク・ミュート）と波形（F03.33）、ホイールでシーク（F03.32） |
+| F03.18 | Video preview | In Progress | MediaPlayerElement で映像＋音声。拡大しない（画像と同じ規則）。E2E `media-video` で MP4（H.264/AAC）の画面上の映像・音声・一時停止・シーク・音量、`media-formats` で WMV を確認。2026-10-30: Quick View は軽い操作バー（再生中はポインターが止まると消える）、ホイールでシーク（F03.32） |
 | F03.19 | HDR support where practical | Investigating | scRGB スワップチェーン。形式ごとの HDR メタデータ対応を調査 |
 | F03.20 | Explorer Preview Pane integration | In Progress | Explorer のプレビューウィンドウ: `Mavue.Shell.Preview.dll`（C++、WINDOWS-INTEGRATION §4）を `Mavue.exe --register` で登録。画像（向き適用・拡大しない）、GIF アニメ、SVG、動画・音声（クリックで再生、シーク・ミュート）、PDF（幅に合わせた連続表示、表示付近のページだけ描画）。既存のプレビューがある形式（本機の PDF は Edge）は奪わない（`--prefer-mavue-preview` で明示的に切り替え、解除で復元）。不正・空のファイルは文言表示。E2E `explorer-preview-pane`・`explorer-preview-pdf`・`explorer-preview-keyboard`、単体 `PreviewNativeTests` |
 | F03.21 | File association integration | In Progress | F22.04 と同じ（Mavue 本体の「プログラムから開く」・既定のアプリ登録） |
@@ -43,6 +43,27 @@
 | F03.25 | Windows Search integration where practical | Investigating | IFilter は MSIX 拡張なし。登録方式を調査（WINDOWS-INTEGRATION §0） |
 | F03.26 | Thumbnail Provider | In Progress | F22.07 と同じ |
 | F03.27 | Preview Handler | In Progress | F22.09 と同じ |
+| | **Quick Preview の拡張（SPEC §3.1、2026-10-06 承認。設計は ARCHITECTURE §4.7）** | | |
+| F03.28 | Folder filmstrip | Implemented | A-1。Phase 1（2026-10-29）。`FilmstripPresenter`＋`FilmstripModel`。既定はオフ（F / ボタン、設定に保存）。表示中の項目が出た後に Explorer のビュー順で前後 60 件だけ読む（端に近づいたら読み直し）。複数選択時は選択されたファイル。サムネイルは専用スレッドで、見えている項目だけ: Windows のキャッシュ → ローカルの画像は Mavue のデコーダー（段階の上限内）→ 種類のアイコン（クラウドのみのファイルは抽出しない）。クリックで Explorer の選択を変更（Pin 中は Quick View 内だけで移動）。E2E `filmstrip`。実機（2026-10-29）: 30,000 件のフォルダー（範囲の読み取り約 0.2 秒・表示は遅くならない）、クラウドのみのファイル（テスト用同期ルートでデータ要求 0 件） |
+| F03.29 | Pixel inspector in Quick View | Implemented | A-2。Phase 1（2026-10-29）。`PixelInspection`（座標変換: ズーム・表示回転・EXIF 回転）＋`WicPixelReader`（原寸の 256×256 タイルを 1 枚ずつ、ストレート α、ファイルの値）＋`PixelInspector`。既定はオフ（I / ボタン）。X/Y・RGB・HEX・Alpha を画像の隅のパネルに表示（ポインターと重なると反対側へ）。静止画のみ（GIF アニメ再生中・PDF・SVG は対象外）。色管理後の値は未対応。E2E `pixel-inspector` |
+| F03.30 | Similar image search | Planned | A-3。Phase 7。明示的に実行したときだけ。別プロセス（メモリ・CPU 上限）、知覚ハッシュのキャッシュ、取り消し可 |
+| F03.31 | Wheel zoom without Ctrl as a user setting | Planned | A-4。Phase 1。既定は従来どおり Ctrl+ホイール（カーソル中心、F03.06）。設定で Ctrl なしを選べるようにする。Fit/100% への吸着、イベントのまとめ処理 |
+| F03.32 | Video seek with the mouse wheel | Implemented | B-2。Phase 3 とまとめて実装（2026-10-30、ARCHITECTURE §4.7.11）。動画・音声の上でホイール 1 段 ±5 秒（上＝進む）、Shift+ホイール ±30 秒、長さの範囲内。タッチパッドの細かい量は 1 段分たまってから。シークは常に 1 件（実行中は最新の要求だけ保持し完了後に実行、完了が来なくても 1 秒で解除）。E2E `media-wheel`、単体 `Phase3RulesTests` |
+| F03.33 | Audio waveform | Implemented | C-1。Phase 3 とまとめて実装（2026-10-30、§4.7.11）。Media Foundation Source Reader で float PCM → 1,024 区間のピーク（メモリは区間数に比例）。20 秒超は 128 か所の概形 → 全体で精密化（0.25 秒ごとに更新）、2 時間超は概形のみ。再生開始後に低優先度スレッド、別ファイル・閉じるで取り消し。再生済み部分を明るく表示、クリック/ドラッグでシーク。E2E `audio-waveform`。長い音声の別プロセス化は Mavue.Worker.exe の導入時（残課題） |
+| F03.34 | ZIP archive preview without extraction | Implemented | D-1。Phase 3（2026-10-30、§4.7.10）。`ZipDirectory`（中央ディレクトリのみ、ZIP64・先頭データ付き・分割 ZIP の判定）＋`ArchiveTree`＋`ArchiveContent`。.zip/.cbz（Office 文書等の ZIP 形式は従来の情報カード）。1 フォルダーずつ仮想化リスト（フォルダー優先・自然順）、件数・展開後/圧縮時の合計、警告（インターネットから取得・安全でない名前・異常な圧縮率・暗号化・未対応方式・入れ子）。名前は UTF-8/Unicode Path/OEM コードページ（CP932）を自動判定。壊れた・ZIP でない・分割の一部は理由を情報カードに表示。クラウドのみは読まない。E2E `archive-list`・`archive-safety`、単体 `ZipArchiveTests`・`Phase3RulesTests` |
+| F03.35 | Preview of images inside ZIP archives | Implemented | D-2。Phase 3（2026-10-30）。1 件ずつメモリへ展開（ディスクに書かない、`ZipEntryReader`: 申告サイズ・申告圧縮率で事前に拒否、実展開量を `DecompressionGuardStream` で計測、サイズと CRC を照合）→ 表示サイズでデコード。「画像を表示」/ダブルクリック/Enter で開き、PageUp/PageDown（Explorer から）・ホイール・ページ ボタン・←/→/Home/End で前後、Backspace で一覧へ。ズーム・回転あり。前後を性能段階の範囲で先読み、戻りはキャッシュから即時。.cbz は最初から画像表示。E2E `archive-images`・`archive-cbz`・`archive-safety`（60 MB の展開爆弾は展開せず拒否） |
+| F03.36 | Text preview | Planned | E-3 の土台。Phase 5。先頭だけ即表示、行の索引は後から、文字コード推定（UTF-8/UTF-16/CP932） |
+| F03.37 | Code preview with syntax highlighting | Planned | E-3。Phase 5。色付けライブラリはライセンス・保守・性能・巨大ファイル耐性・メモリを確認してから選定（DEPENDENCIES に記録） |
+| F03.38 | Markdown preview | Planned | E-1。Phase 5。XAML による直接描画を第一候補（WebView2 を使わない） |
+| F03.39 | Safe HTML preview | Planned | E-2。Phase 6。WebView2 を使う場合は最初から安全境界（スクリプト無効、外部通信・外部 URL・ローカルファイル・外部起動・ダウンロードを遮断） |
+| F03.40 | Universal file information preview | Implemented | Phase 1（2026-10-29）。`UniversalFileInfo`（ファイル システムと Zone.Identifier だけを読む）＋`UniversalContent` の情報カード: 種類のアイコン（キャッシュ済みサムネイルがあれば置換）・名前・種類（Windows の関連付け名）・サイズ・更新/作成日時・MIME・属性・入手元（Mark-of-the-Web のゾーンとホスト名のみ）。文書・アーカイブ・プログラム等の拡張子はデコーダーを試さず即カード、画像として読めないファイルは理由付きでカード、フォルダーは項目数（10,000 件まで）。E2E `info-card` |
+| F03.41 | EXIF inspector | Planned | F-1。Phase 6。Quick View で必要時だけ表示（本体の情報パネル F05.10 と共通の読み取り） |
+| F03.42 | Privacy check before sharing | Planned | F-2。Phase 6。GPS・撮影日時・カメラ等を検出して警告 |
+| F03.43 | Copy without private metadata | Planned | F-2。Phase 6。元ファイルは変更しない。再エンコードせずにメタデータだけ除いた新しいファイル（Mark-of-the-Web を引き継ぐ）。F08.10・F07.15 と共通 |
+| F03.44 | Drag out of Quick View | Implemented | G-1/G-2。Phase 1（2026-10-29）。情報バーのファイル名、または画面に収まっている画像からドラッグ（拡大してパンできる時はパン）。読み取り専用のファイルを渡し、許可する操作はコピーだけ（同じドライブの Explorer へのドロップでも移動しない）。フォルダーはドラッグしない。E2E `drag-out`（ファイル名・画像の 2 経路）。実機（2026-10-29）: Explorer・Edge・別プロセスの WinForms アプリへコピーできる。**ペイントは受け付けない**（WinUI のドラッグを受け付けない。Explorer からは可。残課題、TESTING「Phase 1 の実機確認」） |
+| F03.45 | Preview pin | Implemented | G-3。Phase 1（2026-10-29）。`PreviewNavigator.IsPinned`（P / ボタン）。固定中は Explorer の選択変更・Explorer の終了・他アプリへの切替で変わらず/閉じず、フックで Explorer のキー（←/→・PageUp/PageDown・Esc）を奪わない。Space（Explorer）・Esc（Quick View 上）・閉じるボタンで閉じる。解除すると Explorer の現在の選択に追従。固定中の ←/→ はフィルムストリップの前後へ。複数 Pin は未実装（構造は ARCHITECTURE §4.7.8）。E2E `pin` |
+| F03.46 | Quick View window design (light, dark, glass) | In Progress | Phase 2（2026-10-30。ARCHITECTURE §4.7.9）。Windows 標準のタイトルバー（ファイル名）と直下のツールバー（44 DIP）を Mica で 1 つの帯に（タイトルバーの拡張・ボタン色の変更は表示が約 10 ms 遅くなるため不採用、実測）。下部の情報行はツールバー左（ドラッグ元）へ。Mica（Base）はバーとフィルムストリップだけ、画像の舞台は不透明（#1E1E1E/#F3F3F3）。性能段階 Low・ハイコントラストでは単色。色はテーマ辞書（Dark/Light/HighContrast）。F6 でツールへ、Esc で戻る。アイコンを見直し（フィルムストリップ・スポイト・固定・「Mavue で開く」）、その他は「…」メニュー。ウィンドウは固定サイズ（利用者の判断）。ダークで実機確認済み、**ライト・ハイコントラストは未確認** |
+| F03.47 | Adaptive performance tiers | In Progress | Phase 0 で枠組みを実装: `PreviewResourcePolicy`（High/Balanced/Low。キャッシュ上限・先読み件数・先読みの画素数上限・GIF アニメの上限）を搭載メモリ・コア数・省エネ・リモート セッションから自動選択（タイマーなし）。High は従来値。以降の機能も同じ方針に従う |
 
 ## SPEC §4. Image Formats
 
@@ -81,7 +102,7 @@
 | F05.09 | Slideshow | Planned |  |
 | F05.10 | Image information | In Progress | 本体: ファイル情報パネル（Ctrl+I）。Windows のプロパティシステムから名前・場所・種類・サイズ・日時・大きさ・解像度・色深度・撮影日時・カメラ・レンズ・露出・絞り・ISO・焦点距離・位置（緯度経度）・タイトル・作成者等。E2E `app-info-copy-settings` |
 | F05.11 | Pixel-level inspection where useful | Planned |  |
-| F05.12 | Transparency checkerboard | Planned |  |
+| F05.12 | Transparency checkerboard | In Progress | Quick View で実装（2026-10-30、既定オン、「…」メニューで切替・設定に保存）。透明になり得る形式（PNG・GIF・WebP・AVIF・HEIF・TIFF・BMP・ICO・SVG 等。JPEG・RAW・PDF は対象外）の画像の範囲だけに市松模様。共通の `ViewerSurface.TransparencyGridEnabled`（本体はまだ無効） |
 | F05.13 | Drag & drop | In Progress | 本体: ファイルをウィンドウにドロップして開く（Explorer からのドラッグを合成マウス入力で実機確認）。アプリからのドラッグ（書き出し）は未実装 |
 | F05.14 | Copy/paste | In Progress | コピー: Ctrl+C でファイル（画像は画像データも）。貼り付け: Ctrl+V でクリップボードのファイルを開く。クリップボードの画像データを新規として開くのは未実装 |
 
@@ -351,8 +372,8 @@
 |---|---|---|---|
 | F19.01 | Audio preview | In Progress | Quick View（F03.17）と本体（共通の `MediaSession`。E2E `app-formats` で MP3・WAV・M4A・WMA・FLAC の音声出力を確認） |
 | F19.02 | Video preview | In Progress | Quick View（F03.18）と本体（E2E `app-formats` で MP4・WMV の画面上の映像と音声を確認） |
-| F19.03 | Playback controls | In Progress | Quick View: 標準の操作バー（再生/一時停止）と Enter（Quick View にフォーカスがあるとき）。本体: 操作バーと Space/Enter（E2E `app-media-keys`） |
-| F19.04 | Seek | In Progress | Quick View と本体: シークバーと Ctrl+←/→（10 秒） |
+| F19.03 | Playback controls | In Progress | Quick View: 標準の操作バー（再生/一時停止）と Enter（Quick View にフォーカスがあるとき）。本体: 操作バーと Space/Enter（E2E `app-media-keys`）。2026-10-30: Quick View は独自の軽い操作バー（`MediaOverlay`、本体は標準の操作バーのまま） |
+| F19.04 | Seek | In Progress | Quick View と本体: シークバーと Ctrl+←/→（10 秒）。Quick View はホイール ±5 秒（Shift ±30 秒）・波形のクリックでも |
 | F19.05 | Volume | In Progress | Quick View と本体: 音量/ミュートボタンと Ctrl+↑/↓（10%） |
 | F19.06 | Fullscreen | Planned | WinUI 3 の MediaTransportControls には全画面ボタンがない（テンプレートでコメントアウト、未サポート）。別途実装が必要 |
 | F19.07 | Supported Windows/media formats where practical | In Progress | 形式判定: MP4/M4V・MOV・MKV・WebM・AVI・WMV/ASF・MPEG-TS/M2TS・MPEG-PS・Ogg（映像/音声）・MP3・AAC・M4A/M4B・WAV・FLAC・Opus・WMA。再生は Windows（Media Foundation）にあるデコーダー次第。実機確認済み: MP4(H.264/AAC)・MP3・WAV・M4A・WMA・FLAC・WMV。MKV/WebM/HEVC 等は Store の拡張機能の有無に依存（未確認）。FFmpeg は法務確認待ち |
@@ -489,11 +510,11 @@ SPEC の項目は**削除・延期していない**。下の「後回し」は�
 | パスワード付き PDF を開く（F15.01 の関連・F09） | 本体はパスワード入力（誤り時は再入力、キャンセルで案内）。Quick View・プレビューは「Mavue で開く」案内、サムネイルは作らない。E2E `app-pdf-password` |
 | 配布（SPEC §28・CLAUDE.md §17） | MSIX パッケージ（`tools/package-msix.ps1`）とコード署名（`tools/sign-release.ps1`）。2026-10-04 に X.08 として継続。docs/PACKAGING.md |
 
-### 後回し（未実装 208 項目。Planned / Investigating のまま）
+### 後回し（未実装 227 項目。Planned / Investigating のまま。2026-10-06 に SPEC §3.1 の 19 項目を追加）
 
 | SPEC | 件数 | 優先度（提案） | 項目 |
 |---|---|---|---|
-| §3 Quick View / Quick Look | 9 | A | Fullscreen, Thumbnail/index sheet, Share, Print, Markup from Quick View, HDR support where practical（調査中）, Drag & drop, Clipboard integration, Windows Search integration where practical（調査中） |
+| §3 Quick View / Quick Look | 28 | A | Fullscreen, Thumbnail/index sheet, Share, Print, Markup from Quick View, HDR support where practical（調査中）, Drag & drop, Clipboard integration, Windows Search integration where practical（調査中）。§3.1 Quick Preview 拡張（Phase 1〜7）: Folder filmstrip, Pixel inspector in Quick View, Similar image search, Wheel zoom without Ctrl as a user setting, Video seek with the mouse wheel, Audio waveform, ZIP archive preview without extraction, Preview of images inside ZIP archives, Text preview, Code preview with syntax highlighting, Markdown preview, Safe HTML preview, Universal file information preview, EXIF inspector, Privacy check before sharing, Copy without private metadata, Drag out of Quick View, Preview pin, Quick View window design (light, dark, glass) |
 | §4 Image Formats | 2 | C | JPEG 2000, other practical image formats where appropriate |
 | §5 Image Viewing | 4 | A | Fullscreen, Slideshow, Pixel-level inspection where useful, Transparency checkerboard |
 | §6 Image Editing | 24 | B | Crop, Resize, Rotate, Flip, Brightness, Contrast, Saturation, Tint, Exposure, Gamma, Sharpness, Temperature, Auto Color, Background removal（調査中）, Other practical non-lasso selection tools, Copy, Paste, Markup, Text, Shapes, Freehand drawing, Signature, Undo, Redo |
@@ -534,7 +555,7 @@ SPEC の項目は**削除・延期していない**。下の「後回し」は�
 | WinUI 3 アプリ起動 | Implemented | `Mavue.App`（ja/en リソース、`tools/smoke-test.ps1`） |
 | 本体の閲覧基盤 | In Progress | `Mavue.App`: 引数・開くダイアログ（Ctrl+O）・ドロップでファイルを開き、共通ビューアで画像・GIF・PDF・動画・音声を表示。1 ファイルならフォルダー内の対応ファイルを ←/→ で移動、複数ならその範囲。終了・切替で再生停止とファイル解放。ツールバー（拡大縮小・回転・ページ・サムネイル・情報・コピー・プログラムから開く・フォルダーに表示・プロパティ・新しいウィンドウ・設定・ショートカット）、最近使ったファイル、ウィンドウ位置の保存（`Mavue.Core.Settings.AppSettings`）。E2E `--app`（11 シナリオ） |
 | 共通ビューア | In Progress | `Mavue.Viewer`（PDF 表示 `PdfDocumentView`（連続/見開き/単一、選択・検索強調・リンク、表示中付近のページだけ保持）、表示面 `ViewerSurface`（拡大・パン）・`DocumentViewer`（拡大縮小・回転・SVG・PDF を開いたまま描画する `PdfDocumentSession`）・画像デコード・GIF（一時停止・コマ送り・回転）・動画/音声・ファイル情報）と `Mavue.Core.Viewing`（`ViewerZoom`・`ViewOrientation`・表示サイズ・ページ・安全ポリシー・ファイル一覧）、`Mavue.Shell.ShellActions`（プログラムから開く・フォルダーに表示・プロパティ・クリップボード・Mavue の起動）。Quick View と本体で共有 |
-| Quick View 常駐ホスト（PoC） | In Progress | `Mavue.QuickView.Host`: フック、STA 選択取得、panel 表示、段階表示、計測（ETW/JSONL）、プリウォーム |
+| Quick View 常駐ホスト（PoC） | In Progress | `Mavue.QuickView.Host`: フック、STA 選択取得、panel 表示、段階表示、計測（ETW/JSONL）、プリウォーム。2026-10-06（Phase 0）: 形式ごとの表示部品（`IPreviewContent`: Raster/Svg/PdfDocument/Media/Universal）、表示制御（`QuickViewPresence`）、資源管理（`ResidentResources`・`NeighborPrefetcher`）、ファイル操作（`QuickViewFileActions`）に分割。異常終了・応答なし時の自動再起動（`RegisterApplicationRestart`）。ARCHITECTURE §4.7 |
 | PDF エンジン | In Progress | `Mavue.Pdf`: PDFium の C API（`PdfiumDocument`: 部分読み・共有付きで開く、描画、文字・位置、検索、リンク、アウトライン、ページキャッシュ 4 枚、全呼び出しを直列化）。単体テスト `Mavue.Pdf.Tests` |
 | Quick View 実機 E2E ハーネス | Implemented | `tools/Mavue.QuickView.Harness`（開発用ツール） |
 | ファイル安全ポリシー（プレビュー） | Implemented | `PreviewSafetyPolicy`（クラウドプレースホルダー・デバイスパス・UNC・巨大寸法）、単体テストあり |

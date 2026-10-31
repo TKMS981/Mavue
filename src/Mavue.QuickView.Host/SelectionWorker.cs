@@ -165,6 +165,42 @@ internal sealed class SelectionWorker : IDisposable
         }
     });
 
+    /// <summary>A range of the followed view around its focused item (filmstrip). Empty when nothing is followed.</summary>
+    public Task<(IReadOnlyList<(int Index, string Path)> Items, int ViewCount)> ReadViewRangeAsync(int radius) => _thread.InvokeAsync(() =>
+    {
+        try
+        {
+            return _session?.ReadRange(radius) ?? ([], 0);
+        }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidCastException or ObjectDisposedException)
+        {
+            return ((IReadOnlyList<(int, string)>)[], 0);
+        }
+    });
+
+    /// <summary>Selects the view item at <paramref name="index"/> if it is still <paramref name="path"/> (filmstrip click).</summary>
+    public void SelectInView(int index, string path) => _thread.Post(() =>
+    {
+        try
+        {
+            _session?.SelectAt(index, path);
+        }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or ObjectDisposedException)
+        {
+            // The Explorer window went away.
+        }
+    });
+
+    /// <summary>Reads the followed view's selection again and reports it as a selection change (after unpinning).</summary>
+    public void RefreshSelection() => _thread.Post(() =>
+    {
+        if (!_readQueued && _session is not null)
+        {
+            _firstEventQpc = QuickViewTimeline.Now;
+            PublishSelection();
+        }
+    });
+
     /// <summary>Stops following Explorer (Quick View closed).</summary>
     public void CloseSession() => _thread.Post(CloseSessionCore);
 

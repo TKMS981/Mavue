@@ -43,6 +43,12 @@ public enum FileFormat
     Flac,
     OggAudio,
     WindowsMediaAudio,
+
+    // Archives (listed and read without extraction; docs/ARCHITECTURE.md §4.7.5).
+
+    /// <summary>ZIP archives (.zip) and comic book archives (.cbz). Recognized by extension only: Office documents,
+    /// JARs and other ZIP containers keep their own types.</summary>
+    Zip,
 }
 
 /// <summary>Groups of <see cref="FileFormat"/> values.</summary>
@@ -61,4 +67,12 @@ public static class FileFormatKinds
         or FileFormat.Wav or FileFormat.Flac or FileFormat.OggAudio or FileFormat.WindowsMediaAudio;
 
     public static bool IsMedia(FileFormat format) => IsVideo(format) || IsAudio(format);
+
+    public static bool IsArchive(FileFormat format) => format == FileFormat.Zip;
+
+    /// <summary>
+    /// An image of this format may have transparent pixels (a checkerboard is shown behind it). JPEG, camera raw and
+    /// PDF pages are always opaque; unknown formats may be decoded by an installed codec and are treated as possible.
+    /// </summary>
+    public static bool MayHaveTransparency(FileFormat format) => format is not (FileFormat.Jpeg or FileFormat.CameraRaw or FileFormat.Pdf) && !IsMedia(format) && !IsArchive(format);
 }

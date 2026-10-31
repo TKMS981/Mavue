@@ -47,6 +47,7 @@ var options = new HarnessOptions
     SettleMilliseconds = int.Parse(Arg("--settle", "500"), CultureInfo.InvariantCulture),
     PauseAfterSampleMilliseconds = int.Parse(Arg("--pause", "0"), CultureInfo.InvariantCulture),
     OnlyScenarios = args.Contains("--only") ? Arg("--only", "").Split(',', StringSplitOptions.RemoveEmptyEntries) : null,
+    Phase1Real = args.Contains("--phase1-real"),
 };
 
 if (args.Contains("--write-test-pdf"))
