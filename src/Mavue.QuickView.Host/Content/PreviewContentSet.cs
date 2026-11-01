@@ -22,6 +22,9 @@ internal sealed class PreviewContentSet : IDisposable
             new PdfDocumentContent(services, host),
             new SvgContent(services, host),
             new ArchiveContent(services, host),
+            new TextContent(services, host),
+            new MarkdownContent(services, host),
+            new HtmlContent(services, host),
             Universal = new UniversalContent(services, host),
         ];
         _byKind = _all.ToDictionary(c => c.Kind);

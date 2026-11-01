@@ -38,6 +38,12 @@ public sealed record QuickViewSettings
     /// <summary>A checkerboard is shown behind transparent images. On by default (user decision 2026-10-30).</summary>
     public bool ShowTransparencyGrid { get; set; } = true;
 
+    /// <summary>Plain text wraps long lines (on by default; W in Quick View).</summary>
+    public bool WrapPlainText { get; set; } = true;
+
+    /// <summary>Source code wraps long lines (off by default: code keeps its layout and scrolls sideways).</summary>
+    public bool WrapCode { get; set; }
+
     /// <summary>Default location for the current user.</summary>
     public static string DefaultPath { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Mavue", "QuickView", "settings.json");

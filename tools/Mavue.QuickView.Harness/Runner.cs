@@ -190,6 +190,7 @@ internal sealed partial class Runner(HarnessOptions options, Action<string> log)
                 RunPhase1Scenarios(assets);
                 RunPhase2Scenarios(assets);
                 RunPhase3Scenarios(assets);
+                RunPhase4Scenarios(assets);
                 if (options.Phase1Real)
                 {
                     RunPhase1RealScenarios(assets);

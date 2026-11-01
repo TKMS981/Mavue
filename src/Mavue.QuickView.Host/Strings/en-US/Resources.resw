@@ -378,4 +378,76 @@
   <data name="QuickView_Media_Waveform" xml:space="preserve">
     <value>Waveform (click or drag to move the position)</value>
   </data>
+  <data name="QuickView_Source" xml:space="preserve">
+    <value>Show source (Ctrl+U)</value>
+  </data>
+  <data name="QuickView_Wrap" xml:space="preserve">
+    <value>Wrap long lines (W)</value>
+  </data>
+  <data name="QuickView_InfoText" xml:space="preserve">
+    <value>{0} · {1} · {2} · {3}</value>
+  </data>
+  <data name="QuickView_InfoHtml" xml:space="preserve">
+    <value>HTML · {0} · {1} · scripts and external content off</value>
+  </data>
+  <data name="QuickView_Text_Plain" xml:space="preserve">
+    <value>Text</value>
+  </data>
+  <data name="QuickView_Text_Lines" xml:space="preserve">
+    <value>{0} lines</value>
+  </data>
+  <data name="QuickView_Text_LinesCounting" xml:space="preserve">
+    <value>{0}+ lines (counting)</value>
+  </data>
+  <data name="QuickView_Text_MixedBreaks" xml:space="preserve">
+    <value>mixed line breaks</value>
+  </data>
+  <data name="QuickView_Text_Empty" xml:space="preserve">
+    <value>This file is empty.</value>
+  </data>
+  <data name="QuickView_Text_Binary" xml:space="preserve">
+    <value>This file does not contain text that can be shown.</value>
+  </data>
+  <data name="QuickView_Text_Truncated" xml:space="preserve">
+    <value>This file is very large: only the first {0} lines ({1} of {2}) are shown.</value>
+  </data>
+  <data name="QuickView_Markdown_TooLarge" xml:space="preserve">
+    <value>This Markdown file is larger than {0}, so it is shown as source text.</value>
+  </data>
+  <data name="QuickView_Markdown_Image" xml:space="preserve">
+    <value>Image</value>
+  </data>
+  <data name="QuickView_Markdown_RemoteImage" xml:space="preserve">
+    <value>Images on the internet are not loaded (Quick View does not connect to the network).</value>
+  </data>
+  <data name="QuickView_Markdown_ImageUnavailable" xml:space="preserve">
+    <value>This image cannot be shown (missing, too large, on a network share, or available online only).</value>
+  </data>
+  <data name="QuickView_Markdown_MoreLines" xml:space="preserve">
+    <value>… {0} more lines</value>
+  </data>
+  <data name="QuickView_Markdown_MoreRows" xml:space="preserve">
+    <value>… {0} more rows</value>
+  </data>
+  <data name="QuickView_Markdown_Alert_NOTE" xml:space="preserve">
+    <value>Note</value>
+  </data>
+  <data name="QuickView_Markdown_Alert_TIP" xml:space="preserve">
+    <value>Tip</value>
+  </data>
+  <data name="QuickView_Markdown_Alert_IMPORTANT" xml:space="preserve">
+    <value>Important</value>
+  </data>
+  <data name="QuickView_Markdown_Alert_WARNING" xml:space="preserve">
+    <value>Warning</value>
+  </data>
+  <data name="QuickView_Markdown_Alert_CAUTION" xml:space="preserve">
+    <value>Caution</value>
+  </data>
+  <data name="QuickView_Html_TooLarge" xml:space="preserve">
+    <value>This HTML file is larger than {0}, so it is shown as source text.</value>
+  </data>
+  <data name="QuickView_Html_NoWebView" xml:space="preserve">
+    <value>The WebView2 runtime is not available, so the HTML source is shown.</value>
+  </data>
 </root>

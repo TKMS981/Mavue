@@ -28,8 +28,9 @@ internal sealed partial class Runner
         Directory.CreateDirectory(folder);
         string image = Path.Combine(folder, "01 image.jpg");
         string data = Path.Combine(folder, "02 data.bin");
-        string text = Path.Combine(folder, "03 notes.txt");
+        string text = Path.Combine(folder, "03 notes.docx");
         string broken = Path.Combine(folder, "04 broken.jpg");
+        File.Delete(Path.Combine(folder, "03 notes.txt")); // left by runs before the text preview (it would sit between the files)
         if (!File.Exists(image))
         {
             Task.Run(() => TestAssets.EncodeAsync(image, BitmapEncoder.JpegEncoderId, 640, 480, 0.9)).GetAwaiter().GetResult();
@@ -40,7 +41,7 @@ internal sealed partial class Runner
         random.NextBytes(noise);
         noise[0] = 0x17; // not a known signature
         File.WriteAllBytes(data, noise);
-        File.WriteAllText(text, "Quick View test: plain text is not an image.\r\n", Encoding.UTF8);
+        File.WriteAllText(text, "Quick View test: a document type Quick View does not show (text inside).\r\n", Encoding.UTF8);
         byte[] damaged = new byte[50_000];
         random.NextBytes(damaged);
         damaged[0] = 0xFF;
@@ -49,7 +50,7 @@ internal sealed partial class Runner
         File.WriteAllBytes(broken, damaged);
 
         Guarded("message-not-replaced", () => MessagesStay(image, [data, text, broken]),
-            "↓ from an image to a file with no decoder (random bytes), a text file and a damaged JPEG: each shows its message within the stale-image grace and keeps it (no \"loading\" afterwards, no stale image); ↑ back to the image shows it again");
+            "↓ from an image to a file with no decoder (random bytes), a document type (.docx) and a damaged JPEG: each shows its message within the stale-image grace and keeps it (no \"loading\" afterwards, no stale image); ↑ back to the image shows it again");
     }
 
     private (bool, string) MessagesStay(string image, string[] unshowable)
@@ -90,8 +91,9 @@ internal sealed partial class Runner
             // Past the stale-image grace (120 ms) and any thumbnail lookup.
             Thread.Sleep(900);
             _log.Poll();
-            // Since Phase 1 a text file goes straight to the information card (no decoder, so no message).
-            bool expectsMessage = !path.EndsWith(".txt", StringComparison.OrdinalIgnoreCase);
+            // Since Phase 1 a document type goes straight to the information card (no decoder, so no message). Text files
+            // have been shown as text since the text preview (docs/ARCHITECTURE.md §4.7.12).
+            bool expectsMessage = !path.EndsWith(".docx", StringComparison.OrdinalIgnoreCase);
             Mark? skipped = _log.Find(nav.Request, "full-skipped") ?? _log.Find(nav.Request, "error") ?? _log.Find(nav.Request, "info-card");
             List<Mark> after = skipped is null ? [] : _log.ForRequest(nav.Request).Where(m => m.Qpc > skipped.Qpc).ToList();
             bool replacedLater = after.Any(m => m.Name is "stale-cleared" or "thumbnail" or "full-set");

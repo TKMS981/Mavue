@@ -129,6 +129,13 @@ foreach ($entry in $packageLicenses) {
     Add-Content (Join-Path $folder 'VERSIONS.txt') "$($entry.Id) $packageVersion" -Encoding utf8
 }
 if (-not (Test-Path (Join-Path $licenses 'pdfium\pdfium.txt'))) { throw 'licenses\pdfium is missing (Mavue.Pdf copies it).' }
+# Markdig (Quick View's Markdown preview): BSD-2-Clause; the package has no license file, the host output carries
+# licenses\markdig (copied from the repository). Its version comes from the host's own deps.json.
+$hostDeps = Get-Content (Join-Path $app 'Mavue.QuickView.Host.deps.json') -Raw | ConvertFrom-Json
+$markdig = ($hostDeps.libraries.PSObject.Properties | Where-Object { $_.Name -like 'Markdig/*' } | Select-Object -First 1).Name
+if (-not $markdig) { throw 'Markdig is not in Mavue.QuickView.Host.deps.json; update the license list in tools/build-release.ps1.' }
+if (-not (Test-Path (Join-Path $licenses 'markdig\license.txt'))) { throw 'licenses\markdig is missing (the Quick View host copies it).' }
+Add-Content (Join-Path $licenses 'markdig\VERSIONS.txt') ($markdig.Replace('/', ' ')) -Encoding utf8
 
 # 5. Sign Mavue's binaries (Microsoft's are already signed).
 $signArguments = @{ Path = $app; Subject = $Subject }

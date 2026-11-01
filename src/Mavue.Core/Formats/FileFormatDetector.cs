@@ -1,4 +1,5 @@
 using System.Text;
+using Mavue.Core.Text;
 
 namespace Mavue.Core.Formats;
 
@@ -94,15 +95,26 @@ public static class FileFormatDetector
         [".cbz"] = FileFormat.Zip,
     };
 
+    private static readonly char[] PathSeparators = ['\\', '/'];
+
     // ASF (WMV/WMA) header object GUID.
     private static readonly byte[] AsfHeader = [0x30, 0x26, 0xB2, 0x75, 0x8E, 0x66, 0xCF, 0x11, 0xA6, 0xD9, 0x00, 0xAA, 0x00, 0x62, 0xCE, 0x6C];
 
     /// <summary>Detects the format of the file at <paramref name="path"/>.</summary>
-    public static FileFormat Detect(string path)
+    public static FileFormat Detect(string path) => Detect(path, out _);
+
+    /// <summary>
+    /// Detects the format of the file at <paramref name="path"/>, and whether its first bytes look like text (no zero
+    /// bytes, few control characters), from the same single read of the header.
+    /// </summary>
+    public static FileFormat Detect(string path, out bool looksLikeText)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, bufferSize: 1);
-        return Detect(stream, Path.GetExtension(path));
+        Span<byte> buffer = stackalloc byte[HeaderLength];
+        int read = stream.ReadAtLeast(buffer, buffer.Length, throwOnEndOfStream: false);
+        looksLikeText = TextEncodingDetector.LooksLikeText(buffer[..read]);
+        return Detect(buffer[..read], path);
     }
 
     /// <summary>
@@ -117,18 +129,41 @@ public static class FileFormatDetector
         return Detect(buffer[..read], extensionHint);
     }
 
-    /// <summary>Detects the format from the leading bytes of a file.</summary>
+    /// <summary>
+    /// Detects the format from the leading bytes of a file. <paramref name="extensionHint"/> is the extension (".txt")
+    /// or the file's name or path (needed for text files known by name, such as "Makefile").
+    /// </summary>
     public static FileFormat Detect(ReadOnlySpan<byte> header, string? extensionHint = null)
     {
+        // Text by name: unless the bytes are binary (then a real signature such as a PNG renamed .txt may win), the
+        // name decides. Text must not be sniffed as media or SVG ("G…G" 188 bytes apart is not an MPEG stream, an
+        // HTML page with inline <svg> is not a drawing, a note quoting "%PDF-" is not a PDF).
+        FileFormat byName = TextFormatFor(extensionHint);
+        if (byName != FileFormat.Unknown && TextEncodingDetector.LooksLikeText(header))
+        {
+            return byName;
+        }
+
         FileFormat byContent = DetectByContent(header, extensionHint);
-        return byContent != FileFormat.Unknown ? byContent : FromExtension(extensionHint);
+        if (byContent != FileFormat.Unknown)
+        {
+            return byContent;
+        }
+
+        // Binary content behind a text name: the text preview explains it, except for ".ts"/".mts", which are
+        // transport streams when they are not text.
+        return byName != FileFormat.Unknown && !TextFileTypes.IsAmbiguousWithMedia(Extension(extensionHint!)) ? byName : FromExtension(extensionHint);
     }
 
     /// <summary>Extensions (lower case, with the leading dot) recognized for <paramref name="format"/>.</summary>
     public static IReadOnlyList<string> ExtensionsOf(FileFormat format) =>
         ExtensionMap.Where(p => p.Value == format).Select(p => p.Key).Order(StringComparer.Ordinal).ToArray();
 
-    /// <summary>Maps a file extension (with or without the leading dot) to a format.</summary>
+    /// <summary>
+    /// Maps a file extension (with or without the leading dot) to a format. A file name or path is also accepted:
+    /// then text files known by name ("Makefile") are recognized too. Media extensions win over text ones (".ts" is
+    /// a transport stream when the content cannot be read, e.g. a cloud placeholder).
+    /// </summary>
     public static FileFormat FromExtension(string? extension)
     {
         if (string.IsNullOrEmpty(extension))
@@ -136,8 +171,45 @@ public static class FileFormatDetector
             return FileFormat.Unknown;
         }
 
-        string normalized = extension.StartsWith('.') ? extension : "." + extension;
-        return ExtensionMap.TryGetValue(normalized, out FileFormat format) ? format : FileFormat.Unknown;
+        string normalized = Extension(extension);
+        if (normalized.Length > 1 && ExtensionMap.TryGetValue(normalized, out FileFormat format))
+        {
+            return format;
+        }
+
+        return TextFormatFor(extension);
+    }
+
+    /// <summary>".txt" from ".txt", "txt", "notes.txt" or a path; "" when there is none.</summary>
+    private static string Extension(string hint)
+    {
+        if (IsNameOrPath(hint))
+        {
+            return Path.GetExtension(hint);
+        }
+
+        return hint.StartsWith('.') ? hint : "." + hint;
+    }
+
+    /// <summary>A file name or path ("notes.txt", "C:\a\Makefile") rather than an extension (".txt", "txt").</summary>
+    private static bool IsNameOrPath(string hint) => hint.IndexOfAny(PathSeparators) >= 0 || hint.IndexOf('.', 1) > 0;
+
+    /// <summary>The text format a name or extension stands for (Markdown, HTML, text), or Unknown.</summary>
+    private static FileFormat TextFormatFor(string? hint)
+    {
+        if (string.IsNullOrEmpty(hint))
+        {
+            return FileFormat.Unknown;
+        }
+
+        if (IsNameOrPath(hint))
+        {
+            return TextFileTypes.FormatForPath(hint);
+        }
+
+        // An extension (".txt", "txt"), or a bare name such as "Makefile" or ".gitignore".
+        FileFormat byExtension = TextFileTypes.FormatForPath("x" + (hint.StartsWith('.') ? hint : "." + hint));
+        return byExtension != FileFormat.Unknown ? byExtension : TextFileTypes.FormatForPath(hint);
     }
 
     private static FileFormat DetectByContent(ReadOnlySpan<byte> h, string? extensionHint)
@@ -225,14 +297,14 @@ public static class FileFormatDetector
             return media;
         }
 
-        if (LooksLikeSvg(h))
+        if (LooksLikeSvg(h) && !FileFormatKinds.IsText(TextFormatFor(extensionHint)))
         {
             return FileFormat.Svg;
         }
 
         // PDF readers accept the header anywhere in the first 1024 bytes (junk may precede it).
         // Checked last so that strings embedded in other formats (e.g. EXIF) cannot win over real signatures.
-        return h.IndexOf("%PDF-"u8) > 0 ? FileFormat.Pdf : FileFormat.Unknown;
+        return h.IndexOf("%PDF-"u8) > 0 && !FileFormatKinds.IsText(TextFormatFor(extensionHint)) ? FileFormat.Pdf : FileFormat.Unknown;
     }
 
     private static FileFormat DetectIsoBmff(ReadOnlySpan<byte> h, string? extensionHint)

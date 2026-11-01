@@ -63,6 +63,8 @@ public sealed partial class QuickViewWindow : Window
         LayoutTwoPagesItem.Text = strings.GetString("QuickView_LayoutTwoPages") + "  (Ctrl+Shift+3)";
         LayoutTwoPagesCoverItem.Text = strings.GetString("QuickView_LayoutTwoPagesCover") + "  (Ctrl+Shift+4)";
         SetButtonText(FilmstripButton, strings.GetString("QuickView_Filmstrip"));
+        SetButtonText(SourceButton, strings.GetString("QuickView_Source"));
+        SetButtonText(WrapButton, strings.GetString("QuickView_Wrap"));
         SetButtonText(InspectorButton, strings.GetString("QuickView_PixelInspector"));
         _pinText = strings.GetString("QuickView_Pin");
         _unpinText = strings.GetString("QuickView_Unpin");
@@ -166,7 +168,51 @@ public sealed partial class QuickViewWindow : Window
         ApplyChromeBackground();
         Surface.SetTextColors(Themed("QvPrimaryTextBrush"), Themed("QvSecondaryTextBrush"));
         Surface.SetTransparencyGridColors(CheckerColor("QvCheckerColor1"), CheckerColor("QvCheckerColor2"));
+        ThemeChanged?.Invoke();
     }
+
+    /// <summary>The theme (dark, light, high contrast) changed: contents that color their own elements refresh them.</summary>
+    public event Action? ThemeChanged;
+
+    /// <summary>The rendered view or the source of a Markdown or HTML file was chosen (button or Ctrl+U).</summary>
+    public event Action<bool>? SourceToggled;
+
+    /// <summary>Line wrapping of text was switched on or off (button or W).</summary>
+    public event Action<bool>? WrapToggled;
+
+    /// <summary>
+    /// Shows the text tools (source/rendered, wrapping) for text, code, Markdown and HTML, or hides them
+    /// (<paramref name="source"/> and <paramref name="wrap"/> both null).
+    /// </summary>
+    /// <param name="source">Null: no source view for this file; otherwise whether the source is shown.</param>
+    /// <param name="wrap">Null: wrapping does not apply; otherwise whether lines wrap.</param>
+    public void SetTextTools(bool? source, bool? wrap)
+    {
+        TextTools.Visibility = source is null && wrap is null ? Visibility.Collapsed : Visibility.Visible;
+        SourceButton.Visibility = source is null ? Visibility.Collapsed : Visibility.Visible;
+        SourceButton.IsChecked = source == true;
+        WrapButton.Visibility = wrap is null ? Visibility.Collapsed : Visibility.Visible;
+        WrapButton.IsChecked = wrap == true;
+    }
+
+    /// <summary>Puts the HTML view in its place over the stage (null removes it), and shows or hides it.</summary>
+    public void SetWebView(UIElement? view, bool visible)
+    {
+        if (view is null)
+        {
+            WebHost.Children.Clear();
+        }
+        else if (!WebHost.Children.Contains(view))
+        {
+            WebHost.Children.Clear();
+            WebHost.Children.Add(view);
+        }
+
+        WebHost.Visibility = view is not null && visible ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>True while the HTML view is shown.</summary>
+    public bool ShowsWebView => WebHost.Visibility == Visibility.Visible;
 
     private Windows.UI.Color CheckerColor(string key)
     {
@@ -476,6 +522,10 @@ public sealed partial class QuickViewWindow : Window
     private void OnInspectorClick(object sender, RoutedEventArgs e) => FromButton(() => InspectorToggled?.Invoke(InspectorButton.IsChecked == true));
 
     private void OnPinClick(object sender, RoutedEventArgs e) => FromButton(() => PinToggled?.Invoke(PinButton.IsChecked == true));
+
+    private void OnSourceClick(object sender, RoutedEventArgs e) => FromButton(() => SourceToggled?.Invoke(SourceButton.IsChecked == true));
+
+    private void OnWrapClick(object sender, RoutedEventArgs e) => FromButton(() => WrapToggled?.Invoke(WrapButton.IsChecked == true));
 
     /// <summary>The checkerboard behind transparent images was switched on or off (the "…" menu).</summary>
     public event Action<bool>? TransparencyGridToggled;
@@ -888,6 +938,14 @@ public sealed partial class QuickViewWindow : Window
             case VirtualKey.I when !control && !e.KeyStatus.WasKeyDown && InspectorButton.Visibility == Visibility.Visible:
                 e.Handled = true;
                 InspectorToggled?.Invoke(!InspectorActive);
+                return;
+            case VirtualKey.U when control && !e.KeyStatus.WasKeyDown && SourceButton.Visibility == Visibility.Visible && TextTools.Visibility == Visibility.Visible:
+                e.Handled = true;
+                SourceToggled?.Invoke(SourceButton.IsChecked != true);
+                return;
+            case VirtualKey.W when !control && !e.KeyStatus.WasKeyDown && WrapButton.Visibility == Visibility.Visible && TextTools.Visibility == Visibility.Visible:
+                e.Handled = true;
+                WrapToggled?.Invoke(WrapButton.IsChecked != true);
                 return;
             case VirtualKey.P when !control && !e.KeyStatus.WasKeyDown:
                 e.Handled = true;

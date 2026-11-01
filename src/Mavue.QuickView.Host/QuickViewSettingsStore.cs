@@ -42,6 +42,12 @@ internal sealed class QuickViewSettingsStore
     /// <summary>A checkerboard is shown behind transparent images (on by default).</summary>
     public bool TransparencyGridOn { get; set; } = true;
 
+    /// <summary>Plain text wraps long lines (on by default).</summary>
+    public bool WrapPlainText { get; set; } = true;
+
+    /// <summary>Source code wraps long lines (off by default).</summary>
+    public bool WrapCode { get; set; }
+
     /// <summary>The image scale changed on a reload (decoded previews were made for the other mode's box).</summary>
     public event Action? ScaleModeChanged;
 
@@ -71,6 +77,8 @@ internal sealed class QuickViewSettingsStore
         FilmstripVisible = settings.ShowFilmstrip;
         PixelInspectorOn = settings.ShowPixelInspector;
         TransparencyGridOn = settings.ShowTransparencyGrid;
+        WrapPlainText = settings.WrapPlainText;
+        WrapCode = settings.WrapCode;
         if (!force && previous != ScaleMode)
         {
             ScaleModeChanged?.Invoke();

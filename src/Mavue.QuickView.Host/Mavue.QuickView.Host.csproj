@@ -36,6 +36,8 @@
     <!-- Pinned to the metapackage's version: WinUI 2.3.9 asks for >= 2.1.8, which is not published (NU1603). -->
     <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
+    <!-- Markdown preview: parsed by Markdig, drawn as XAML; loaded only when the first Markdown file is shown. -->
+    <PackageReference Include="Markdig" />
   </ItemGroup>
 
   <!-- Windows 11 context-menu command (docs/WINDOWS-INTEGRATION.md §15): the identity package's external location
@@ -43,6 +45,9 @@
        package logo are copied here. Without the DLL the host builds and works as before. -->
   <ItemGroup>
     <Content Include="Assets\QuickViewLogo.png" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Markdig ships no license file in its package (SPDX expression only): the upstream text is kept in licenses/markdig
+         and travels with the host (docs/DEPENDENCIES.md §2, THIRD-PARTY-NOTICES.md). -->
+    <None Include="..\..\licenses\markdig\*.*" Link="licenses\markdig\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
     <None Include="$(MavueNativeCommandDll)" Condition="Exists('$(MavueNativeCommandDll)')"
           Link="Mavue.Shell.Native.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>

@@ -347,6 +347,9 @@ Mavue.QuickView.Host
 │   ├─ UniversalContent       何でも何かを表示する（Phase 0 は従来のメッセージ。Phase 1 で情報カード）
 │   ├─ SurfaceImageView       画像として描く内容の共通状態（ズーム・回転・表示中の大きさ・表示用ビットマップ）
 │   ├─ PreviewInfoText        情報欄の文字列（メタデータ表示の境界）
+│   ├─ TextContent            テキスト・コード（Phase 4。§4.7.12）。Text/TextPreviewer・TextLinesView・DocumentLineSource
+│   ├─ MarkdownContent        Markdown を XAML で描画（Markdig）。Markdown/MarkdownRenderer・MarkdownView・MarkdownImages
+│   ├─ HtmlContent            HTML を安全な WebView2 で表示。Html/HtmlBrowser（WebView2 の型に触れる唯一のクラス）
 │   └─ PreviewContracts       IPreviewContent・能力インターフェース・IPreviewHost・PreviewServices
 └─ Performance/
     ├─ ResidentResources      資源上限（性能段階）、非表示後のメモリ返却、異常終了時の自動再起動
@@ -360,7 +363,8 @@ Mavue.Core
 ├─ Viewing/PreviewContentRouting   ファイル情報 → 表示部品の種類（唯一の振り分け。純粋関数）
 ├─ Viewing/PreviewResourcePolicy   性能段階と資源上限（High = PoC の実測値、Balanced、Low）
 ├─ Viewing/PreviewPrefetchPlan     先読みの順序（次 → 前）・対象（通常のファイル・段階の上限内）・先読みする部品（画像のみ）
-└─ Archives/                        ZIP 等の安全上限（ArchiveLimits）、項目名の検査（ArchiveEntryName）、展開量の計測（DecompressionGuardStream）
+├─ Archives/                        ZIP 等の安全上限（ArchiveLimits）、項目名の検査（ArchiveEntryName）、展開量の計測（DecompressionGuardStream）
+└─ Text/                            文字コード判定・行索引・行の読み出し・構文の色付け・上限（Phase 4。§4.7.12。UI 型に依存しない）
 ```
 
 #### 4.7.1 表示部品の契約
@@ -441,9 +445,9 @@ Mavue.Core
 | 1 | Ctrl なしのホイールズーム（設定）・吸着、ピクセル Inspector、フィルムストリップ、Pin（現在の Quick View を固定）、外へのドラッグ（既定はコピー）、Universal Preview（2026-10-29: ホイールズーム以外の 5 項目を実装・テスト。§4.7.8） |
 | 2 | ウィンドウのデザイン（2026-10-29 利用者の指示で ZIP と入れ替え。前提と改善点は §4.7.9） |
 | 3 | ZIP（一覧・ZIP 内画像・前後移動）（2026-10-30 実装。§4.7.10）。利用者の指示で Phase 4 の動画・音声もまとめて実装（§4.7.11） |
-| 4 | 動画（軽い操作 UI、ホイール ±5 秒、Shift+ホイール ±30 秒）、音声の波形（2026-10-30 に Phase 3 とまとめて実装。§4.7.11） |
-| 5 | テキスト・コード（色付けライブラリは選定のうえ）・Markdown（XAML 直接描画） |
-| 6 | HTML（WebView2 の安全境界）、EXIF Inspector、共有前チェック・メタデータを除いたコピー |
+| 4 | 動画（軽い操作 UI、ホイール ±5 秒、Shift+ホイール ±30 秒）、音声の波形（2026-10-30 に Phase 3 とまとめて実装。§4.7.11）。2026-11-02: 利用者の指示で、Phase 5 のテキスト・コード・Markdown と Phase 6 の HTML をまとめて Phase 4 として実装（§4.7.12） |
+| 5 | （テキスト・コード・Markdown は Phase 4 で実装済み） |
+| 6 | EXIF Inspector、共有前チェック・メタデータを除いたコピー（HTML は Phase 4 で実装済み） |
 | 7 | 類似画像検索（別プロセス） |
 | 8 | 統合テスト・性能テスト・長時間テスト |
 
@@ -614,6 +618,116 @@ Mavue.QuickView.Host/Content/ArchiveContent（表示部品、PreviewContentKind.
 - 位置の表示は再生中のファイルがある間だけ 200 ms ごとに更新（非表示・別ファイルで停止。常駐中は何も動かない）。
 - 計測項目: `media-wheel-seek`（stepMs・targetMs）、`media-seek`（slider/waveform）、`media-mute`、`media-command` に source（key/button）、
   `audio-waveform`（exact/coarse/unavailable・所要時間）。
+
+#### 4.7.12 テキスト・コード・Markdown・HTML（Phase 4、2026-11-02）
+
+利用者の指示（2026-11-02）: Markdown（XAML ネイティブ描画）、HTML（安全な WebView2 構成）、コード（色付け）、大きなテキストの負荷対策、
+Universal Preview との自然な振り分けをまとめて実装する。HTML は外部通信・外部リソース・危険なスクリプト実行を禁止し、外部アプリの起動や勝手な
+ダウンロードをしない。巨大ファイルのメモリ・CPU 消費を制限し、読み取り専用で扱う。Phase 2 の UI を共通利用し、必要になるまで解析・描画しない。
+
+```
+Mavue.Core.Text（データ層: パス・上限・CancellationToken → 行・トークン。UI 型に依存しない＝将来 Mavue.Worker.exe へ移せる）
+├─ TextEncodingDetector  先頭 64 KiB から: BOM（UTF-8/16/32）→ BOM なし UTF-16（1 バイトおきの 0 と、読んだ結果に制御文字が少ないこと）
+│                        → ISO-2022-JP（エスケープ列）→ 正しい UTF-8 → Shift_JIS / EUC-JP（かな・漢字の割合で採点）→ システムの ANSI コード ページ。
+│                        0 バイト（UTF-16 以外）や制御文字 2 % 超はバイナリ。LooksLikeText は形式判定と同じ 1 回のヘッダー読み取りで使う
+├─ TextLineIndex         行頭のバイト位置の「チェックポイント」だけを持つ（16 行ごと、または前のチェックポイントから 64 KiB 以上離れた行頭）。
+│                        12 バイト/チェックポイント。LF・CRLF・単独 CR をコード単位で探す（UTF-16 の文字の中の 0x0A を改行と誤らない）。
+│                        1 MiB ずつ読み、1 回目の後と約 4 MiB ごとに進捗を通知。上限（バイト数・チェックポイント数）で打ち切り
+├─ TextDocument          読み取り専用・共有モードで開く。任意の行範囲を最寄りのチェックポイントから読み、デコード・タブ展開（4）・制御文字の可視化
+│                        （␛ など）・双方向制御文字（U+202A–202E、2066–2069）を <U+202E> と表示（"Trojan Source" 型の見せかけを防ぐ）・
+│                        長い行は 10,000 文字で切る。色付けの状態は 128 行ごとに覚え、最寄りの状態から（5,000 行以内）続けて色付け
+├─ Syntax/               自作の行単位レキサー（状態を次の行へ渡す）。CodeLanguage（C 系 40 言語余り: 定義データで記述）、MarkupLanguage
+│                        （XML/HTML/XAML）、CssLanguage、YamlLanguage、IniLanguage（INI/TOML）、MarkdownSourceLanguage、DiffLanguage、LogLanguage。
+│                        SyntaxLanguages: 拡張子・既知のファイル名（Makefile、Dockerfile、.gitignore、CMakeLists.txt…）→ 言語
+├─ TextFileTypes         名前からテキスト・Markdown・HTML を判定（拡張子・既知のファイル名・README/LICENSE 等）
+├─ HtmlCharset           HTML の文字コードの宣言（BOM → <meta charset>（既知の名前のみ）→ 判定結果）
+└─ TextPreviewLimits     性能段階ごとの上限（下表）
+
+Mavue.QuickView.Host/Content
+├─ TextContent        テキスト・コード（PreviewContentKind.Text）。TextPreviewer に任せる
+├─ MarkdownContent    Markdown（.Markdown）。Markdig で解析 → MarkdownRenderer で XAML。ソース表示は TextPreviewer
+├─ HtmlContent        HTML（.Html）。HtmlBrowser（WebView2）。ソース表示・フォールバックは TextPreviewer
+├─ Text/TextPreviewer       文書を開く → 索引を低優先度スレッドで作る → 最初の 1 MiB の索引で 1 画面目を表示 → 情報欄・注意書きを更新
+├─ Text/TextLinesView       仮想化した行表示（見えている行の TextBlock だけ。行番号の溝・縦横スクロールバー・折り返し・タッチでパン）
+├─ Text/DocumentLineSource  行の読み出しを UI スレッドの外で 1 件ずつ（待っている要求は最新だけ）、見えている付近だけを上限付きでキャッシュ
+├─ Markdown/MarkdownView    ItemsRepeater（最上位のブロック 1 つ = 要素 1 つ、見えている分だけ作る）＋ ScrollViewer（本文幅 880 DIP、中央寄せ）
+├─ Markdown/MarkdownImages  画像の読み込み方針（下記）
+└─ Html/HtmlBrowser         WebView2 の安全境界（下記）
+```
+
+**振り分け**（`PreviewContentRouting`、単体テストで固定）: `FileFormat.Text/Markdown/Html` は名前（拡張子・既知のファイル名）で決まり、内容が
+バイナリでなければその種類（PNG を .txt にしたものは PNG）。テキストの名前のファイルでは、内容を MPEG-TS・SVG・PDF と誤判定しない（"G…G" が
+188 バイト離れている文・インライン `<svg>` を含む HTML・`%PDF-` を引用した文書）。`.ts`/`.mts` は内容が MPEG-TS なら動画、テキストなら
+TypeScript。種類が分からず先頭がテキストに見えるファイル（拡張子なしの README、独自の設定ファイル）もテキスト表示（画像の拡張子と文書・
+アーカイブ等の既知の種類を除く。後者は従来どおり情報カード）。クラウドのみのファイルは読まない（読むとダウンロードされる）→ 情報カード。
+テキストの名前でも中身がバイナリなら、情報カードに「表示できるテキストが含まれていません」。関連付け・Explorer のプレビュー登録は変えない。
+
+**上限**（`TextPreviewLimits`、性能段階で自動選択。テキストはファイル全体を読まない）:
+
+| 段階 | 索引するバイト | チェックポイント（≒行数） | 1 行の表示 | Markdown を整形する大きさ | HTML を描画する大きさ | 行キャッシュ |
+|---|---|---|---|---|---|---|
+| High | 2 GiB | 400 万（約 6,400 万行、48 MB） | 10,000 文字 | 4 MiB | 16 MiB | 6,000 行 |
+| Balanced | 1 GiB | 200 万 | 10,000 文字 | 2 MiB | 8 MiB | 4,000 行 |
+| Low | 512 MiB | 100 万 | 5,000 文字 | 1 MiB | 4 MiB | 2,000 行 |
+
+上限を超えた部分は表示せず、注意書き（「先頭の N 行だけを表示しています」）を出す。上限を超える Markdown・HTML はソースとして表示する。
+
+**テキスト・コードの表示**（`TextLinesView`）:
+
+- スクロールは「先頭の行 + その行の中のピクセル位置」で持つ（ファイル全体のピクセル位置ではない）。数百万行でも浮動小数点の精度に影響されず、
+  折り返しもできる（見えている行だけ測る。まだ測っていない行は 1 行分の高さとして扱う）。縦スクロールバーは行番号に対応。
+- ホイールで 3 行、Shift/チルトで横、Ctrl+ホイール・Ctrl+=/−/0 は文字の大きさ（ツールバーの − % ＋ も同じ。50〜400 %、閉じると 100 %）。
+  Quick View がキーボードを持つとき ↑/↓・PageUp/PageDown・Home/End でスクロール、←/→ は従来どおりファイルの移動。W で折り返し（ツールバーにも）。
+  折り返しの既定はプレーンテキストが**オン**、コードが**オフ**（`wrapPlainText`/`wrapCode` として設定に保存）。
+- コードは行番号付き、プレーンテキストは行番号なし。フォントは Cascadia Mono（日本語は既定のフォールバック）。色は VS Code の Dark+/Light+ に
+  準じたテーマ辞書（`QvSyntax*Brush`）、ハイコントラストでは色付けなし（システムの文字色）。
+- 選択は 1 行の中だけ（マウス）。Ctrl+C は選択があれば選択文字列、なければ従来どおりファイル。
+- 情報欄: 「C# · UTF-8 · CRLF · 2,000 行 · 61 KB」（索引中は「…行以上（数えています）」）。
+
+**Markdown**（`MarkdownContent`・`MarkdownRenderer`）:
+
+- Markdig 1.4.2（BSD-2-Clause、依存なし。DEPENDENCIES §2）。拡張: 表（パイプ・グリッド）、タスクリスト、取り消し線等、自動リンク、YAML フロントマター、
+  脚注、GitHub のアラート（NOTE/TIP/IMPORTANT/WARNING/CAUTION）、定義リスト、数式（ソースのまま表示）、見出しの ID（GitHub 方式）。
+  入れ子の深さは 64、描画側も 24 段で打ち切る。解析は UI スレッドの外。Markdig の型は初めて Markdown を表示したときに読み込まれる。
+- XAML: 見出し（H1/H2 は下線。UIA の見出しレベル付き）、段落（RichTextBlock、選択可）、強調、インラインコード、リスト・タスクリスト、引用、アラート、
+  コードブロック（info 文字列の言語で色付け。3,000 行まで）、表（1,000 行まで、横スクロール）、区切り線、脚注、定義リスト。
+  **HTML はレンダリングしない**: `<br>` は改行、`<img>` は画像（下記の規則）、それ以外のタグは表示せず中の文字だけ。HTML コメントは表示しない。
+- リンク: XAML の NavigateUri は使わない（自動で起動されるため）。クリックしたときだけ、http/https/mailto は既定のプログラム（PDF のリンクと同じ規則）、
+  `#見出し` は文書内へスクロール、それ以外（他のファイル、javascript:、file: 等）は何もしない。リンク先はツールチップで見える。
+- 画像（`MarkdownImages`）: 文書のフォルダーからの相対パスとローカルの絶対パス、data: URI は表示。**インターネット上の画像は読み込まない**（代わりに
+  代替テキストとアドレスのツールチップ）。ネットワーク共有（`\\server\…`。資格情報が送られうる）・デバイス パス・クラウドのみのファイルは開かない。
+  1 文書 64 枚・1 枚 32 MiB・合計 160 MiB まで、表示幅でデコード、表示されたブロックの画像だけ読む。
+- Ctrl+U（ツールバーの「ソース」）で色付きソースに切替（同じファイルの再表示。セッション中は選択を保持、閉じると解除）。
+
+**HTML**（`HtmlContent`・`HtmlBrowser`）。WebView2 の型に触れるのは `HtmlBrowser` だけで、最初の HTML を表示するまでアセンブリもブラウザー プロセスも
+読み込まない。閉じると `Close()` でプロセスを終わらせる（常駐中は何も動かない）。安全境界:
+
+1. スクリプト無効（`IsScriptEnabled=false`）。Web メッセージ・ホスト オブジェクト・開発者ツール・既定のコンテキスト メニュー・ブラウザーのショートカット
+   （印刷・保存・検索・再読み込み）・自動入力・パスワード保存・ステータス バー・スワイプ移動・**SmartScreen の評判確認（アドレスを外部へ送る）**を無効。
+2. 文書はメモリから `https://quickview.mavue.invalid/<n>/document.html`（解決されない予約名）として返す。応答ヘッダーで
+   `Content-Security-Policy: sandbox; default-src 'none'; img-src data:; style-src 'unsafe-inline' data:; font-src data:; …; form-action 'none'`、
+   `X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`、`Cache-Control: no-store`。
+3. それ以外の**すべての要求**（画像・CSS・スクリプト・フォント・iframe・プリフェッチ・favicon・ローカル ファイル・相対パス）は
+   `WebResourceRequested`（全コンテキスト・全要求元）で空の 403 を返し、ネットワークに出さない。
+4. 文書以外への**すべての移動**（リンクのクリック、meta refresh、フォーム、フレーム）を取り消す。新しいウィンドウ・ダウンロード・外部プロトコル
+   （アプリの起動）・権限要求・Basic 認証・証明書エラーはすべて拒否。
+5. 二重の防御: ブラウザーを存在しないプロキシ（ループバックも対象）・バックグラウンド通信なし・ping なしで起動。プロファイルは InPrivate
+   （ディスクに残さない）。ユーザー データ フォルダーは `%LOCALAPPDATA%\Mavue\QuickView\WebView2`。
+6. 文字コード: BOM があれば宣言しない。なければ文書の `<meta charset>`（既知の名前のみ）、なければ判定結果を Content-Type で宣言。
+
+- ページのズームは Ctrl+ホイール（WebView2 自身）。ツールバーのズームは HTML の描画では出さない（ソース表示では文字の大きさ）。
+- WebView2 ランタイムがない・作成に失敗した場合はソース表示と注意書き。
+- 計測（タイミング ログ）: `html-blocked`（種類と scheme のみ。アドレスは記録しない。1 文書 20 件まで）、`html-blocked-total`（要求・移動・新しい
+  ウィンドウ・ダウンロード・外部起動・権限の件数）、`full-set`（decoder=html、loaded、charset、所要時間、ランタイムの版）。
+
+**計測項目**: `text-open`（文字コード・言語・バイナリか・所要時間）、`text-index`（行数・索引したバイト・打ち切り・索引のメモリ・最長の行・所要時間）、
+`full-set`（decoder=text/markdown/html。行数・ブロック数・解析時間）、`full-visible`（表示した行数・作成したブロック数）、`text-wrap`、`text-source`、
+`markdown-image`（origin=Local/Data/Remote/Invalid と描画できたか。アドレスは記録しない）、`markdown-anchor`、`uri-opened`（scheme のみ）。
+先読み（`PreviewPrefetchPlan`）の対象は従来どおり画像だけ（テキストは表示が速いので先読みしない）。
+
+**未対応・残課題**: 複数行にまたがる選択とテキスト内の検索、ZIP 内のテキスト（`ArchiveContent` から `TextPreviewer` を使えば表示できる）、
+Explorer のプレビュー ウィンドウでのテキスト表示（Windows 標準のハンドラーを奪わない）、RTF・Jupyter ノートブックの整形表示、Mermaid 図と数式の描画、
+HTML 内でフォーカスを持っているときの Space（ページのスクロールに使われる。Esc・Explorer からの Space は閉じる）、HTML の印刷。
 
 ---
 

@@ -210,13 +210,39 @@ public sealed record UniversalFileInfo(
             return FileKindCategory.Archive;
         }
 
+        if (FileFormatKinds.IsText(format))
+        {
+            return TextCategory(extension, format);
+        }
+
         FileFormat byExtension = FileFormatDetector.FromExtension(extension ?? string.Empty);
+        if (FileFormatKinds.IsText(byExtension))
+        {
+            return TextCategory(extension, byExtension);
+        }
+
         if (byExtension != FileFormat.Unknown)
         {
             return CategoryFor(string.Empty, byExtension);
         }
 
         return extension is not null && ByExtension.TryGetValue(extension, out var known) ? known.Category : FileKindCategory.Other;
+    }
+
+    /// <summary>Text files: the table's category (CSV is a spreadsheet), else code when the file has a syntax language.</summary>
+    private static FileKindCategory TextCategory(string? extension, FileFormat format)
+    {
+        if (!string.IsNullOrEmpty(extension) && ByExtension.TryGetValue(extension, out var known))
+        {
+            return known.Category;
+        }
+
+        return format switch
+        {
+            FileFormat.Html => FileKindCategory.Code,
+            FileFormat.Markdown => FileKindCategory.Text,
+            _ => !string.IsNullOrEmpty(extension) && Text.Syntax.SyntaxLanguages.ForPath("x" + extension) is { Id: not "log" } ? FileKindCategory.Code : FileKindCategory.Text,
+        };
     }
 
     /// <summary>The MIME type Mavue knows for the format or extension, or null (the host may ask Windows).</summary>
@@ -226,6 +252,8 @@ public sealed record UniversalFileInfo(
         {
             FileFormat.Pdf => "application/pdf",
             FileFormat.Zip => "application/zip",
+            FileFormat.Markdown => "text/markdown",
+            FileFormat.Html => "text/html",
             FileFormat.Jpeg => "image/jpeg",
             FileFormat.Png => "image/png",
             FileFormat.Gif => "image/gif",

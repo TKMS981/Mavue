@@ -138,7 +138,7 @@ public class PreviewContentRoutingTests
             File.WriteAllText(text, "plain text");
 
             Assert.Equal(PreviewContentKind.PdfDocument, PreviewContentRouting.Choose(FileFacts.Read(pdfNamedJpg), true));
-            Assert.Equal(PreviewContentKind.Raster, PreviewContentRouting.Choose(FileFacts.Read(text), true));
+            Assert.Equal(PreviewContentKind.Text, PreviewContentRouting.Choose(FileFacts.Read(text), true));
             Assert.Equal(PreviewContentKind.Universal, PreviewContentRouting.Choose(FileFacts.Read(folder), true));
             Assert.Equal(PreviewContentKind.Universal, PreviewContentRouting.Choose(FileFacts.Read(Path.Combine(folder, "missing.png")), true));
         }

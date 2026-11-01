@@ -430,6 +430,48 @@ PDFium 表示の「領域に収まる」判定は 1 px の丸めを許容。
 
 - 未確認: ZIP 内の大量画像（数千枚）・数 GB の ZIP での体感、長い音声（1 時間超）の概形→精密化の実機表示、ライト テーマでの ZIP 一覧・操作バーの見え方。
 
+#### Quick Preview Phase 4（2026-11-02: テキスト・コード・Markdown・HTML）
+
+利用者の方針（2026-11-02）: 細かいテストは回さず、Markdown / HTML / Code / Universal の振り分けまで実装がまとまってから一括で実行した。
+
+| プロジェクト | 追加・変更したテスト | 件数 |
+|---|---|---|
+| `Mavue.Core.Tests` | `TextPreviewTests`: 文字コード判定（BOM 付き UTF-8/UTF-16 LE・BE、BOM なし UTF-16、UTF-8、Shift_JIS、EUC-JP、ISO-2022-JP、末尾で切れた UTF-8、欧文の ANSI、バイナリ・制御文字）、行の区切り（LF/CRLF/CR/混在・末尾の改行・空ファイル）、UTF-16 で 0x0A を含む文字を改行と誤らない、Shift_JIS の行、20 万行の任意の行の直接読み出しと索引メモリ、1 MiB の境界にまたがる CRLF、30 万文字の行の切り詰めと次の行、バイト数・チェックポイント数の上限、取り消し、バイナリは開かない、表示用の変換（タブ・制御文字・双方向制御文字）、途中から読んだときの複数行コメントの色、C#/Python/JSON/XAML/YAML/INI/diff/ログ/Markdown/CSS の色付け、名前と拡張子からの言語、全言語に乱数入力（例外・不正なトークンなし）、名前によるテキスト形式の判定、テキストを MPEG-TS・SVG・PDF と誤判定しない、.ts（TypeScript と MPEG-TS）、PNG を .txt にしたもの、振り分け（Text/Markdown/Html、クラウドのみは情報カード、種類不明でテキストならテキスト）、カテゴリーと MIME、HTML の文字コード宣言、段階別の上限、折り返し設定の既定値と保存 | 88 |
+| `Mavue.Core.Tests`（既存の変更） | `FileFormatDetectorTests`（.txt → Text、.md → Markdown、.html → Html、.xyz → Unknown）、`PreviewContentRoutingTests`（実ファイルの .txt はテキスト表示へ） | 4 |
+| **全体（Debug）** | **1,091（1,090 成功、1 スキップ: 既存のシンボリックリンクのテスト、失敗 0）** | |
+
+実機 E2E（Debug、`--iterations 1`。新シナリオは `RunnerPhase4.cs`）:
+
+- `text-plain`: Shift_JIS の日本語テキスト（CRLF・41 行）。情報欄の後 85〜93 ms で表示、文字コード Shift_JIS、プレーンテキストは折り返し・行番号なし、日本語が画面上にある。PASS。
+- `text-code`: 2,005 行の C#。言語 csharp・行番号あり・折り返しなし、ホイール 10 段で 30 行、End で最終行・Home で先頭、W で折り返しの切替（保存）。PASS。
+- `text-large`: 200 万行・約 122 MB のログ。1 画面目は情報欄の後 144〜167 ms（その時点で約 2.6 万行を索引済み）、全体の索引は 234〜250 ms で 200 万行、索引のメモリ 1.4 MB、
+  End で最終行、ホストのワーキング セットの増加は約 4 MB。PASS。
+- `text-routing`: 拡張子なしの README・未知の拡張子のテキストはテキスト表示、`module.ts` は TypeScript（動画ではない）、中身がバイナリの .txt は情報カードに
+  「表示できるテキストが含まれていません」。PASS。
+- `markdown-render`: 12 ブロック（解析 73〜79 ms）、見出し・表（日本語）・アラート・ローカル画像を描画、リモート画像 2 件（Markdown の画像と `<img>`）は読み込まない
+  （ローカルのテスト用 TCP サーバーへの接続 0 件）、Ctrl+U でソース表示と戻り。PASS。
+- `markdown-large`: 4 MB 超の Markdown はソース表示と注意書き。PASS。
+- `html-safe`: スクリプト・外部 CSS/画像/フォント/iframe/object/embed/video/audio・meta refresh・prefetch・フォーム・ダウンロード リンク・file: 画像を含む HTML。
+  ページは描画（インライン スタイルの見出しを画面のピクセルで確認、data: 画像を表示）、スクリプトは実行されない、テスト用サーバーへの接続 0 件、iframe 2 件の移動を取り消し、
+  Ctrl+U でソース、閉じた後に Quick View の WebView2 プロセスは 0。初回の WebView2 作成込みで 700〜940 ms、2 回目以降 95 ms。PASS。
+
+全体の一括実行で見つかったもの（すべてハーネス側。製品の変更は自動化ピアの追加のみ）:
+
+- テキスト表示の外枠（Grid/Canvas）・注意書きの外枠（Border）は UI Automation の要素にならない → テキスト表示のルートに「Document」の自動化ピアを追加
+  （スクリーン リーダーにも文書として見える。製品側の改善）、注意書きは TextBlock に ID。
+- HTML の外部要求は Content-Security-Policy がブラウザー内で止めるため `WebResourceRequested` まで来ない（要求 0 件）→ 判定を「接続 0 件・iframe の移動の取り消し・
+  ダウンロード 0」に変更。WebView2 の中の文字は UI Automation で取れないことがあるため、見出しの色を画面のピクセルで確認（表示の色管理で #00AA66 が (79,166,108) になる
+  ことを実測し、色相で判定）。
+- 既存の `message-not-replaced`: 以前の実行で作った `03 notes.txt` がテスト フォルダーに残り、↓ がそれに止まった（.txt はテキスト表示になったため名前を .docx に変えた）
+  → 古いファイルを消すよう修正し PASS。
+- 1 回目の表示計測で 1 度、Space がタイプアヘッドと判定された（`space-classified` reason=TypeAhead。フックと判定は今回変更していない）。全体実行では 7/7 OK。
+
+結果: Quick View 表示 7/7、Quick View のシナリオ 44 件はすべて PASS（`cli-quickview` は全体実行で 1 回失敗し単独で PASS。既知の揺らぎ）、本体 15/15。
+常駐の起動直後のワーキング セットは 142.5 MB で Phase 3（142.8 MB）と同等。Markdig と WebView2 は最初の Markdown・HTML を表示するまで読み込まれない。
+
+- 未確認: ライト テーマ・ハイコントラストでの色付けの見え方、数 GB のテキスト（上限での打ち切りは単体テストのみ）、タッチでのパン、スクリーン リーダーでの読み上げ、
+  Explorer がフォーカスを持たない状態での HTML 内の Space。
+
 ### 2.1 Quick View 実機 E2E ハーネス（`tools/Mavue.QuickView.Harness`）
 
 **実際のデスクトップを操作する**（Explorer を開き、SendInput で Space/Esc/Alt+Tab を送り、前面ウィンドウと画面ピクセルを検査する）。
@@ -457,6 +499,7 @@ $h = ".\tools\Mavue.QuickView.Harness\bin\Debug\net10.0-windows10.0.26100.0\Mavu
   計測中の**実ユーザー入力の有無**（ハーネス自身の LL フックで注入でない入力を数える）。
 - ホストは既定で **WMI 経由で独立に起動**する（ハーネスの子プロセスにすると前面化の結果が有利に歪むことを実測したため）。
 - ホストには作業フォルダの `settings-e2e.json` を `--settings` で渡す。**利用者の Quick View 設定は読み書きしない**。
+- Phase 4 のシナリオ: `text-plain`・`text-code`・`text-large`・`text-routing`・`markdown-render`・`markdown-large`・`html-safe`（§「Quick Preview Phase 4」）。
 - シナリオ（第 3 工程時点）: `nav-single-follow`、`nav-rapid`（↓×4・↑×4 を 40 ms 間隔、キャッシュ再表示でエラーがないこと）、
   `nav-multi-step`、`tab-switch-follow`（Ctrl+T・Ctrl+Tab）、`small-image-not-enlarged`（240×180 の画像が画面上で 240×180 物理ピクセルか、
   ウィンドウを画面キャプチャして測定。キャプチャは `display-capture.bmp` に保存）、`settings-reload`（非表示中に `settings-e2e.json` の

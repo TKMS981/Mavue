@@ -378,4 +378,76 @@
   <data name="QuickView_Media_Waveform" xml:space="preserve">
     <value>波形（クリックまたはドラッグで再生位置を移動）</value>
   </data>
+  <data name="QuickView_Source" xml:space="preserve">
+    <value>ソースを表示（Ctrl+U）</value>
+  </data>
+  <data name="QuickView_Wrap" xml:space="preserve">
+    <value>長い行を折り返す（W）</value>
+  </data>
+  <data name="QuickView_InfoText" xml:space="preserve">
+    <value>{0} · {1} · {2} · {3}</value>
+  </data>
+  <data name="QuickView_InfoHtml" xml:space="preserve">
+    <value>HTML · {0} · {1} · スクリプトと外部の読み込みは無効</value>
+  </data>
+  <data name="QuickView_Text_Plain" xml:space="preserve">
+    <value>テキスト</value>
+  </data>
+  <data name="QuickView_Text_Lines" xml:space="preserve">
+    <value>{0} 行</value>
+  </data>
+  <data name="QuickView_Text_LinesCounting" xml:space="preserve">
+    <value>{0} 行以上（数えています）</value>
+  </data>
+  <data name="QuickView_Text_MixedBreaks" xml:space="preserve">
+    <value>改行コード混在</value>
+  </data>
+  <data name="QuickView_Text_Empty" xml:space="preserve">
+    <value>空のファイルです。</value>
+  </data>
+  <data name="QuickView_Text_Binary" xml:space="preserve">
+    <value>このファイルには表示できるテキストが含まれていません。</value>
+  </data>
+  <data name="QuickView_Text_Truncated" xml:space="preserve">
+    <value>ファイルが大きいため、先頭の {0} 行（{2} のうち {1}）だけを表示しています。</value>
+  </data>
+  <data name="QuickView_Markdown_TooLarge" xml:space="preserve">
+    <value>Markdown ファイルが {0} を超えるため、整形せずにソースとして表示しています。</value>
+  </data>
+  <data name="QuickView_Markdown_Image" xml:space="preserve">
+    <value>画像</value>
+  </data>
+  <data name="QuickView_Markdown_RemoteImage" xml:space="preserve">
+    <value>インターネット上の画像は読み込みません（クイックビューはネットワークに接続しません）。</value>
+  </data>
+  <data name="QuickView_Markdown_ImageUnavailable" xml:space="preserve">
+    <value>この画像は表示できません（見つからない、大きすぎる、ネットワーク共有上、またはオンラインのみのファイル）。</value>
+  </data>
+  <data name="QuickView_Markdown_MoreLines" xml:space="preserve">
+    <value>…ほか {0} 行</value>
+  </data>
+  <data name="QuickView_Markdown_MoreRows" xml:space="preserve">
+    <value>…ほか {0} 行</value>
+  </data>
+  <data name="QuickView_Markdown_Alert_NOTE" xml:space="preserve">
+    <value>注記</value>
+  </data>
+  <data name="QuickView_Markdown_Alert_TIP" xml:space="preserve">
+    <value>ヒント</value>
+  </data>
+  <data name="QuickView_Markdown_Alert_IMPORTANT" xml:space="preserve">
+    <value>重要</value>
+  </data>
+  <data name="QuickView_Markdown_Alert_WARNING" xml:space="preserve">
+    <value>警告</value>
+  </data>
+  <data name="QuickView_Markdown_Alert_CAUTION" xml:space="preserve">
+    <value>注意</value>
+  </data>
+  <data name="QuickView_Html_TooLarge" xml:space="preserve">
+    <value>HTML ファイルが {0} を超えるため、ソースとして表示しています。</value>
+  </data>
+  <data name="QuickView_Html_NoWebView" xml:space="preserve">
+    <value>WebView2 ランタイムを利用できないため、HTML のソースを表示しています。</value>
+  </data>
 </root>

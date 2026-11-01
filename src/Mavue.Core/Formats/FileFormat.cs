@@ -49,6 +49,18 @@ public enum FileFormat
     /// <summary>ZIP archives (.zip) and comic book archives (.cbz). Recognized by extension only: Office documents,
     /// JARs and other ZIP containers keep their own types.</summary>
     Zip,
+
+    // Text (shown by the text, Markdown and HTML contents; docs/ARCHITECTURE.md §4.7.12). Recognized by name
+    // (extension or a well-known file name); the content still has to be text.
+
+    /// <summary>Plain text and source code (.txt, .log, .csv, .cs, .json, .xml, Makefile…).</summary>
+    Text,
+
+    /// <summary>Markdown (.md, .markdown…).</summary>
+    Markdown,
+
+    /// <summary>HTML documents (.html, .htm, .xhtml).</summary>
+    Html,
 }
 
 /// <summary>Groups of <see cref="FileFormat"/> values.</summary>
@@ -70,9 +82,12 @@ public static class FileFormatKinds
 
     public static bool IsArchive(FileFormat format) => format == FileFormat.Zip;
 
+    /// <summary>Text, Markdown and HTML.</summary>
+    public static bool IsText(FileFormat format) => format is FileFormat.Text or FileFormat.Markdown or FileFormat.Html;
+
     /// <summary>
     /// An image of this format may have transparent pixels (a checkerboard is shown behind it). JPEG, camera raw and
     /// PDF pages are always opaque; unknown formats may be decoded by an installed codec and are treated as possible.
     /// </summary>
-    public static bool MayHaveTransparency(FileFormat format) => format is not (FileFormat.Jpeg or FileFormat.CameraRaw or FileFormat.Pdf) && !IsMedia(format) && !IsArchive(format);
+    public static bool MayHaveTransparency(FileFormat format) => format is not (FileFormat.Jpeg or FileFormat.CameraRaw or FileFormat.Pdf) && !IsMedia(format) && !IsArchive(format) && !IsText(format);
 }

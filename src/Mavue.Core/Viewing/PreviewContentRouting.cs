@@ -26,6 +26,15 @@ public enum PreviewContentKind
 
     /// <summary>ZIP archives: the listing from the central directory and the images inside, read on demand.</summary>
     Archive,
+
+    /// <summary>Plain text and source code (syntax colored), only visible lines read (docs/ARCHITECTURE.md §4.7.12).</summary>
+    Text,
+
+    /// <summary>Markdown drawn as native XAML (no browser).</summary>
+    Markdown,
+
+    /// <summary>HTML in a locked-down WebView2: no scripts, no requests beyond the file itself, no downloads.</summary>
+    Html,
 }
 
 /// <summary>
@@ -63,6 +72,17 @@ public static class PreviewContentRouting
             return PreviewContentKind.Svg;
         }
 
+        if (FileFormatKinds.IsText(facts.Format))
+        {
+            // Reading a cloud placeholder would download it; the card shows its information instead.
+            return facts.Access != PreviewAccess.Allowed ? PreviewContentKind.Universal : facts.Format switch
+            {
+                FileFormat.Markdown => PreviewContentKind.Markdown,
+                FileFormat.Html => PreviewContentKind.Html,
+                _ => PreviewContentKind.Text,
+            };
+        }
+
         if (facts.Format == FileFormat.Pdf && facts.Access == PreviewAccess.Allowed && pdfDocumentViewAvailable)
         {
             return PreviewContentKind.PdfDocument;
@@ -73,11 +93,21 @@ public static class PreviewContentRouting
             return PreviewContentKind.Universal;
         }
 
+        // A file of no known type whose first bytes are text (a configuration file with an unusual extension, a
+        // README without one) is shown as text; Windows Imaging Component could not decode it anyway.
+        if (facts.Format == FileFormat.Unknown && facts.LooksLikeText && facts.Access == PreviewAccess.Allowed && !IsImageExtension(extension))
+        {
+            return PreviewContentKind.Text;
+        }
+
         // Images, PDF pages without PDFium, cloud placeholders of images (cached thumbnail) and unknown formats,
         // which Windows Imaging Component may still decode (e.g. JPEG XR, DDS); what it cannot decode falls back to
         // the information card.
         return PreviewContentKind.Raster;
     }
+
+    private static bool IsImageExtension(string? extension) =>
+        extension is { Length: > 1 } && UniversalFileInfo.CategoryFor(extension) == FileKindCategory.Image;
 
     /// <summary>Extensions of documents, archives, programs, fonts and the like: never images.</summary>
     private static bool IsKnownNonImage(string? extension) =>

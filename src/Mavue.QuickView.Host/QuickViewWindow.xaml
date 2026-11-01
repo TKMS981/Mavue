@@ -24,6 +24,28 @@
             <SolidColorBrush x:Key="QvOverlayTextBrush" Color="#FFF2F2F2" />
             <Color x:Key="QvCheckerColor1">#FF2C2C2C</Color>
             <Color x:Key="QvCheckerColor2">#FF3A3A3A</Color>
+            <!-- Text, code and Markdown preview (Content/Text): token colors after VS Code Dark+ / Light+. -->
+            <SolidColorBrush x:Key="QvTextBrush" Color="#FFD4D4D4" />
+            <SolidColorBrush x:Key="QvLineNumberBrush" Color="#FF858585" />
+            <SolidColorBrush x:Key="QvSyntaxKeywordBrush" Color="#FF569CD6" />
+            <SolidColorBrush x:Key="QvSyntaxTypeBrush" Color="#FF4EC9B0" />
+            <SolidColorBrush x:Key="QvSyntaxLiteralBrush" Color="#FF569CD6" />
+            <SolidColorBrush x:Key="QvSyntaxStringBrush" Color="#FFCE9178" />
+            <SolidColorBrush x:Key="QvSyntaxNumberBrush" Color="#FFB5CEA8" />
+            <SolidColorBrush x:Key="QvSyntaxCommentBrush" Color="#FF6A9955" />
+            <SolidColorBrush x:Key="QvSyntaxPreprocessorBrush" Color="#FFC586C0" />
+            <SolidColorBrush x:Key="QvSyntaxTagBrush" Color="#FF569CD6" />
+            <SolidColorBrush x:Key="QvSyntaxAttributeBrush" Color="#FF9CDCFE" />
+            <SolidColorBrush x:Key="QvSyntaxPropertyBrush" Color="#FF9CDCFE" />
+            <SolidColorBrush x:Key="QvSyntaxHeadingBrush" Color="#FF569CD6" />
+            <SolidColorBrush x:Key="QvSyntaxInsertedBrush" Color="#FF89D185" />
+            <SolidColorBrush x:Key="QvSyntaxDeletedBrush" Color="#FFF48771" />
+            <SolidColorBrush x:Key="QvSyntaxVariableBrush" Color="#FF9CDCFE" />
+            <SolidColorBrush x:Key="QvSyntaxErrorBrush" Color="#FFF48771" />
+            <SolidColorBrush x:Key="QvSyntaxWarningBrush" Color="#FFCCA700" />
+            <SolidColorBrush x:Key="QvCodeBlockBrush" Color="#FF262626" />
+            <SolidColorBrush x:Key="QvLinkBrush" Color="#FF4CC2FF" />
+            <SolidColorBrush x:Key="QvNoticeBrush" Color="#FF2B2B2B" />
           </ResourceDictionary>
           <ResourceDictionary x:Key="Light">
             <SolidColorBrush x:Key="QvStageBrush" Color="#FFF3F3F3" />
@@ -37,6 +59,27 @@
             <SolidColorBrush x:Key="QvOverlayTextBrush" Color="#FF1A1A1A" />
             <Color x:Key="QvCheckerColor1">#FFFFFFFF</Color>
             <Color x:Key="QvCheckerColor2">#FFE3E3E3</Color>
+            <SolidColorBrush x:Key="QvTextBrush" Color="#FF1F1F1F" />
+            <SolidColorBrush x:Key="QvLineNumberBrush" Color="#FF6E7681" />
+            <SolidColorBrush x:Key="QvSyntaxKeywordBrush" Color="#FF0000FF" />
+            <SolidColorBrush x:Key="QvSyntaxTypeBrush" Color="#FF267F99" />
+            <SolidColorBrush x:Key="QvSyntaxLiteralBrush" Color="#FF0000FF" />
+            <SolidColorBrush x:Key="QvSyntaxStringBrush" Color="#FFA31515" />
+            <SolidColorBrush x:Key="QvSyntaxNumberBrush" Color="#FF098658" />
+            <SolidColorBrush x:Key="QvSyntaxCommentBrush" Color="#FF008000" />
+            <SolidColorBrush x:Key="QvSyntaxPreprocessorBrush" Color="#FFAF00DB" />
+            <SolidColorBrush x:Key="QvSyntaxTagBrush" Color="#FF800000" />
+            <SolidColorBrush x:Key="QvSyntaxAttributeBrush" Color="#FFE50000" />
+            <SolidColorBrush x:Key="QvSyntaxPropertyBrush" Color="#FF0451A5" />
+            <SolidColorBrush x:Key="QvSyntaxHeadingBrush" Color="#FF800000" />
+            <SolidColorBrush x:Key="QvSyntaxInsertedBrush" Color="#FF098658" />
+            <SolidColorBrush x:Key="QvSyntaxDeletedBrush" Color="#FFA31515" />
+            <SolidColorBrush x:Key="QvSyntaxVariableBrush" Color="#FF001080" />
+            <SolidColorBrush x:Key="QvSyntaxErrorBrush" Color="#FFCD3131" />
+            <SolidColorBrush x:Key="QvSyntaxWarningBrush" Color="#FF946300" />
+            <SolidColorBrush x:Key="QvCodeBlockBrush" Color="#FFEAEAEA" />
+            <SolidColorBrush x:Key="QvLinkBrush" Color="#FF005FB8" />
+            <SolidColorBrush x:Key="QvNoticeBrush" Color="#FFE6E6E6" />
           </ResourceDictionary>
           <ResourceDictionary x:Key="HighContrast">
             <SolidColorBrush x:Key="QvStageBrush" Color="{ThemeResource SystemColorWindowColor}" />
@@ -50,6 +93,28 @@
             <SolidColorBrush x:Key="QvOverlayTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <Color x:Key="QvCheckerColor1">#FFFFFFFF</Color>
             <Color x:Key="QvCheckerColor2">#FFC0C0C0</Color>
+            <!-- High contrast: system text color only (no syntax colors). -->
+            <SolidColorBrush x:Key="QvTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="QvLineNumberBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="QvSyntaxKeywordBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="QvSyntaxTypeBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="QvSyntaxLiteralBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="QvSyntaxStringBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="QvSyntaxNumberBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="QvSyntaxCommentBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="QvSyntaxPreprocessorBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="QvSyntaxTagBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="QvSyntaxAttributeBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="QvSyntaxPropertyBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="QvSyntaxHeadingBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="QvSyntaxInsertedBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="QvSyntaxDeletedBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="QvSyntaxVariableBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="QvSyntaxErrorBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="QvSyntaxWarningBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="QvCodeBlockBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="QvLinkBrush" Color="{ThemeResource SystemColorHotlightColor}" />
+            <SolidColorBrush x:Key="QvNoticeBrush" Color="{ThemeResource SystemColorWindowColor}" />
           </ResourceDictionary>
         </ResourceDictionary.ThemeDictionaries>
 
@@ -134,7 +199,13 @@
           <Button x:Name="NextPageButton" Style="{StaticResource QvToolButton}" Click="OnNextPageClick" Content="&#xE76C;" />
           <Border Width="1" Height="20" Margin="6,0" Background="{ThemeResource QvDividerBrush}" />
         </StackPanel>
-        <!-- Zoom and rotation (images, GIFs, PDF pages, SVG, PDF documents). -->
+        <!-- Text, code, Markdown and HTML: rendered view or source (Ctrl+U), line wrapping (W). -->
+        <StackPanel x:Name="TextTools" Orientation="Horizontal" Spacing="2" Visibility="Collapsed">
+          <ToggleButton x:Name="SourceButton" Style="{StaticResource QvToolToggle}" Click="OnSourceClick" Content="&#xE943;" AutomationProperties.AutomationId="QuickViewSourceButton" />
+          <ToggleButton x:Name="WrapButton" Style="{StaticResource QvToolToggle}" Click="OnWrapClick" Content="&#xE751;" AutomationProperties.AutomationId="QuickViewWrapButton" />
+          <Border Width="1" Height="20" Margin="6,0" Background="{ThemeResource QvDividerBrush}" />
+        </StackPanel>
+        <!-- Zoom and rotation (images, GIFs, PDF pages, SVG, PDF documents; the text size of text). -->
         <StackPanel x:Name="ViewButtons" Orientation="Horizontal" Spacing="2" Visibility="Collapsed">
           <Button x:Name="ZoomOutButton" Style="{StaticResource QvToolButton}" Click="OnZoomOutClick" Content="&#xE71F;" />
           <Button x:Name="ZoomFitButton" Style="{StaticResource QvToolButton}" Click="OnZoomFitClick" Width="Auto" MinWidth="52" Padding="6,0" FontFamily="Segoe UI Variable Text,Segoe UI" FontSize="12" Foreground="{ThemeResource QvPrimaryTextBrush}" />
@@ -176,6 +247,8 @@
       </Grid.ColumnDefinitions>
       <Grid x:Name="SidebarHost" Width="232" Visibility="Collapsed" Background="{ThemeResource QvSidebarBrush}" />
       <Grid x:Name="SurfaceHost" Grid.Column="1" />
+      <!-- HTML preview: the WebView2 lives here (created for the first HTML file, released when Quick View closes). -->
+      <Grid x:Name="WebHost" Grid.Column="1" Visibility="Collapsed" />
       <!-- Universal Preview: the information card for files no other content shows (added in code). -->
       <Grid x:Name="CardHost" Grid.Column="1" Visibility="Collapsed" />
       <!-- Pixel inspector: a small card over a corner of the image (no blur, so the image's colors stay as they are); it never takes the pointer. -->

@@ -87,6 +87,7 @@
 | Microsoft.WindowsAppSDK.WinUI / .Foundation / .InteractiveExperiences | 2.3.9 / 2.3.12 / 2.1.9（メタパッケージ 2.5.1 の固定版） | MS-EULA（再配布可） | WinUI 3 / MRT Core / Windowing | Adopted | メタパッケージ `Microsoft.WindowsAppSDK` は参照しない（§0.1）。AI・ML 等は必要になった時点で部品として追加 |
 | Microsoft.Windows.SDK.BuildTools | 10.0.28000.2705 | MS-EULA | ビルドツール | Adopted | 開発時のみ |
 | **bblanchon.PDFium.Win32** | **156.0.8076** | PDFium: BSD-3-Clause（同梱成分は §3.1。いずれも許容型） / ビルドスクリプト: MIT（nuspec の表記は Apache-2.0） | PDF の描画・文字・検索・リンク・目次（`Mavue.Pdf`） | **Adopted**（2026-10-03） | ネイティブ `pdfium.dll`（win-x64 / win-arm64）を出力に置く。ライセンス文は `licenses/pdfium/`（出力にも同梱）。Explorer のプレビュー・サムネイル（`native/Mavue.Shell.Preview`）も同じ `pdfium.dll` を使う（同パッケージのヘッダーでビルド、DLL は Mavue.exe と同じフォルダーから実行時に読み込む。新しい依存・再配布物は増えない）。§3.2 |
+| **Markdig** | **1.4.2**（2026-10-19 公開。1.4.1 からの不具合修正版。2 週間以上経過したものから選んだ） | BSD-2-Clause（© Alexandre Mutel。nuspec の SPDX 表記と GitHub のタグ 1.4.2 の `license.txt` を確認） | Quick View の Markdown 表示: 解析のみ（描画は Mavue の XAML、§2.1） | **Adopted**（2026-11-02） | マネージドのみ・net10.0 では依存なし（推移的依存なし）・ネイティブ DLL なし。パッケージにライセンス文がないため `licenses/markdig/license.txt`（タグ 1.4.2 の原文を変更せず）をホストの出力・配布物の `licenses\markdig\` に同梱（BSD-2 の第 2 条: バイナリ配布時に著作権表示・条件・免責を文書に再掲）。HTML 出力は使わない。ホストでは最初の Markdown を表示するまで読み込まれない |
 | Microsoft.Graphics.Win2D | 1.4.0 | MIT | GPU 2D 描画・エフェクト | Selected | ネイティブ DLL 同梱 |
 | CommunityToolkit.Mvvm | 8.4.2 | MIT | MVVM（ソース生成） | Selected | |
 | xunit.v3 | 4.0.1 | Apache-2.0 | テスト | Adopted | 開発時のみ |
@@ -98,6 +99,29 @@
 | PdfSharp | 6.2.4 | MIT | — | Rejected（現時点） | PDFium + QPDF で機能が揃うため不要。暗号化の代替として保持 |
 | Magick.NET | 14.17.2 | Apache-2.0（ImageMagick）+ 同梱デリゲート各種 | — | Rejected | 巨大。libheif/libde265 (LGPL・HEVC 特許) を同梱。必要なコーデックを個別採用する方針 |
 | SkiaSharp | 4.153.1 | MIT | — | Rejected（現時点） | Win2D/D2D と重複 |
+
+### 2.1 Quick Preview のテキスト系（Phase 4、2026-11-02）
+
+**構文の色付け: 自作（`Mavue.Core.Text.Syntax`）を採用、外部ライブラリは使わない。** 判断の基準は FEATURES F03.37 の条件（ライセンス・保守・性能・
+巨大ファイル耐性・メモリ）。
+
+| 候補 | ライセンス | 評価 | 結果 |
+|---|---|---|---|
+| ColorCode-Universal（Microsoft） | MIT | 正規表現で文書全体を走査して HTML/RichText を作る方式。見えている行だけを色付けする設計に合わず、巨大ファイル・長い行で時間とメモリが読めない。言語定義の追加も正規表現 | Rejected |
+| TextMateSharp | MIT | VS Code と同じ TextMate 文法で精度は高い。ただし Oniguruma の**ネイティブ DLL**（onigwrap）の再配布が必要、文法ファイル（.tmLanguage.json）はそれぞれ別ライセンス（MIT/Apache 以外も混在）で個別確認が要る、正規表現エンジンの最悪計算量の管理が難しい | Rejected（将来、精度が要る言語で再検討） |
+| AvaloniaEdit / ICSharpCode.AvalonEdit | MIT | エディター部品ごと（Avalonia / WPF）。WinUI 3 では使えない | Rejected |
+| Scintilla / Lexilla | HPND 系 | ネイティブのエディター コントロール。WinUI の中に Win32 子ウィンドウを置くことになり、テーマ・DPI・アクセシビリティの統合が重い | Rejected |
+| **自作の行単位レキサー** | Mavue（Apache-2.0） | 状態（ブロックコメント・複数行文字列・タグの途中）を行から行へ渡す小さな手書きレキサー。見えている行（と直前の既知の状態から）だけを処理、1 文字あたり割り当てなし、どんな入力でも例外・暴走なし（乱数入力の単体テスト）。精度は「キーワード・型・文字列・数値・コメント・プリプロセッサ・タグ・属性・キー」程度 | **Adopted** |
+
+**Markdown: Markdig（上表）+ 自作の XAML 描画。** 比較: CommunityToolkit Labs の MarkdownTextBlock（MIT）は Labs（実験段階）で、内部で Markdig を使い、
+大きな文書の仮想化がない。WebView2 + Markdig の HTML 出力は SPEC の「XAML による直接描画を第一候補（WebView2 を使わない）」に反し、起動も重い。
+
+**HTML: WebView2（Windows App SDK の WinUI パッケージの依存として既に配布物に含まれる `Microsoft.Web.WebView2` 1.0.3719.77）。** 新しいパッケージは
+増えない。ランタイムは Windows 11 に標準で入っている Evergreen の WebView2 Runtime（Microsoft の配布物。Mavue は同梱しない）。§0.1 の「WebView2 は
+読み込まれない」は常駐・画像・PDF 表示時の実測で、HTML を表示したときだけ読み込まれる（閉じるとブラウザー プロセスは終了）。WebView2 自身の診断データは
+Windows の診断データ設定に従う（Mavue からは変更できない。ARCHITECTURE §4.7.12 の安全境界ではページからの通信と SmartScreen の照会を止めている）。
+
+**文字コード**: .NET の `CodePagesEncodingProvider`（ランタイムに含まれる。Shift_JIS・EUC-JP・ISO-2022-JP・各国の ANSI コード ページ）。追加の依存なし。
 
 ## 3. PDF エンジン候補
 

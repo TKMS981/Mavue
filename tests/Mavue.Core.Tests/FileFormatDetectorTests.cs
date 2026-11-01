@@ -73,7 +73,10 @@ public class FileFormatDetectorTests
     [InlineData("HEIF", FileFormat.Heif)]
     [InlineData(".JPG", FileFormat.Jpeg)]
     [InlineData(".jxl", FileFormat.JpegXl)]
-    [InlineData(".txt", FileFormat.Unknown)]
+    [InlineData(".txt", FileFormat.Text)]
+    [InlineData(".md", FileFormat.Markdown)]
+    [InlineData(".html", FileFormat.Html)]
+    [InlineData(".xyz", FileFormat.Unknown)]
     [InlineData("", FileFormat.Unknown)]
     [InlineData(null, FileFormat.Unknown)]
     public void Detect_FallsBackToExtension(string? extension, FileFormat expected)
