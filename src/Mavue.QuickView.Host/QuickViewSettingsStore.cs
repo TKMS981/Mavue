@@ -48,6 +48,15 @@ internal sealed class QuickViewSettingsStore
     /// <summary>Source code wraps long lines (off by default).</summary>
     public bool WrapCode { get; set; }
 
+    /// <summary>The EXIF card is on (the last choice is kept).</summary>
+    public bool ExifPanelOn { get; set; }
+
+    public Core.Similarity.SimilarSensitivity SimilarSensitivity { get; set; } = Core.Similarity.SimilarSensitivity.Normal;
+
+    public bool SimilarIncludeSubfolders { get; set; }
+
+    public bool SimilarDetectRotations { get; set; } = true;
+
     /// <summary>The image scale changed on a reload (decoded previews were made for the other mode's box).</summary>
     public event Action? ScaleModeChanged;
 
@@ -79,6 +88,10 @@ internal sealed class QuickViewSettingsStore
         TransparencyGridOn = settings.ShowTransparencyGrid;
         WrapPlainText = settings.WrapPlainText;
         WrapCode = settings.WrapCode;
+        ExifPanelOn = settings.ShowExifPanel;
+        SimilarSensitivity = settings.SimilarSensitivity;
+        SimilarIncludeSubfolders = settings.SimilarIncludeSubfolders;
+        SimilarDetectRotations = settings.SimilarDetectRotations;
         if (!force && previous != ScaleMode)
         {
             ScaleModeChanged?.Invoke();

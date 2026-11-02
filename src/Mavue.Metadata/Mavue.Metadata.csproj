@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- Metadata (EXIF/XMP/IPTC/GPS/ICC) read/write abstraction. Treats GPS and personal data as sensitive. -->
+  <!-- Image metadata (EXIF/XMP/IPTC/GPS/ICC): reading, the privacy check and removal without re-encoding
+       (docs/ARCHITECTURE.md §4.7.13). BCL only; treats GPS and personal data as sensitive (never logged). -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Mavue.Metadata</RootNamespace>

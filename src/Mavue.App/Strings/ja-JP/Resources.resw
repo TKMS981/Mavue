@@ -549,4 +549,163 @@
   <data name="Settings_Licenses" xml:space="preserve">
     <value>ライセンス情報</value>
   </data>
+  <data name="MainWindow_ExportClean" xml:space="preserve">
+    <value>メタデータを除いて書き出す…</value>
+  </data>
+  <data name="Export_Title" xml:space="preserve">
+    <value>メタデータを除いて書き出す</value>
+  </data>
+  <data name="Export_Remove" xml:space="preserve">
+    <value>取り除くもの</value>
+  </data>
+  <data name="Export_Always" xml:space="preserve">
+    <value>常に取り除く: シリアル番号・ID、所有者名、ソフトウェアと編集履歴、説明・コメント、サムネイルや埋め込み画像、メーカー独自データなど。残す: 色プロファイルと画像の向き。元のファイルは変更しません。</value>
+  </data>
+  <data name="Export_Format" xml:space="preserve">
+    <value>ファイルの種類</value>
+  </data>
+  <data name="Export_FormatOriginal" xml:space="preserve">
+    <value>{0}（そのまま、再エンコードなし）</value>
+  </data>
+  <data name="Export_FormatJpeg" xml:space="preserve">
+    <value>JPEG（変換）</value>
+  </data>
+  <data name="Export_FormatPng" xml:space="preserve">
+    <value>PNG（変換、可逆）</value>
+  </data>
+  <data name="Export_Quality" xml:space="preserve">
+    <value>JPEG の画質</value>
+  </data>
+  <data name="Export_ConvertsNote" xml:space="preserve">
+    <value>画像を変換します（向きを適用、sRGB、8 ビット）。残す項目の値は新しいファイルに書き込みます。</value>
+  </data>
+  <data name="Export_Choose" xml:space="preserve">
+    <value>保存先を選ぶ…</value>
+  </data>
+  <data name="Export_FileName" xml:space="preserve">
+    <value>{0}（メタデータなし）</value>
+  </data>
+  <data name="Export_Working" xml:space="preserve">
+    <value>メタデータを取り除いています…</value>
+  </data>
+  <data name="Export_Converting" xml:space="preserve">
+    <value>変換してメタデータを取り除いています…</value>
+  </data>
+  <data name="Export_Done" xml:space="preserve">
+    <value>「{0}」を書き出しました（メタデータ {1} を除去）。元のファイルは変更していません。</value>
+  </data>
+  <data name="Export_DoneConverted" xml:space="preserve">
+    <value>変換したコピー「{0}」を書き出しました（メタデータ {1} を除去）。元のファイルは変更していません。</value>
+  </data>
+  <data name="Export_NotOriginal" xml:space="preserve">
+    <value>元のファイルには書き出せません。別の名前か場所を選んでください。</value>
+  </data>
+  <data name="Export_NotVerified" xml:space="preserve">
+    <value>コピーを検証できなかったため、保存しませんでした。</value>
+  </data>
+  <data name="Export_NoCodec" xml:space="preserve">
+    <value>この画像を Windows で読み込めません（HEIF・RAW などの拡張機能が必要な場合があります）。</value>
+  </data>
+  <data name="Export_TooLarge" xml:space="preserve">
+    <value>この画像は大きすぎるため変換できません。</value>
+  </data>
+  <data name="Export_Failed" xml:space="preserve">
+    <value>書き出しに失敗しました。</value>
+  </data>
+  <data name="Export_Nothing" xml:space="preserve">
+    <value>共有前に取り除くべきメタデータは見つかりませんでした。</value>
+  </data>
+  <data name="Export_Kind_Location" xml:space="preserve">
+    <value>位置情報</value>
+  </data>
+  <data name="Export_Kind_CaptureTime" xml:space="preserve">
+    <value>撮影日時</value>
+  </data>
+  <data name="Export_Kind_CameraDetails" xml:space="preserve">
+    <value>カメラ・撮影設定</value>
+  </data>
+  <data name="Export_Kind_AuthorCopyright" xml:space="preserve">
+    <value>作成者・著作権</value>
+  </data>
+  <data name="Export_Kind_DeviceIdentity" xml:space="preserve">
+    <value>シリアル番号・ID</value>
+  </data>
+  <data name="Export_Kind_OwnerName" xml:space="preserve">
+    <value>カメラ所有者の名前</value>
+  </data>
+  <data name="Export_Kind_EditingSoftware" xml:space="preserve">
+    <value>ソフトウェア・編集履歴</value>
+  </data>
+  <data name="Export_Kind_Descriptions" xml:space="preserve">
+    <value>タイトル・説明・コメント</value>
+  </data>
+  <data name="Export_Kind_EmbeddedImages" xml:space="preserve">
+    <value>サムネイル・埋め込み画像やデータ（切り取った部分が残っていることがあります）</value>
+  </data>
+  <data name="Export_Kind_MakerNote" xml:space="preserve">
+    <value>メーカー独自データ（MakerNote）</value>
+  </data>
+  <data name="Export_Kind_OtherData" xml:space="preserve">
+    <value>その他のアプリケーション データ</value>
+  </data>
+  <data name="Export_Kind_ColorProfile" xml:space="preserve">
+    <value>色プロファイル（残します）</value>
+  </data>
+  <data name="Settings_SimilarSensitivity" xml:space="preserve">
+    <value>クイックビュー: 類似画像の検索</value>
+  </data>
+  <data name="Settings_SimilarLoose" xml:space="preserve">
+    <value>ゆるく似ている（64% 以上）</value>
+  </data>
+  <data name="Settings_SimilarNormal" xml:space="preserve">
+    <value>似ている（72% 以上、標準）</value>
+  </data>
+  <data name="Settings_SimilarStrict" xml:space="preserve">
+    <value>ほぼ同じ（84% 以上）</value>
+  </data>
+  <data name="Settings_SimilarSubfolders" xml:space="preserve">
+    <value>サブフォルダーも含める</value>
+  </data>
+  <data name="Settings_SimilarRotations" xml:space="preserve">
+    <value>回転・反転したコピーも探す</value>
+  </data>
+  <data name="Settings_SimilarClearCache" xml:space="preserve">
+    <value>検索キャッシュを削除（{0}）</value>
+  </data>
+  <data name="Settings_SimilarHint" xml:space="preserve">
+    <value>検索はクイックビューで開始したときだけ動きます。キャッシュには画像の特徴（ファイル名は含みません）を保存し、2 回目以降の検索を速くします。</value>
+  </data>
+  <data name="Export_SaveNext" xml:space="preserve">
+    <value>コピーを保存</value>
+  </data>
+  <data name="Export_SaveNextTip" xml:space="preserve">
+    <value>元のファイルの隣に「…（メタデータなし）」として保存します</value>
+  </data>
+  <data name="Export_ToClipboard" xml:space="preserve">
+    <value>クリップボードにコピー</value>
+  </data>
+  <data name="Export_DoneSaved" xml:space="preserve">
+    <value>元のファイルの隣に「{0}」を保存しました（{1} を除去）。</value>
+  </data>
+  <data name="Export_DoneClipboard" xml:space="preserve">
+    <value>「{0}」のクリーンなコピーをクリップボードに置きました（{1} を除去）。共有先に貼り付けてください。</value>
+  </data>
+  <data name="Export_DoneFallback" xml:space="preserve">
+    <value>このフォルダーには保存できないため、クリーンなコピー「{0}」をクリップボードに置きました（{1} を除去）。</value>
+  </data>
+  <data name="Export_NotWritable" xml:space="preserve">
+    <value>この場所には保存できません（読み取り専用か、アクセス許可がありません）。別の保存先を選んでください。</value>
+  </data>
+  <data name="Export_ShowInFolder" xml:space="preserve">
+    <value>フォルダーに表示</value>
+  </data>
+  <data name="Export_Svg" xml:space="preserve">
+    <value>SVG（テキストで書かれた図）はこの機能の対象外です。タイトル・説明・作成者などは、ファイルを編集して取り除いてください。元のファイルは変更していません。</value>
+  </data>
+  <data name="Export_Cloud" xml:space="preserve">
+    <value>このファイルはクラウドにだけあり、この PC にはまだダウンロードされていません。ダウンロードしてから（「このデバイス上に常に保持する」など）もう一度お試しください。</value>
+  </data>
+  <data name="Export_FirstFrame" xml:space="preserve">
+    <value>アニメーションは最初のフレームだけになります。</value>
+  </data>
 </root>

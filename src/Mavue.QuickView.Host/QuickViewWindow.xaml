@@ -150,6 +150,7 @@
       <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />
       <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
 
     <!-- Tool bar under Windows' own title bar (which shows the file's name). Over Mica the title bar and this bar read
@@ -216,6 +217,10 @@
         <!-- Filmstrip, pixel inspector (images) and pin. -->
         <ToggleButton x:Name="FilmstripButton" Style="{StaticResource QvToolToggle}" Click="OnFilmstripClick" Content="&#xE7AA;" AutomationProperties.AutomationId="QuickViewFilmstripButton" />
         <ToggleButton x:Name="InspectorButton" Style="{StaticResource QvToolToggle}" Click="OnInspectorClick" Content="&#xEF3C;" Visibility="Collapsed" AutomationProperties.AutomationId="QuickViewInspectorButton" />
+        <!-- Images: EXIF card (E), check before sharing, similar images in the folder (Phase 5, ARCHITECTURE §4.7.13–14). -->
+        <ToggleButton x:Name="ExifButton" Style="{StaticResource QvToolToggle}" Click="OnExifClick" Content="&#xE946;" Visibility="Collapsed" AutomationProperties.AutomationId="QuickViewExifButton" />
+        <Button x:Name="ShareCheckButton" Style="{StaticResource QvToolButton}" Click="OnShareCheckClick" Content="&#xEA18;" Visibility="Collapsed" AutomationProperties.AutomationId="QuickViewShareCheckButton" />
+        <Button x:Name="SimilarButton" Style="{StaticResource QvToolButton}" Click="OnSimilarClick" Content="&#xE8B9;" Visibility="Collapsed" AutomationProperties.AutomationId="QuickViewSimilarButton" />
         <ToggleButton x:Name="PinButton" Style="{StaticResource QvToolToggle}" Click="OnPinClick" Content="&#xE718;" AutomationProperties.AutomationId="QuickViewPinButton" />
         <Border Width="1" Height="20" Margin="6,0" Background="{ThemeResource QvDividerBrush}" />
         <Button x:Name="OpenInMavueButton" Style="{StaticResource QvToolButton}" Click="OnOpenInMavueClick" Content="&#xE8A7;" Visibility="Collapsed" />
@@ -266,9 +271,14 @@
           </StackPanel>
         </StackPanel>
       </Border>
+      <!-- EXIF card: the shot at a glance over the image's top-right corner (filled in code; never covers the inspector). -->
+      <Grid x:Name="ExifHost" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="16" Visibility="Collapsed" />
     </Grid>
 
     <!-- Filmstrip: neighbors in Explorer's order (or the selection), added in code. Off by default; part of the chrome. -->
     <Grid x:Name="FilmstripHost" Grid.Row="3" Height="88" Visibility="Collapsed" Background="Transparent" />
+
+    <!-- Similar images: results of an explicit search (filled in code; part of the chrome, closed with its button). -->
+    <Grid x:Name="SimilarHost" Grid.Row="4" Height="140" Visibility="Collapsed" Background="Transparent" />
   </Grid>
 </Window>

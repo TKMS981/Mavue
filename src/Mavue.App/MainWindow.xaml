@@ -161,6 +161,11 @@
             <FontIcon Glyph="&#xE8C8;" />
           </AppBarButton.Icon>
         </AppBarButton>
+        <AppBarButton x:Name="ExportCleanButton" IsEnabled="False" Click="OnExportCleanClick" AutomationProperties.AutomationId="ExportCleanButton">
+          <AppBarButton.Icon>
+            <FontIcon Glyph="&#xEA18;" />
+          </AppBarButton.Icon>
+        </AppBarButton>
         <AppBarButton x:Name="OpenWithButton" IsEnabled="False" Click="OnOpenWithClick">
           <AppBarButton.Icon>
             <FontIcon Glyph="&#xE7AC;" />

@@ -49,6 +49,9 @@ internal sealed class QuickViewController : IPreviewHost, IDisposable
     private readonly QuickViewFileActions _fileActions;
     private readonly PixelInspector _inspector;
     private readonly FilmstripPresenter _filmstrip;
+    private readonly Metadata.ExifCard _exif;
+    private readonly Metadata.ShareCheck _shareCheck;
+    private readonly Similar.SimilarPanel _similar;
     private readonly PreviewNavigator _navigator = new();
     private readonly WinEventWatcher _focusWatcher = new();
     private readonly bool _pdfDocumentView;
@@ -122,6 +125,28 @@ internal sealed class QuickViewController : IPreviewHost, IDisposable
             _settings.Save(s => s with { ShowPixelInspector = on });
         };
         _window.PinToggled += SetPinned;
+
+        // Phase 5 (docs/ARCHITECTURE.md §4.7.13–14): EXIF card, check before sharing, similar images. Each works only
+        // while Quick View is shown and only when asked; nothing runs while it is hidden.
+        _exif = new Metadata.ExifCard(window, _strings, timeline, () => CurrentRequest);
+        _shareCheck = new Metadata.ShareCheck(window, _strings, timeline, () => CurrentRequest, _dispatcher, () => _resources.Policy.Tier);
+        _similar = new Similar.SimilarPanel(window, _strings, timeline, _dispatcher, () => _resources.Policy, DisplayScale, _settings);
+        _window.ExifToggled += on =>
+        {
+            _exif.SetEnabled(on);
+            _settings.ExifPanelOn = on;
+            _settings.Save(s => s with { ShowExifPanel = on });
+        };
+        _window.ShareCheckRequested += anchor => OpenShareCheck(anchor);
+        _exif.ShareCheckRequested += () => OpenShareCheck(_window.ShareCheckAnchor);
+        _window.SimilarRequested += () =>
+        {
+            if (_visible && _currentPath is { } path && _currentFacts is { } facts && Metadata.ExifCard.IsImage(facts))
+            {
+                _similar.Start(path, CurrentRequest);
+            }
+        };
+        _similar.ItemInvoked += ShowSimilarResult;
         _window.TransparencyGridToggled += on =>
         {
             _window.SetTransparencyGridOn(on);
@@ -198,6 +223,9 @@ internal sealed class QuickViewController : IPreviewHost, IDisposable
     {
         _prefetcher.Dispose();
         _filmstrip.Dispose();
+        _exif.Dispose();
+        _shareCheck.Dispose();
+        _similar.Dispose();
         _inspector.Dispose();
         _contents.Dispose();
         _resources.Dispose();
@@ -553,6 +581,38 @@ internal sealed class QuickViewController : IPreviewHost, IDisposable
         }
     }
 
+    private void OpenShareCheck(Microsoft.UI.Xaml.FrameworkElement anchor)
+    {
+        if (_visible && _currentPath is { } path && _currentFacts is { } facts && Metadata.ExifCard.IsImage(facts))
+        {
+            _shareCheck.Open(path, facts, anchor);
+        }
+    }
+
+    /// <summary>
+    /// A similar image was clicked: it is shown inside Quick View, pinned, so Explorer's selection (and the folder
+    /// view) stay as they were while the results are looked through.
+    /// </summary>
+    private void ShowSimilarResult(string path)
+    {
+        if (!_visible)
+        {
+            return;
+        }
+
+        if (!_navigator.IsPinned)
+        {
+            SetPinned(true);
+        }
+
+        _timeline.Mark(_currentRequest, "similar-open", QuickViewTimeline.Now);
+        NavigationResult result = _navigator.GoTo(path);
+        if (result.Action == NavigationAction.Show)
+        {
+            Apply(result, "similar", null, null);
+        }
+    }
+
     /// <summary>A file of the filmstrip was clicked.</summary>
     private void OnFilmstripInvoked(FilmstripItem item)
     {
@@ -732,12 +792,16 @@ internal sealed class QuickViewController : IPreviewHost, IDisposable
             // Before the image area is measured (the filmstrip takes a row).
             _filmstrip.SetEnabled(_settings.FilmstripVisible);
             _inspector.SetEnabled(_settings.PixelInspectorOn);
+            _exif.SetEnabled(_settings.ExifPanelOn);
             _window.SetTransparencyGridOn(_settings.TransparencyGridOn);
             _window.SetBackdrop(UseBackdrop(_resources.Policy)); // solid chrome on modest machines
             _window.SetPinned(false);
         }
 
         _inspector.OnItemChanged();
+        _exif.OnItemChanged();
+        _shareCheck.Close();
+        _window.SetImageTools(false);
         _filmstrip.OnItemShowing(path, _navigator);
         string fileName = Path.GetFileName(path);
         _window.ResetContent(fileName);
@@ -770,6 +834,9 @@ internal sealed class QuickViewController : IPreviewHost, IDisposable
         {
             SetPaging(false, false, false);
             _inspector.OnItemChanged();
+            _exif.OnItemChanged();
+            _shareCheck.Close();
+            _window.SetImageTools(false);
             _filmstrip.OnItemShowing(path, _navigator);
         }
 
@@ -822,6 +889,10 @@ internal sealed class QuickViewController : IPreviewHost, IDisposable
         _prefetcher.Cancel();
         _filmstrip.OnHidden();
         _inspector.OnHidden();
+        _exif.OnHidden();
+        _shareCheck.Close();
+        _similar.Close(); // the worker ends and the results are released
+        _window.SetImageTools(false);
         _pinned = false;
         _window.SetPinned(false);
         _contents.Reset(ContentReset.Hidden, "hidden");
@@ -864,6 +935,7 @@ internal sealed class QuickViewController : IPreviewHost, IDisposable
             });
             SetInfo(PreviewInfoText.For(_strings, facts, null));
             _currentFacts = facts;
+            _window.SetImageTools(Metadata.ExifCard.IsImage(facts));
 
             IPreviewContent content = _contents[PreviewContentRouting.Choose(facts, _pdfDocumentView, Path.GetExtension(path))];
             _active = content;
@@ -911,6 +983,11 @@ internal sealed class QuickViewController : IPreviewHost, IDisposable
         {
             _display.MarkContent(requestId);
             _inspector.OnContentShown();
+            if (_currentPath is { } shown && _currentFacts is { } shownFacts)
+            {
+                _exif.OnItemShown(shown, shownFacts); // after the item is on screen: the preview comes first
+            }
+
             _filmstrip.OnItemShown(); // after the item is on screen: the preview comes first
         }
     }

@@ -44,6 +44,19 @@ public sealed record QuickViewSettings
     /// <summary>Source code wraps long lines (off by default: code keeps its layout and scrolls sideways).</summary>
     public bool WrapCode { get; set; }
 
+    /// <summary>The EXIF card is shown over images (off by default; E in Quick View).</summary>
+    public bool ShowExifPanel { get; set; }
+
+    /// <summary>How alike images must be to be listed by the similar-image search.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter<Similarity.SimilarSensitivity>))]
+    public Similarity.SimilarSensitivity SimilarSensitivity { get; set; } = Similarity.SimilarSensitivity.Normal;
+
+    /// <summary>The similar-image search also looks in subfolders (off by default).</summary>
+    public bool SimilarIncludeSubfolders { get; set; }
+
+    /// <summary>The similar-image search also finds rotated and mirrored copies (on by default).</summary>
+    public bool SimilarDetectRotations { get; set; } = true;
+
     /// <summary>Default location for the current user.</summary>
     public static string DefaultPath { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Mavue", "QuickView", "settings.json");
@@ -66,6 +79,7 @@ public sealed record QuickViewSettings
                 return new QuickViewSettings();
             }
 
+            loaded = Enum.IsDefined(loaded.SimilarSensitivity) ? loaded : loaded with { SimilarSensitivity = Similarity.SimilarSensitivity.Normal };
             return Enum.IsDefined(loaded.PdfLayout) ? loaded : loaded with { PdfLayout = PdfLayoutMode.Continuous };
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)

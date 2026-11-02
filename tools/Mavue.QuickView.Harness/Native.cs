@@ -59,6 +59,9 @@ internal static partial class Native
     [LibraryImport("user32.dll")]
     public static partial nint GetForegroundWindow();
 
+    [LibraryImport("user32.dll")]
+    public static partial short GetKeyState(int nVirtKey);
+
     [StructLayout(LayoutKind.Sequential)]
     public struct MSG
     {

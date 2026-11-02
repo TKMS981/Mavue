@@ -266,6 +266,7 @@ public sealed partial class MainWindow : Window
 
         bool file = state.Path is not null && state.Kind is not (ViewerContentKind.None or ViewerContentKind.Loading) && state.Message != ViewerMessage.NotAFile;
         CopyButton.IsEnabled = file;
+        ExportCleanButton.IsEnabled = file && CanExportClean(state.Facts);
         OpenWithButton.IsEnabled = file;
         ShowInFolderButton.IsEnabled = file;
         PropertiesButton.IsEnabled = file;
@@ -379,6 +380,7 @@ public sealed partial class MainWindow : Window
         SetCommandText(FlipHorizontalButton, "MainWindow_FlipHorizontal");
         SetCommandText(FlipVerticalButton, "MainWindow_FlipVertical");
         SetCommandText(CopyButton, "MainWindow_Copy", "Ctrl+C");
+        SetCommandText(ExportCleanButton, "MainWindow_ExportClean");
         SetCommandText(OpenWithButton, "MainWindow_OpenWith");
         SetCommandText(ShowInFolderButton, "MainWindow_ShowInFolder");
         SetCommandText(PropertiesButton, "MainWindow_Properties", "Alt+Enter");

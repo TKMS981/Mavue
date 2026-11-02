@@ -450,4 +450,280 @@
   <data name="QuickView_Html_NoWebView" xml:space="preserve">
     <value>WebView2 ランタイムを利用できないため、HTML のソースを表示しています。</value>
   </data>
+  <data name="QuickView_Exif" xml:space="preserve">
+    <value>撮影情報（E）</value>
+  </data>
+  <data name="QuickView_ShareCheck" xml:space="preserve">
+    <value>共有前チェック</value>
+  </data>
+  <data name="QuickView_Similar" xml:space="preserve">
+    <value>このフォルダーの類似画像を探す</value>
+  </data>
+  <data name="QuickView_Exif_NoCamera" xml:space="preserve">
+    <value>カメラの情報なし</value>
+  </data>
+  <data name="QuickView_Exif_HasLocation" xml:space="preserve">
+    <value>位置情報</value>
+  </data>
+  <data name="QuickView_Exif_HasPerson" xml:space="preserve">
+    <value>氏名</value>
+  </data>
+  <data name="QuickView_Exif_HasSerial" xml:space="preserve">
+    <value>シリアル番号</value>
+  </data>
+  <data name="QuickView_Exif_More" xml:space="preserve">
+    <value>詳細</value>
+  </data>
+  <data name="QuickView_Exif_Less" xml:space="preserve">
+    <value>詳細を閉じる</value>
+  </data>
+  <data name="QuickView_Exif_ShareCheck" xml:space="preserve">
+    <value>共有前チェック…</value>
+  </data>
+  <data name="QuickView_Exif_FlashOn" xml:space="preserve">
+    <value>発光</value>
+  </data>
+  <data name="QuickView_Exif_FlashOff" xml:space="preserve">
+    <value>発光なし</value>
+  </data>
+  <data name="QuickView_Exif_WbManual" xml:space="preserve">
+    <value>マニュアル</value>
+  </data>
+  <data name="QuickView_Exif_WbAuto" xml:space="preserve">
+    <value>オート</value>
+  </data>
+  <data name="QuickView_Exif_None" xml:space="preserve">
+    <value>この画像には撮影情報がありません。</value>
+  </data>
+  <data name="QuickView_Exif_Taken" xml:space="preserve">
+    <value>撮影日時</value>
+  </data>
+  <data name="QuickView_Exif_Camera" xml:space="preserve">
+    <value>カメラ</value>
+  </data>
+  <data name="QuickView_Exif_Lens" xml:space="preserve">
+    <value>レンズ</value>
+  </data>
+  <data name="QuickView_Exif_Aperture" xml:space="preserve">
+    <value>絞り</value>
+  </data>
+  <data name="QuickView_Exif_Exposure" xml:space="preserve">
+    <value>シャッター速度</value>
+  </data>
+  <data name="QuickView_Exif_Iso" xml:space="preserve">
+    <value>ISO 感度</value>
+  </data>
+  <data name="QuickView_Exif_FocalLength" xml:space="preserve">
+    <value>焦点距離</value>
+  </data>
+  <data name="QuickView_Exif_Bias" xml:space="preserve">
+    <value>露出補正</value>
+  </data>
+  <data name="QuickView_Exif_Flash" xml:space="preserve">
+    <value>フラッシュ</value>
+  </data>
+  <data name="QuickView_Exif_WhiteBalance" xml:space="preserve">
+    <value>ホワイトバランス</value>
+  </data>
+  <data name="QuickView_Exif_Pixels" xml:space="preserve">
+    <value>画素数</value>
+  </data>
+  <data name="QuickView_Exif_Orientation" xml:space="preserve">
+    <value>向き</value>
+  </data>
+  <data name="QuickView_Exif_Location" xml:space="preserve">
+    <value>位置</value>
+  </data>
+  <data name="QuickView_Exif_Software" xml:space="preserve">
+    <value>ソフトウェア</value>
+  </data>
+  <data name="QuickView_Exif_Author" xml:space="preserve">
+    <value>作成者</value>
+  </data>
+  <data name="QuickView_Exif_Copyright" xml:space="preserve">
+    <value>著作権</value>
+  </data>
+  <data name="QuickView_Exif_Description" xml:space="preserve">
+    <value>説明</value>
+  </data>
+  <data name="QuickView_Exif_Serial" xml:space="preserve">
+    <value>シリアル番号</value>
+  </data>
+  <data name="QuickView_Exif_Owner" xml:space="preserve">
+    <value>所有者</value>
+  </data>
+  <data name="QuickView_Exif_Blocks" xml:space="preserve">
+    <value>メタデータ</value>
+  </data>
+  <data name="QuickView_Share_Title" xml:space="preserve">
+    <value>共有前チェック</value>
+  </data>
+  <data name="QuickView_Share_Nothing" xml:space="preserve">
+    <value>共有前に取り除くべきメタデータは見つかりませんでした。</value>
+  </data>
+  <data name="QuickView_Share_Unsupported" xml:space="preserve">
+    <value>この形式からはまだメタデータを取り除けません（JPEG・PNG・WebP・GIF に対応）。</value>
+  </data>
+  <data name="QuickView_Share_Remove" xml:space="preserve">
+    <value>コピーから取り除く</value>
+  </data>
+  <data name="QuickView_Share_Always" xml:space="preserve">
+    <value>常に取り除く: シリアル番号・ID、所有者名、ソフトウェアと編集履歴、説明・コメント、サムネイルや埋め込み画像、メーカー独自データなど。残す: 色プロファイルと画像の向き。元のファイルは変更しません。</value>
+  </data>
+  <data name="QuickView_Share_ToClipboard" xml:space="preserve">
+    <value>クリップボードにコピー</value>
+  </data>
+  <data name="QuickView_Share_Save" xml:space="preserve">
+    <value>コピーを保存</value>
+  </data>
+  <data name="QuickView_Share_Working" xml:space="preserve">
+    <value>メタデータを取り除いたコピーを作成しています…</value>
+  </data>
+  <data name="QuickView_Share_CopyName" xml:space="preserve">
+    <value>{0}（メタデータなし）</value>
+  </data>
+  <data name="QuickView_Share_DoneClipboard" xml:space="preserve">
+    <value>「{0}」のクリーンなコピーをクリップボードに置きました（{1} を除去）。共有先に貼り付けてください。</value>
+  </data>
+  <data name="QuickView_Share_DoneSaved" xml:space="preserve">
+    <value>元のファイルの隣に「{0}」を保存しました（{1} を除去）。</value>
+  </data>
+  <data name="QuickView_Share_DoneFallback" xml:space="preserve">
+    <value>このフォルダーには保存できないため、クリーンなコピー「{0}」をクリップボードに置きました（{1} を除去）。</value>
+  </data>
+  <data name="QuickView_Share_NotVerified" xml:space="preserve">
+    <value>コピーを検証できなかったため、作成しませんでした。</value>
+  </data>
+  <data name="QuickView_Share_Failed" xml:space="preserve">
+    <value>コピーを作成できませんでした。</value>
+  </data>
+  <data name="QuickView_Share_Kind_Location" xml:space="preserve">
+    <value>位置情報</value>
+  </data>
+  <data name="QuickView_Share_Kind_CaptureTime" xml:space="preserve">
+    <value>撮影日時</value>
+  </data>
+  <data name="QuickView_Share_Kind_CameraDetails" xml:space="preserve">
+    <value>カメラ・撮影設定</value>
+  </data>
+  <data name="QuickView_Share_Kind_AuthorCopyright" xml:space="preserve">
+    <value>作成者・著作権</value>
+  </data>
+  <data name="QuickView_Share_Kind_DeviceIdentity" xml:space="preserve">
+    <value>シリアル番号・ID</value>
+  </data>
+  <data name="QuickView_Share_Kind_OwnerName" xml:space="preserve">
+    <value>カメラ所有者の名前</value>
+  </data>
+  <data name="QuickView_Share_Kind_EditingSoftware" xml:space="preserve">
+    <value>ソフトウェア・編集履歴</value>
+  </data>
+  <data name="QuickView_Share_Kind_Descriptions" xml:space="preserve">
+    <value>タイトル・説明・コメント</value>
+  </data>
+  <data name="QuickView_Share_Kind_EmbeddedImages" xml:space="preserve">
+    <value>サムネイル・埋め込み画像やデータ（切り取った部分が残っていることがあります）</value>
+  </data>
+  <data name="QuickView_Share_Kind_MakerNote" xml:space="preserve">
+    <value>メーカー独自データ（MakerNote）</value>
+  </data>
+  <data name="QuickView_Share_Kind_OtherData" xml:space="preserve">
+    <value>その他のアプリケーション データ</value>
+  </data>
+  <data name="QuickView_Share_Kind_ColorProfile" xml:space="preserve">
+    <value>色プロファイル（残します）</value>
+  </data>
+  <data name="QuickView_Similar_Title" xml:space="preserve">
+    <value>類似画像</value>
+  </data>
+  <data name="QuickView_Similar_Subfolders" xml:space="preserve">
+    <value>サブフォルダーも含める</value>
+  </data>
+  <data name="QuickView_Similar_Stop" xml:space="preserve">
+    <value>中止</value>
+  </data>
+  <data name="QuickView_Similar_Close" xml:space="preserve">
+    <value>類似画像を閉じる</value>
+  </data>
+  <data name="QuickView_Similar_Listing" xml:space="preserve">
+    <value>ファイルを確認しています…</value>
+  </data>
+  <data name="QuickView_Similar_Coarse" xml:space="preserve">
+    <value>{1} 枚中 {0} 枚を比較（候補 {2}）</value>
+  </data>
+  <data name="QuickView_Similar_Fine" xml:space="preserve">
+    <value>候補 {1} 枚中 {0} 枚を詳しく比較（類似 {2}）</value>
+  </data>
+  <data name="QuickView_Similar_Thumbnails" xml:space="preserve">
+    <value>結果 {1} 件中 {0} 件を準備</value>
+  </data>
+  <data name="QuickView_Similar_Done" xml:space="preserve">
+    <value>{1} 枚中 {0} 枚の類似画像（{2} 秒）</value>
+  </data>
+  <data name="QuickView_Similar_NoneFound" xml:space="preserve">
+    <value>{1} 枚中に類似画像はありません（{2} 秒）</value>
+  </data>
+  <data name="QuickView_Similar_Truncated" xml:space="preserve">
+    <value>このフォルダーの先頭の画像だけを比較しました。</value>
+  </data>
+  <data name="QuickView_Similar_Cancelled" xml:space="preserve">
+    <value>中止しました。</value>
+  </data>
+  <data name="QuickView_Similar_StartFailed" xml:space="preserve">
+    <value>検索を開始できませんでした。</value>
+  </data>
+  <data name="QuickView_Similar_TargetUnreadable" xml:space="preserve">
+    <value>この画像は比較できません。</value>
+  </data>
+  <data name="QuickView_Similar_Failed" xml:space="preserve">
+    <value>エラーのため検索を中止しました。</value>
+  </data>
+  <data name="QuickView_Similar_ResultTip" xml:space="preserve">
+    <value>{0} — 類似度 {1}%、{2} × {3}</value>
+  </data>
+  <data name="QuickView_Share_Converts" xml:space="preserve">
+    <value>この形式は形式を保ったままメタデータを取り除けないため、変換したコピーを作ります（向きを適用・sRGB・8 ビット）。元のファイルは変更しません。</value>
+  </data>
+  <data name="QuickView_Share_Converting" xml:space="preserve">
+    <value>変換してメタデータを取り除いています…</value>
+  </data>
+  <data name="QuickView_Share_NoCodec" xml:space="preserve">
+    <value>この画像を Windows で読み込めません（HEIF・RAW などの拡張機能が必要な場合があります）。</value>
+  </data>
+  <data name="QuickView_Share_TooLarge" xml:space="preserve">
+    <value>この画像は大きすぎるため変換できません。</value>
+  </data>
+  <data name="QuickView_Similar_Options" xml:space="preserve">
+    <value>検索の設定</value>
+  </data>
+  <data name="QuickView_Similar_Loose" xml:space="preserve">
+    <value>ゆるく似ている（64% 以上）</value>
+  </data>
+  <data name="QuickView_Similar_Normal" xml:space="preserve">
+    <value>似ている（72% 以上、標準）</value>
+  </data>
+  <data name="QuickView_Similar_Strict" xml:space="preserve">
+    <value>ほぼ同じ（84% 以上）</value>
+  </data>
+  <data name="QuickView_Similar_Rotations" xml:space="preserve">
+    <value>回転・反転したコピーも探す</value>
+  </data>
+  <data name="QuickView_Similar_ClearCache" xml:space="preserve">
+    <value>検索キャッシュを削除（{0}）</value>
+  </data>
+  <data name="QuickView_Similar_CacheCleared" xml:space="preserve">
+    <value>検索キャッシュを削除しました（{0}）。</value>
+  </data>
+  <data name="QuickView_Similar_CacheBusy" xml:space="preserve">
+    <value>検索キャッシュが使用中です。少し待ってからもう一度お試しください。</value>
+  </data>
+  <data name="QuickView_Similar_MatchedRotated" xml:space="preserve">
+    <value>{0}° 回転すると一致</value>
+  </data>
+  <data name="QuickView_Similar_MatchedMirrored" xml:space="preserve">
+    <value>反転して {0}° 回転すると一致</value>
+  </data>
+  <data name="QuickView_Share_NotWritable" xml:space="preserve">
+    <value>この場所には保存できません（読み取り専用か、アクセス許可がありません）。</value>
+  </data>
 </root>

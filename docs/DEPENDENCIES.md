@@ -123,6 +123,24 @@ Windows の診断データ設定に従う（Mavue からは変更できない。
 
 **文字コード**: .NET の `CodePagesEncodingProvider`（ランタイムに含まれる。Shift_JIS・EUC-JP・ISO-2022-JP・各国の ANSI コード ページ）。追加の依存なし。
 
+### 2.2 画像メタデータと類似画像検索（Phase 5、2026-11-02）
+
+**新しい外部依存なし。** EXIF/XMP/IPTC の読み取りと除去は `Mavue.Metadata`（自作、BCL のみ）、類似度は `Mavue.Core.Similarity`（自作）。
+
+| 候補 | ライセンス | 評価 | 結果 |
+|---|---|---|---|
+| MetadataExtractor（§2 の Candidate） | Apache-2.0 | 読み取りは広く対応。ただし書き込み・除去がなく、共有前チェックの「除去して検証」は結局自作が要る。依存（XmpCore）も増える | 不採用（読み取りの対応形式を広げる必要が出たら再検討） |
+| WIC のメタデータ クエリ リーダー/ライター | Windows | 読み取りは HEIF も含めて可能。書き込みは形式ごとの制約（パディング・インプレース更新）が多く、「再エンコードしない」ことの保証と検証が難しい。Quick View の常駐プロセスで COM を多用することになる | 表示の補助としてのみ（HEIF 等は Windows のプロパティ システム＝本体の情報パネルと共通の `FileInformation`） |
+| ExifTool | Artistic/GPL | Perl ランタイムの同梱が必要、外部プロセス | 不採用 |
+| 知覚ハッシュのライブラリ（CoenM.ImageHash 等） | MIT | ImageSharp（Six Labors Split License: 条件付き）に依存 | 不採用。dHash/aHash/pHash（DCT）は数十行で、デコードは既存の WIC 経路を使える |
+
+類似画像検索のワーカーは Quick View のホスト自身（`--similar-worker`）。新しい実行ファイル・配布物はない。
+
+**追加分（2026-11-02、HEIF/RAW の除去・本体の書き出し）も新しい依存なし。** HEIF の EXIF/XMP は自作の `HeifReader`（ISOBMFF の箱を読むだけ）。
+変換したコピーのデコードは Windows のコーデック（WinRT `BitmapDecoder`）で、HEIF/AVIF・RAW は利用者が入れた Microsoft Store の拡張機能
+（HEIF 画像拡張機能・HEVC ビデオ拡張機能・AV1 Video Extension・Raw Image Extension）に任せる。Mavue はこれらを同梱・再配布しない（ない場合は「拡張機能が必要」と表示）。
+エンコードは Windows 標準の JPEG/PNG エンコーダー。変換ワーカーもホスト自身（`--export-worker`）。
+
 ## 3. PDF エンジン候補
 
 | 候補 | ライセンス | 描画 | テキスト抽出/検索 | フォーム | 注釈編集 | ページ操作 | 暗号化書込 | 線形化 | 判定 |

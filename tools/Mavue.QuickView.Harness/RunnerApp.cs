@@ -69,6 +69,7 @@ internal sealed partial class Runner
                 "Three files on the command line (JPEG, PDF, MP3): ←/→ step through exactly those three in that order");
             RunAppViewingScenarios(assets, gif, pdf);
             RunAppMonitorScenarios(assets);
+            RunAppExportScenarios(assets);
             Guarded("app-open-dialog", AppOpenDialog,
                 "Ctrl+O shows the Windows Open dialog owned by the app window; Esc cancels it and the app keeps working");
         }

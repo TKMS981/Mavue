@@ -64,6 +64,9 @@ public sealed partial class QuickViewWindow : Window
         LayoutTwoPagesCoverItem.Text = strings.GetString("QuickView_LayoutTwoPagesCover") + "  (Ctrl+Shift+4)";
         SetButtonText(FilmstripButton, strings.GetString("QuickView_Filmstrip"));
         SetButtonText(SourceButton, strings.GetString("QuickView_Source"));
+        SetButtonText(ExifButton, strings.GetString("QuickView_Exif"));
+        SetButtonText(ShareCheckButton, strings.GetString("QuickView_ShareCheck"));
+        SetButtonText(SimilarButton, strings.GetString("QuickView_Similar"));
         SetButtonText(WrapButton, strings.GetString("QuickView_Wrap"));
         SetButtonText(InspectorButton, strings.GetString("QuickView_PixelInspector"));
         _pinText = strings.GetString("QuickView_Pin");
@@ -134,6 +137,7 @@ public sealed partial class QuickViewWindow : Window
         Brush chrome = _backdrop ? new SolidColorBrush(Colors.Transparent) : Themed("QvChromeSolidBrush");
         TopBar.Background = chrome;
         FilmstripHost.Background = chrome;
+        SimilarHost.Background = chrome;
         Root.Background = _backdrop ? new SolidColorBrush(Colors.Transparent) : Themed("QvChromeSolidBrush");
     }
 
@@ -296,11 +300,62 @@ public sealed partial class QuickViewWindow : Window
         double search = SearchHost.Visibility == Visibility.Visible ? SearchHost.ActualHeight : 0;
         double sidebar = SidebarHost.Visibility == Visibility.Visible ? SidebarHost.Width : 0;
         double filmstrip = FilmstripHost.Visibility == Visibility.Visible ? FilmstripHeight : 0;
-        return ((2 * ViewerSurface.ContentPadding) + sidebar, (2 * ViewerSurface.ContentPadding) + TopBarHeight + search + filmstrip);
+        double similar = SimilarHost.Visibility == Visibility.Visible ? SimilarHeight : 0;
+        return ((2 * ViewerSurface.ContentPadding) + sidebar, (2 * ViewerSurface.ContentPadding) + TopBarHeight + search + filmstrip + similar);
     }
 
     /// <summary>Height of the filmstrip row in device-independent pixels (fixed, so the image area is known before layout).</summary>
     public const double FilmstripHeight = 88;
+
+    /// <summary>Height of the similar-images row (fixed, like the filmstrip).</summary>
+    public const double SimilarHeight = 140;
+
+    /// <summary>The EXIF card was switched on or off (button or E).</summary>
+    public event Action<bool>? ExifToggled;
+
+    /// <summary>The check before sharing was asked for; the argument is the button (the flyout's anchor).</summary>
+    public event Action<FrameworkElement>? ShareCheckRequested;
+
+    /// <summary>A similar-image search was asked for.</summary>
+    public event Action? SimilarRequested;
+
+    /// <summary>Shows the image tools (EXIF, check before sharing, similar images) for images, or hides them.</summary>
+    public void SetImageTools(bool available)
+    {
+        Visibility visibility = available ? Visibility.Visible : Visibility.Collapsed;
+        ExifButton.Visibility = visibility;
+        ShareCheckButton.Visibility = visibility;
+        SimilarButton.Visibility = visibility;
+    }
+
+    public void SetExifOn(bool on) => ExifButton.IsChecked = on;
+
+    /// <summary>The EXIF card over the image (null hides it).</summary>
+    public void ShowExif(UIElement? card)
+    {
+        ExifHost.Children.Clear();
+        if (card is not null)
+        {
+            ExifHost.Children.Add(card);
+        }
+
+        ExifHost.Visibility = card is null ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    /// <summary>The similar-images row (null hides it; the image area changes).</summary>
+    public void ShowSimilar(UIElement? panel)
+    {
+        SimilarHost.Children.Clear();
+        if (panel is not null)
+        {
+            SimilarHost.Children.Add(panel);
+        }
+
+        SimilarHost.Visibility = panel is null ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    /// <summary>The button the check before sharing opens from.</summary>
+    public FrameworkElement ShareCheckAnchor => ShareCheckButton;
 
     public void ResetContent(string fileName)
     {
@@ -522,6 +577,12 @@ public sealed partial class QuickViewWindow : Window
     private void OnInspectorClick(object sender, RoutedEventArgs e) => FromButton(() => InspectorToggled?.Invoke(InspectorButton.IsChecked == true));
 
     private void OnPinClick(object sender, RoutedEventArgs e) => FromButton(() => PinToggled?.Invoke(PinButton.IsChecked == true));
+
+    private void OnExifClick(object sender, RoutedEventArgs e) => FromButton(() => ExifToggled?.Invoke(ExifButton.IsChecked == true));
+
+    private void OnShareCheckClick(object sender, RoutedEventArgs e) => ShareCheckRequested?.Invoke(ShareCheckButton);
+
+    private void OnSimilarClick(object sender, RoutedEventArgs e) => FromButton(() => SimilarRequested?.Invoke());
 
     private void OnSourceClick(object sender, RoutedEventArgs e) => FromButton(() => SourceToggled?.Invoke(SourceButton.IsChecked == true));
 
@@ -946,6 +1007,10 @@ public sealed partial class QuickViewWindow : Window
             case VirtualKey.W when !control && !e.KeyStatus.WasKeyDown && WrapButton.Visibility == Visibility.Visible && TextTools.Visibility == Visibility.Visible:
                 e.Handled = true;
                 WrapToggled?.Invoke(WrapButton.IsChecked != true);
+                return;
+            case VirtualKey.E when !control && !e.KeyStatus.WasKeyDown && ExifButton.Visibility == Visibility.Visible:
+                e.Handled = true;
+                ExifToggled?.Invoke(ExifButton.IsChecked != true);
                 return;
             case VirtualKey.P when !control && !e.KeyStatus.WasKeyDown:
                 e.Handled = true;

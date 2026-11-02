@@ -133,6 +133,38 @@ internal sealed partial class Runner
 
     private (bool, string) AppPdfPassword(string encrypted)
     {
+        // The keys are sent without Shift: with Caps Lock on, "mavue" would arrive as "MAVUE". Turned off for the
+        // scenario and restored afterwards.
+        bool capsLock = (Native.GetKeyState(VkCapital) & 1) != 0;
+        if (capsLock)
+        {
+            PressCapsLock();
+        }
+
+        try
+        {
+            return AppPdfPasswordCore(encrypted);
+        }
+        finally
+        {
+            if (capsLock)
+            {
+                PressCapsLock();
+            }
+        }
+    }
+
+    private const ushort VkCapital = 0x14;
+
+    private static void PressCapsLock()
+    {
+        Native.INPUT[] inputs = [Key(VkCapital, false), Key(VkCapital, true)];
+        Native.SendInput(2, inputs, System.Runtime.InteropServices.Marshal.SizeOf<Native.INPUT>());
+        Thread.Sleep(100);
+    }
+
+    private (bool, string) AppPdfPasswordCore(string encrypted)
+    {
         var observed = new List<string>();
         bool ok;
         using (AppSession app = LaunchApp(encrypted))

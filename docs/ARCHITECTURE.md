@@ -446,9 +446,9 @@ Mavue.Core
 | 2 | ウィンドウのデザイン（2026-10-29 利用者の指示で ZIP と入れ替え。前提と改善点は §4.7.9） |
 | 3 | ZIP（一覧・ZIP 内画像・前後移動）（2026-10-30 実装。§4.7.10）。利用者の指示で Phase 4 の動画・音声もまとめて実装（§4.7.11） |
 | 4 | 動画（軽い操作 UI、ホイール ±5 秒、Shift+ホイール ±30 秒）、音声の波形（2026-10-30 に Phase 3 とまとめて実装。§4.7.11）。2026-11-02: 利用者の指示で、Phase 5 のテキスト・コード・Markdown と Phase 6 の HTML をまとめて Phase 4 として実装（§4.7.12） |
-| 5 | （テキスト・コード・Markdown は Phase 4 で実装済み） |
-| 6 | EXIF Inspector、共有前チェック・メタデータを除いたコピー（HTML は Phase 4 で実装済み） |
-| 7 | 類似画像検索（別プロセス） |
+| 5 | 2026-11-02: 利用者の指示で、Phase 6 の EXIF Inspector・共有前チェック・メタデータを除いたコピーと Phase 7 の類似画像検索をまとめて Phase 5 として実装（§4.7.13–14） |
+| 6 | （EXIF・共有前チェックは Phase 5、HTML は Phase 4 で実装済み） |
+| 7 | （類似画像検索は Phase 5 で実装済み） |
 | 8 | 統合テスト・性能テスト・長時間テスト |
 
 #### 4.7.8 Phase 1 の設計（2026-10-29、実装前に整理）
@@ -728,6 +728,140 @@ TypeScript。種類が分からず先頭がテキストに見えるファイル�
 **未対応・残課題**: 複数行にまたがる選択とテキスト内の検索、ZIP 内のテキスト（`ArchiveContent` から `TextPreviewer` を使えば表示できる）、
 Explorer のプレビュー ウィンドウでのテキスト表示（Windows 標準のハンドラーを奪わない）、RTF・Jupyter ノートブックの整形表示、Mermaid 図と数式の描画、
 HTML 内でフォーカスを持っているときの Space（ページのスクロールに使われる。Esc・Explorer からの Space は閉じる）、HTML の印刷。
+
+#### 4.7.13 EXIF カード・共有前チェック・メタデータを除いたコピー（Phase 5、2026-11-02）
+
+利用者の指示（2026-11-02）: EXIF 表示（撮影日時・カメラ・レンズ・ISO・露出等）、共有前チェック（メタデータを確認・削除してコピー）、類似画像検索を
+まとめて実装する。EXIF は Pixel Inspector と役割を分け、画像を主役にした軽い UI にする。既存の Quick Preview 機能・安全対策・性能を維持する。
+
+```
+Mavue.Metadata（BCL のみ。UI・Windows API に依存しない）
+├─ Tiff/TiffReader        EXIF/TIFF のディレクトリ（IFD0・EXIF・GPS・IFD1）をシーク読み。項目数・値の大きさ（256 KiB 超は件数だけ）・
+│                         ディレクトリ数を制限し、ループ・範囲外のオフセットを無視。値はファイルのバイト順のまま保持
+├─ ImageMetadataReader    JPEG（APPn・COM、任意で EOI 以降の付加データ）、PNG（チャンク）、WebP（RIFF）、GIF（拡張ブロック）、TIFF 系（RAW 含む）。
+│                         画像データは読まずにシーク。XMP は文字列として検索（XML パーサーなし＝実体展開・外部参照なし）、IPTC は IIM を解析
+├─ PrivacyCheck           何が分かるか: 位置・撮影日時・カメラと設定・作成者/著作権・シリアル番号/ID・所有者名・ソフトウェア/編集履歴・
+│                         説明/コメント・サムネイル/埋め込み画像/付加データ・MakerNote・その他（色プロファイルは「残す」）。値は画面に出すだけ
+├─ Tiff/ExifWriter        残す値だけの最小 EXIF（元のバイト順で値をそのままコピー。MakerNote・シリアル・IFD1 サムネイルは書かない）
+├─ MetadataStripper       再エンコードしないコピー: JPEG（APP1/APP13/APPn/COM/MPF/JFXX を除去、ICC・Adobe APP14・JFIF は残す、EOI 以降は捨てる）、
+│                         PNG（tEXt/zTXt/iTXt/tIME/eXIf/未知の補助チャンクを除去、CRC 付きで eXIf を IDAT の前に）、WebP（EXIF/XMP/未知を除去、
+│                         VP8X のフラグと RIFF の大きさを修正）、GIF（コメント・XMP 等を除去、NETSCAPE のループは残す）
+└─ ExifText               設定の短い表記（f/2.8・1/250 s・ISO 400・35 mm (52 mm)・+0.3 EV）
+
+Mavue.QuickView.Host/Metadata
+├─ ExifCard     画像の右上に重ねるカード（幅 320）: カメラ・レンズ・設定・撮影日時と「位置情報・氏名・シリアル番号」の注意。
+│               「詳細」で全項目、「共有前チェック…」へのリンク。既定オフ（E・ボタン、設定 showExifPanel に保存）。オンのときだけ、表示後に UI スレッドの外で読む。
+│               HEIF/AVIF/JPEG XL/CR3 等は Windows のプロパティ システム（本体の情報パネルと共通の FileInformation）で表示
+├─ ShareCheck   フライアウト: 見つかったもの（重要度の色・値）、取り除くもの（位置・日時・カメラと設定・作成者と著作権を選択。それ以外は常に除去、
+│               色プロファイルと向きは常に残す）、「クリップボードにコピー」「コピーを保存」
+└─ CleanCopy    （2026-11-02 に Mavue.Viewer/Metadata へ移動し本体と共通化、§4.7.15）SafeFileWriter で一時ファイル → 検証（読み直して除去すべき種類が 0、XMP/IPTC/コメント/埋め込み画像/付加データがない、
+                WIC で元と同じ寸法に読める）→ 合格したときだけ名前を付ける。元ファイルは読むだけ。Mark-of-the-Web（Zone.Identifier）を引き継ぐ。
+                保存先: 元の隣「名前（メタデータなし）.jpg」（重複時は (2)…）。書き込めないフォルダーはクリップボード用の一時コピーに切り替え。
+                クリップボード用: %LOCALAPPDATA%\Mavue\QuickView\Shared\<時刻-ID>\元の名前（24 時間後に次回の作成時に削除）
+```
+
+- **役割の分担**: Pixel Inspector は左下/右下・ポインター追従・画素値（ファイルの画素）。EXIF カードは右上・固定・ファイルの情報。重ならない。
+- **ツールの表示**: ローカルのラスター画像のときだけ（SVG・クラウドのみ・PDF・動画・ZIP 等では出さない）。項目の切り替えで共有前チェックは閉じ、カードは消える。
+- **形式**: 再エンコードしない除去は JPEG・PNG・WebP・GIF。HEIF/AVIF・TIFF/RAW・JPEG XL 等は**変換したコピー**（JPEG/PNG）で除去する（§4.7.15）。Windows で読めない（拡張機能がない）ときは理由を表示。
+- **計測**: `exif-card`（形式・EXIF の有無・Windows の値を使ったか・時間）、`share-check`（形式・件数・種類・除去できるか）、
+  `share-copy`（保存先・切り替えたか・除去バイト数・EXIF を書いたか・MotW・検証・時間、失敗時は例外の種類）。パス・値は記録しない。
+
+#### 4.7.14 類似画像検索（Phase 5、2026-11-02）
+
+条件（利用者）: 明示的に実行したときだけ開始、常駐中にフォルダーを監視・解析しない、候補を段階的に絞り込む、重い解析はキャンセル可能、
+キャッシュとメモリの上限、大量のファイルでも Explorer / Quick View の通常操作を邪魔しない、終了後は不要な資源を解放。
+
+```
+ボタン（類似画像を探す）→ SimilarPanel（下段の行 140 DIP: 進捗・中止・サブフォルダー・閉じる・結果）
+      │ WorkerSession（Mavue.Viewer/Workers、旧 SimilarSearchSession）: 自分自身の exe を --similar-worker で起動し、すぐにジョブ オブジェクトへ
+      │   ジョブ: メモリ上限（High 1 GiB / Balanced 768 MiB / Low 512 MiB）・CPU のハード上限（25 / 20 / 15 %）・優先度 BelowNormal・
+      │   プロセス数 1（子プロセス不可）・未処理例外で終了・ハンドルを閉じると終了（Quick View が閉じる/落ちる/中止で必ず終わる）
+      ▼ 標準入出力の JSON Lines（SimilarSearchProtocol。要求 1 行 → 進捗・結果・done/error）
+Mavue.QuickView.Host.exe --similar-worker（SimilarWorker。WinUI・フック・ミューテックスを作らない。WorkerPriority で
+      CPU の優先度を BelowNormal・メモリの優先度を Low に下げる（※）。"cancel" または入力の終了で中止）
+      ▼ SimilarImageSearch（Mavue.Image）
+  0. 一覧: フォルダー（任意でサブフォルダー、深さ 8）の画像の種類だけ。クラウドのみ（読むとダウンロード）・0 バイト・512 MiB 超は除外、
+     件数の上限（20,000 / 10,000 / 5,000、超えたら「先頭だけ」と表示）
+  1. 粗い比較: 32 px のデコード（JPEG は DCT 縮小）→ 差分ハッシュ・平均ハッシュ・平均色・縦横比（24 バイト）→ ハミング距離で候補
+  2. 詳しい比較: 候補だけ 128 px のデコード → 知覚ハッシュ（32×32 の DCT）・4×4 の色配置（YCbCr）→ 類似度（%、既定 72 % 以上）。
+     構造の距離は知覚ハッシュと差分ハッシュの両方から（滑らかな画像では DCT の係数が中央値付近で反転しやすいため。2026-11-02 のテストで判明）
+  3. 上位 60 件だけ縮小画像（88 DIP × 表示倍率）を作って送る
+  デコードは専用スレッド（COM を初期化、1〜2 本、BelowNormal）。ファイルごとに取り消しを確認。1 スレッドが持つのは小さなデコード 1 枚だけ。
+  署名のキャッシュ（SignatureCache）: %LOCALAPPDATA%\Mavue\QuickView\SimilarCache\signatures.bin。キーはフル パスのハッシュ＋大きさ＋更新日時
+  （パスは保存しない）、最大 10 万件（約 9 MB、古い順に削除）、一時ファイル → 置換で保存。壊れていれば空から。
+```
+
+- ※ 当初は Windows のバックグラウンド モード（`PROCESS_MODE_BACKGROUND_BEGIN`）を使っていたが、このモードでは HEIF（HEVC）のデコーダーが
+  E_OUTOFMEMORY で失敗し、HEIC の変換も比較もできなかった（2026-11-02 の E2E `share-convert` で判明、ジョブなしでも再現）。CPU とメモリの優先度を個別に下げる方式に変更
+  （両ワーカー共通の `Mavue.Viewer/Workers/WorkerPriority`）。メモリと CPU の上限は引き続きジョブで掛ける。
+- 結果のクリック: Quick View 内で表示し、Pin（固定）にする（Explorer の選択とビューはそのまま。結果を順に見られる）。行を閉じる・Quick View を閉じる・
+  別の検索を始めると、ワーカーは終了し、縮小画像は解放される。常駐中は何も動かない（タイマー・監視なし）。
+- 色管理: 比較用のデコードは ICC プロファイルを無視（`WicPreviewDecoder.DecodeForAnalysis`。表示には使わない）。
+- 計測: `similar-start`（範囲・上限・メモリ/CPU 上限・並列数）、`similar-done`（確認数・除外・一致・表示数・キャッシュ ヒット・時間・打ち切り）、
+  `similar-cancel`、`similar-error`、`similar-worker-ended`（終了コード）、`similar-open`。パスは記録しない。
+- **設定（2026-11-02 追加）**: 行の「検索の設定」メニュー（Quick View）と本体の設定画面の両方から変更でき、同じ設定ファイル（`similarSensitivity`・
+  `similarIncludeSubfolders`・`similarDetectRotations`）に保存。感度は 3 段階（ゆるく似ている 64 % / 似ている 72 %（既定）/ ほぼ同じ 84 %）。
+  Quick View で変更すると現在の検索を中止して同じ条件でやり直す。読めない値は既定に戻す。
+- **回転・反転（既定オン）**: 対象画像だけを 8 通りの向き（0/90/180/270°、それぞれ左右反転あり/なし）で署名し、候補ごとに最も近い向きを採用する
+  （候補側は 1 回だけデコード。キャッシュは向きに依存しない）。90/270° は縦横比を入れ替えて比較。結果には「↻」と「90° 回転すると一致」等の説明
+  （ツールチップと読み上げ名）。オフにすると向きは 1 通りだけ（従来どおり）。
+- **キャッシュの削除**: メニューと本体の設定に「検索キャッシュを削除（大きさ）」。実行中の検索は先に中止し、使用中なら 0.8 秒後にもう一度試して、
+  削除できなければ「使用中」と表示（例外にしない）。保存途中の一時ファイル（`*.tmp`）も削除。計測 `similar-cache-cleared`（削除できたか・バイト数）。
+- 未対応（残課題）: ZIP 内の画像、結果の一括操作（選択・削除）。
+
+#### 4.7.15 変換したクリーン コピー（HEIF/RAW）と本体からの書き出し（Phase 5 の続き、2026-11-02）
+
+利用者の指示（2026-11-02）: HEIF/RAW のメタデータ除去、本体の Export でのメタデータ除去、類似検索の設定 UI・回転を考慮した類似判定・キャッシュ削除 UI。
+条件: 除去は元ファイルを変更しない（安全なコピー/書き出し）、キャンセル可能、メモリ上限、Quick Preview の UI・性能・安全性を維持。
+
+```
+読み取り（Mavue.Metadata）
+└─ HeifReader     ISOBMFF（ftyp のブランド heic/heix/heim/heis/mif1/msf1/avif/avis）。meta → iinf（項目の種類）・iloc（位置、version 0/1/2、
+                  構築方法 0 と 1 = idat）・colr（ICC）。Exif 項目（先頭 4 バイトの TIFF までのオフセット）と XMP（mime の rdf+xml）を読む。
+                  箱の大きさ・項目数・範囲を検査し、壊れていれば読めるところまで。動画（isom）や CR3（crx）は HEIF として扱わない
+書き出し（Mavue.Image/Export/CleanExport）
+├─ Plan        形式を判定: 再エンコードせず除去できる（JPEG/PNG/WebP/GIF）か、変換が必要か。既定の書き出し形式（そのまま / JPEG）と拡張子
+├─ WriteAsync  そのまま: MetadataStripper。変換: Windows のデコーダー（HEIF・RAW 拡張機能を含む）で、EXIF の向きを適用・sRGB に色変換・8 ビット BGRA
+│              → JPEG（品質 92、選択可）または PNG にエンコード（メタデータなし）→ 元の EXIF から残す値だけ書く（向きは書かない＝画素がすでに正立）。
+│              画素数の上限（既定 2.5 億、ワーカーではジョブのメモリ上限÷8 との小さい方）を超えるとデコード前に拒否（ImageTooLargeException）
+└─ Verify      読み直して除去漏れ 0・XMP/IPTC/コメント/埋め込み画像なし・期待した寸法（変換時は向きを適用した寸法）で WIC が読める
+
+両方のアプリで共通（2026-11-02 に本体と共通化）
+├─ Mavue.Image/Export/PrivacyReview   最初の段階: 自前の読み取り（読めない形式は呼び出し側の代替＝Windows のプロパティ）→ 見つかったもの、
+│                                     Plan、CanDecode（ヘッダーだけ読んで Windows がデコードできるか）、CannotCopy（変換が必要なのにデコードできない）
+├─ Mavue.Image/Export/CleanCopyRules  元の隣の名前「…（メタデータなし）(2)」、元ファイルかどうか、失敗の分類（CleanCopyFailure: 検証できない・
+│                                     コーデックなし・大きすぎる・書き込めない・その他）、ワーカーのメモリ上限、一時コピーの掃除（24 時間）
+├─ Mavue.Viewer/Metadata/CleanCopy    コピーを作る: そのまま＝プロセス内で MetadataStripper、変換＝ワーカー。SafeFileWriter → Verify → 名前、
+│                                     MotW。元ファイルを保存先にすると ArgumentException。一時フォルダーはアプリごと
+├─ Mavue.Viewer/Metadata/FileInformationPrivacy  Windows のプロパティからの見つかったもの（JPEG XL 等）
+└─ Mavue.Viewer/Workers               WorkerSession（ジョブ: メモリ 2 / 1.5 / 1 GiB・CPU 50 %・子プロセス不可・閉じると終了）・
+                                      ExportWorker（--export-worker）・WorkerPriority（§4.7.14 の※）
+
+Quick View（共有前チェック、フライアウト）             本体（MainWindow.Export、… メニュー「メタデータを除いて書き出す…」、ダイアログ）
+├─ 一時: %LOCALAPPDATA%\Mavue\QuickView\Shared       ├─ 一時: %LOCALAPPDATA%\Mavue\Shared
+├─ ワーカー: Mavue.QuickView.Host.exe --export-worker  ├─ ワーカー: Mavue.exe --export-worker（Program.cs が WinUI の前に分岐）
+├─ 形式: 変換が必要な形式だけ JPEG / PNG              ├─ 形式: そのまま / JPEG / PNG（どの画像でも変換を選べる）と JPEG の画質
+└─ 保存先: コピーを保存（元の隣）・クリップボード      └─ 保存先: クリップボードにコピー・コピーを保存（元の隣）・保存先を選ぶ…（FileSavePicker）
+```
+
+- **本体の画面（Quick View と揃える）**: 見つかったもの（重要度のアイコンと色・値）→ ファイルの種類 → 取り除くもの 4 種 → 常に取り除くもの/残すもの →
+  ボタン → 進行状況と結果（ダイアログ内、読み上げは Polite）。文言は Quick View と同じ（見つかったものの名前・完了メッセージ・失敗メッセージ）。
+  書き出し中は選択を無効にし、ダイアログを閉じると取り消す（途中のファイルは残らない）。保存した後は「フォルダーに表示」。
+  元のフォルダーに書き込めないときは Quick View と同じくクリップボードへ切り替える。保存ダイアログで元ファイルを選ぶと拒否。
+- **対応できない形式の案内**: コマンドは画像なら常に使える（無効のボタンで理由が分からないことを避ける）。SVG とクラウドだけのファイルは何も読まずに説明。
+  変換が必要でデコードできない（拡張機能がない・壊れている）ときは、見つかったものと理由だけを表示し、ボタンを出さない（Quick View も同じ）。
+  GIF/WebP を変換するときは「アニメーションは最初のフレームだけ」と表示。
+- **計測（本体）**: `export-clean-check`（形式・件数・種類・除去できるか・デコードできるか、または拒否の理由 svg/cloud）、
+  `export-clean`（保存先・切り替え・形式・変換・除去バイト数・MotW・検証・時間、失敗時は例外の種類と分類）。パス・値は記録しない。
+
+- **ワーカーの理由**: HEIF/RAW のデコードはサード パーティの拡張機能で、大きな画像では数百 MB を使う。別プロセス＋ジョブにすることで、
+  メモリの上限・CPU の上限・異常終了の隔離ができ、Quick View の表示と操作に影響しない。プロトコルは JSON Lines（`CleanExportProtocol`、
+  要求 1 行 → done/error。エラー コードは unsupported / too-large / unreadable / failed）。中止・フライアウトを閉じる・Quick View を閉じるとワーカーは終わり、一時ファイルを消す。
+- **本体もワーカー**（2026-11-02 変更。当初はプロセス内で変換していた）: 大きな RAW や HEIF のデコードのメモリを本体から切り離し、
+  Quick View と同じ上限・同じ失敗の扱いにするため。Mavue.exe 自身を `--export-worker` で起動する（リリースでは両方の exe が同じフォルダーにあるが、
+  開発時は別フォルダーのため、他方の exe には依存しない）。
+- **残すもの**: 変換時も色は sRGB に変換するので ICC は書かない（「色プロファイル（残します）」は再エンコードしない場合のみ）。向きは画素に適用。
+- **計測**: `share-copy` に `converted`・`format` を追加。失敗時は `worker-<コード>`。パス・値は記録しない。
 
 ---
 

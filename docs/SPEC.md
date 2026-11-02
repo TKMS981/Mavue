@@ -244,6 +244,22 @@ ColorSync and Soft Proof are excluded.
 
 GPS/map visualization is not excluded and should be treated as an implementation target.
 
+Metadata removal follows the same rules in Quick View ("Copy without private metadata", §3.1) and in the main
+application ("Export without metadata…", §7 "metadata removal", §8 "EXIF removal"):
+
+1. The original file is only read. It is never the destination of a copy and is never modified.
+2. A copy is written to a temporary file, verified (none of the removed kinds left, decodable with the expected size)
+   and only then given its name. A failed or cancelled copy leaves nothing behind.
+3. Types that can carry the removal without re-encoding (JPEG, PNG, WebP, GIF) are copied without re-encoding. Other
+   types (HEIF/AVIF, TIFF/RAW and others Windows can decode) are converted to JPEG or PNG in a separate,
+   memory- and CPU-limited process, and the user is told that the copy is converted.
+4. Both places show the same findings, the same choices of what to remove, the same words and the same destinations
+   (next to the original, the clipboard). The main application also offers a place chosen in the save dialog, the
+   file type of the copy and the JPEG quality.
+5. When no copy can be made (SVG, a missing codec, a cloud-only file, a destination that cannot be written), the
+   reason is shown; the application keeps working.
+6. The copy keeps the original's Mark-of-the-Web. Nothing is uploaded; the values found are shown but never logged.
+
 ---
 
 # 9. PDF Viewer

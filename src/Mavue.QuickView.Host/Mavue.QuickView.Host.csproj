@@ -56,6 +56,7 @@
     <ProjectReference Include="..\Mavue.Core\Mavue.Core.csproj" />
     <ProjectReference Include="..\Mavue.QuickView\Mavue.QuickView.csproj" />
     <ProjectReference Include="..\Mavue.Image\Mavue.Image.csproj" />
+    <ProjectReference Include="..\Mavue.Metadata\Mavue.Metadata.csproj" />
     <ProjectReference Include="..\Mavue.Shell\Mavue.Shell.csproj" />
     <ProjectReference Include="..\Mavue.Viewer\Mavue.Viewer.csproj" />
   </ItemGroup>

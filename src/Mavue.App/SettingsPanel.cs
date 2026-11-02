@@ -1,5 +1,6 @@
 using System.Reflection;
 using Mavue.Core.Settings;
+using Mavue.Core.Similarity;
 using Mavue.Core.Viewing;
 using Mavue.Shell;
 using Microsoft.UI.Xaml;
@@ -53,6 +54,37 @@ internal sealed partial class SettingsPanel : UserControl
             [("Settings_ScaleFit", ImageScaleMode.FitNoUpscale), ("Settings_ScaleActual", ImageScaleMode.ActualSize)],
             quickView.ImageScale,
             scale => _ = SaveQuickViewAsync(scale)));
+
+        // Quick View's similar-image search: run only when asked; these choose what it lists and clear its cache.
+        var similar = new StackPanel { Spacing = 8 };
+        similar.Children.Add(Choice(
+            "Settings_SimilarSensitivity",
+            [("Settings_SimilarLoose", SimilarSensitivity.Loose), ("Settings_SimilarNormal", SimilarSensitivity.Normal), ("Settings_SimilarStrict", SimilarSensitivity.Strict)],
+            quickView.SimilarSensitivity,
+            value => _ = SaveQuickViewAsync(s => s with { SimilarSensitivity = value })));
+        var subfolders = new ToggleSwitch { Header = MainWindow.Text("Settings_SimilarSubfolders"), IsOn = quickView.SimilarIncludeSubfolders };
+        subfolders.Toggled += (_, _) => _ = SaveQuickViewAsync(s => s with { SimilarIncludeSubfolders = subfolders.IsOn });
+        similar.Children.Add(subfolders);
+        var rotations = new ToggleSwitch { Header = MainWindow.Text("Settings_SimilarRotations"), IsOn = quickView.SimilarDetectRotations };
+        rotations.Toggled += (_, _) => _ = SaveQuickViewAsync(s => s with { SimilarDetectRotations = rotations.IsOn });
+        similar.Children.Add(rotations);
+        var clearCache = new Button();
+        void ShowCacheSize()
+        {
+            long bytes = SimilarSearchSettings.CacheBytes();
+            clearCache.Content = MainWindow.Format("Settings_SimilarClearCache", ByteSizeText.Format(bytes));
+            clearCache.IsEnabled = bytes > 0;
+        }
+
+        clearCache.Click += (_, _) =>
+        {
+            SimilarSearchSettings.DeleteCache();
+            ShowCacheSize();
+        };
+        ShowCacheSize();
+        similar.Children.Add(clearCache);
+        similar.Children.Add(new TextBlock { Text = MainWindow.Text("Settings_SimilarHint"), TextWrapping = TextWrapping.Wrap, Opacity = 0.75 });
+        panel.Children.Add(similar);
 
         var integration = new StackPanel { Spacing = 8 };
         integration.Children.Add(Header("Settings_Integration"));
@@ -172,12 +204,14 @@ internal sealed partial class SettingsPanel : UserControl
         }
     }
 
-    private static async Task SaveQuickViewAsync(ImageScaleMode scale)
+    private static Task SaveQuickViewAsync(ImageScaleMode scale) => SaveQuickViewAsync(s => s with { ImageScale = scale });
+
+    private static async Task SaveQuickViewAsync(Func<QuickViewSettings, QuickViewSettings> change)
     {
         string path = QuickViewSettings.DefaultPath;
         try
         {
-            await (QuickViewSettings.Load(path) with { ImageScale = scale }).SaveAsync(path);
+            await change(QuickViewSettings.Load(path)).SaveAsync(path);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

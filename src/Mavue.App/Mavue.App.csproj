@@ -22,6 +22,8 @@
     <DefaultLanguage>en-US</DefaultLanguage>
     <!-- LibraryImport (console attach for the registration switches). -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Program.cs: the export worker mode starts before WinUI. -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
     <!-- File Explorer preview handler / thumbnail provider built by tools/build-native.ps1 (artifacts is git-ignored). -->
     <MavueNativePreviewDll>$(MSBuildThisFileDirectory)..\..\artifacts\native\$(RuntimeIdentifier)\Mavue.Shell.Preview.dll</MavueNativePreviewDll>
   </PropertyGroup>

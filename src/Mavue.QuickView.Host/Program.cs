@@ -27,6 +27,18 @@ internal static partial class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        // The similar-image search worker: a separate, resource-limited process (no window, hooks or mutex).
+        if (args.Length == 1 && args[0] == Similar.SimilarWorker.Argument)
+        {
+            return Similar.SimilarWorker.Run();
+        }
+
+        // A converted export without metadata (HEIF, raw…): also a separate, memory-limited process.
+        if (args.Length == 1 && args[0] == Mavue.Viewer.Workers.ExportWorker.Argument)
+        {
+            return Mavue.Viewer.Workers.ExportWorker.Run();
+        }
+
         StartupForeground = NativeMethods.GetForegroundWindow();
         Arguments = args;
         HostOptions options = HostOptions.Parse(args);

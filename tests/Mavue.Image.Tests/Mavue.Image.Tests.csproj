@@ -6,5 +6,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Mavue.Image\Mavue.Image.csproj" />
+    <ProjectReference Include="..\..\src\Mavue.Metadata\Mavue.Metadata.csproj" />
   </ItemGroup>
 </Project>

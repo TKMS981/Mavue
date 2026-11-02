@@ -46,7 +46,7 @@
 | | **Quick Preview の拡張（SPEC §3.1、2026-10-06 承認。設計は ARCHITECTURE §4.7）** | | |
 | F03.28 | Folder filmstrip | Implemented | A-1。Phase 1（2026-10-29）。`FilmstripPresenter`＋`FilmstripModel`。既定はオフ（F / ボタン、設定に保存）。表示中の項目が出た後に Explorer のビュー順で前後 60 件だけ読む（端に近づいたら読み直し）。複数選択時は選択されたファイル。サムネイルは専用スレッドで、見えている項目だけ: Windows のキャッシュ → ローカルの画像は Mavue のデコーダー（段階の上限内）→ 種類のアイコン（クラウドのみのファイルは抽出しない）。クリックで Explorer の選択を変更（Pin 中は Quick View 内だけで移動）。E2E `filmstrip`。実機（2026-10-29）: 30,000 件のフォルダー（範囲の読み取り約 0.2 秒・表示は遅くならない）、クラウドのみのファイル（テスト用同期ルートでデータ要求 0 件） |
 | F03.29 | Pixel inspector in Quick View | Implemented | A-2。Phase 1（2026-10-29）。`PixelInspection`（座標変換: ズーム・表示回転・EXIF 回転）＋`WicPixelReader`（原寸の 256×256 タイルを 1 枚ずつ、ストレート α、ファイルの値）＋`PixelInspector`。既定はオフ（I / ボタン）。X/Y・RGB・HEX・Alpha を画像の隅のパネルに表示（ポインターと重なると反対側へ）。静止画のみ（GIF アニメ再生中・PDF・SVG は対象外）。色管理後の値は未対応。E2E `pixel-inspector` |
-| F03.30 | Similar image search | Planned | A-3。Phase 7。明示的に実行したときだけ。別プロセス（メモリ・CPU 上限）、知覚ハッシュのキャッシュ、取り消し可 |
+| F03.30 | Similar image search | Implemented | A-3。2026-11-02 Phase 5 で実装（ARCHITECTURE §4.7.14）。ボタンで明示的に開始。別プロセス（自分の exe を `--similar-worker` で起動、ジョブ オブジェクトでメモリ 1 GiB/768/512 MiB・CPU 25/20/15 %・子プロセス不可・親と一緒に終了、優先度 BelowNormal・メモリ優先度 Low）。一覧 → 32 px の粗い署名（差分/平均ハッシュ・平均色・縦横比）→ 候補だけ 128 px の詳しい署名（DCT 知覚ハッシュ・色配置）→ 上位 60 件の縮小画像。署名キャッシュ（パスのハッシュ＋大きさ＋時刻、10 万件まで）。クラウドのみ・巨大ファイルは除外、件数上限 2 万（段階別）。中止・Quick View を閉じる・行を閉じるでワーカー終了。結果は Quick View 内（Pin）で表示 E2E `similar-search`・`similar-resources`、単体 `SimilarityTests`・`SimilarSearchTests`。**2026-11-02 追加**: 感度 3 段階（64/72/84 %）・サブフォルダー・回転/反転の検出（対象を 8 通りの向きで比較、既定オン）・キャッシュの削除を Quick View のメニューと本体の設定から（§4.7.14） E2E `similar-rotations`・`similar-settings`、単体 `RotationAndExportTests`・`SimilarSettingsTests`。本体の設定画面は手動確認待ち |
 | F03.31 | Wheel zoom without Ctrl as a user setting | Planned | A-4。Phase 1。既定は従来どおり Ctrl+ホイール（カーソル中心、F03.06）。設定で Ctrl なしを選べるようにする。Fit/100% への吸着、イベントのまとめ処理 |
 | F03.32 | Video seek with the mouse wheel | Implemented | B-2。Phase 3 とまとめて実装（2026-10-30、ARCHITECTURE §4.7.11）。動画・音声の上でホイール 1 段 ±5 秒（上＝進む）、Shift+ホイール ±30 秒、長さの範囲内。タッチパッドの細かい量は 1 段分たまってから。シークは常に 1 件（実行中は最新の要求だけ保持し完了後に実行、完了が来なくても 1 秒で解除）。E2E `media-wheel`、単体 `Phase3RulesTests` |
 | F03.33 | Audio waveform | Implemented | C-1。Phase 3 とまとめて実装（2026-10-30、§4.7.11）。Media Foundation Source Reader で float PCM → 1,024 区間のピーク（メモリは区間数に比例）。20 秒超は 128 か所の概形 → 全体で精密化（0.25 秒ごとに更新）、2 時間超は概形のみ。再生開始後に低優先度スレッド、別ファイル・閉じるで取り消し。再生済み部分を明るく表示、クリック/ドラッグでシーク。E2E `audio-waveform`。長い音声の別プロセス化は Mavue.Worker.exe の導入時（残課題） |
@@ -57,9 +57,9 @@
 | F03.38 | Markdown preview | Implemented | E-1。Phase 4（2026-11-02）。Markdig 1.4.2（BSD-2-Clause）で解析し、XAML で直接描画（WebView2 は使わない）。見出し・強調・リスト・タスクリスト・引用・GitHub のアラート・色付きコードブロック・表・脚注・定義リスト・フロントマター。最上位ブロックごとに見えている分だけ要素を作る（ItemsRepeater）。HTML はレンダリングしない（`<br>` と `<img>` のみ解釈）。リンクはクリック時だけ（http/https/mailto は既定のプログラム、#見出しは文書内）。画像は文書のフォルダーのローカル画像と data: だけ（インターネット上の画像・ネットワーク共有・クラウドのみのファイルは読まない、枚数・サイズの上限）。Ctrl+U でソース表示。段階別の上限（4/2/1 MiB）を超えるファイルはソース表示と注意書き。E2E `markdown-render`・`markdown-large` |
 | F03.39 | Safe HTML preview | Implemented | E-2。Phase 4（2026-11-02、利用者の指示で Phase 6 から前倒し）。WebView2 を最初の HTML で作成し、閉じると終了。安全境界（ARCHITECTURE §4.7.12）: スクリプト無効、文書はメモリから予約名 `quickview.mavue.invalid` で CSP `sandbox; default-src 'none'`（data: 画像・インライン スタイルのみ）付きで返す、それ以外の要求はすべて 403（ネットワーク・ローカル ファイルとも）、文書以外への移動・新しいウィンドウ・ダウンロード・外部プロトコル・権限要求を拒否、SmartScreen 照会・自動入力・開発者ツール・コンテキスト メニュー・印刷等のショートカットを無効、存在しないプロキシ・InPrivate で起動。Ctrl+U でソース表示。WebView2 がない・上限（16/8/4 MiB）超過はソース表示と注意書き。ページ内にフォーカスがあるときの Space はページのスクロール（Esc・Explorer の Space は閉じる）。E2E `html-safe`（ローカルのテスト サーバーへの接続 0 件を確認） |
 | F03.40 | Universal file information preview | Implemented | Phase 1（2026-10-29）。`UniversalFileInfo`（ファイル システムと Zone.Identifier だけを読む）＋`UniversalContent` の情報カード: 種類のアイコン（キャッシュ済みサムネイルがあれば置換）・名前・種類（Windows の関連付け名）・サイズ・更新/作成日時・MIME・属性・入手元（Mark-of-the-Web のゾーンとホスト名のみ）。文書・アーカイブ・プログラム等の拡張子はデコーダーを試さず即カード、画像として読めないファイルは理由付きでカード、フォルダーは項目数（10,000 件まで）。E2E `info-card` |
-| F03.41 | EXIF inspector | Planned | F-1。Phase 6。Quick View で必要時だけ表示（本体の情報パネル F05.10 と共通の読み取り） |
-| F03.42 | Privacy check before sharing | Planned | F-2。Phase 6。GPS・撮影日時・カメラ等を検出して警告 |
-| F03.43 | Copy without private metadata | Planned | F-2。Phase 6。元ファイルは変更しない。再エンコードせずにメタデータだけ除いた新しいファイル（Mark-of-the-Web を引き継ぐ）。F08.10・F07.15 と共通 |
+| F03.41 | EXIF inspector | Implemented | F-1。2026-11-02 Phase 5（§4.7.13）。画像の右上の軽いカード（Pixel Inspector とは別の役割・位置）: カメラ・レンズ・f 値/シャッター/ISO/焦点距離（35 mm 換算）/露出補正・撮影日時（オフセット）と位置情報・氏名・シリアル番号の注意。「詳細」で全項目とメタデータの種類・大きさ。E・ボタン、既定オフ（設定に保存）。自作の読み取り（JPEG/PNG/WebP/GIF/TIFF・RAW）、HEIF 等は Windows のプロパティ（本体の情報パネルと共通） E2E `exif-card`、単体 `MetadataTests` |
+| F03.42 | Privacy check before sharing | Implemented | F-2。2026-11-02 Phase 5（§4.7.13）。位置（EXIF GPS・XMP・IPTC）・撮影日時・カメラと設定・作成者/著作権・シリアル番号/ID・所有者名・ソフトウェア/編集履歴・説明/コメント・サムネイル/埋め込み画像/EOI 以降のデータ・MakerNote・その他を重要度付きで一覧（値は表示のみ、記録しない） E2E `share-check`、単体 `MetadataTests` |
+| F03.43 | Copy without private metadata | Implemented | F-2。2026-11-02 Phase 5（§4.7.13）。再エンコードしない（JPEG/PNG/WebP/GIF）。位置・日時・カメラ・作成者は選択、それ以外は常に除去、色プロファイルと向きは残す。SafeFileWriter で書き、読み直して検証（除去漏れ 0・同じ寸法で読める）してから名前を付ける。元ファイルは変更しない。Mark-of-the-Web を引き継ぐ。「コピーを保存」（元の隣に「…（メタデータなし）」）と「クリップボードにコピー」（一時コピー、24 時間で削除） E2E `share-check`、単体 `MetadataTests`。**2026-11-02 追加**: HEIF/AVIF・TIFF/RAW 等は変換したコピー（JPEG/PNG、向き適用・sRGB）で除去。変換は別プロセスのワーカー（メモリ・CPU 上限付き、§4.7.15） E2E `share-convert`（HEIC → JPEG）、単体 `HeifAndExportTests`・`RotationAndExportTests`。実機の RAW は手動確認待ち。2026-11-02: 処理を本体と共通化（Mavue.Image/Export・Mavue.Viewer）、変換が必要でデコードできない形式はボタンを出さず理由を表示（2026-11-03 回帰 E2E PASS） |
 | F03.44 | Drag out of Quick View | Implemented | G-1/G-2。Phase 1（2026-10-29）。情報バーのファイル名、または画面に収まっている画像からドラッグ（拡大してパンできる時はパン）。読み取り専用のファイルを渡し、許可する操作はコピーだけ（同じドライブの Explorer へのドロップでも移動しない）。フォルダーはドラッグしない。E2E `drag-out`（ファイル名・画像の 2 経路）。実機（2026-10-29）: Explorer・Edge・別プロセスの WinForms アプリへコピーできる。**ペイントは受け付けない**（WinUI のドラッグを受け付けない。Explorer からは可。残課題、TESTING「Phase 1 の実機確認」） |
 | F03.45 | Preview pin | Implemented | G-3。Phase 1（2026-10-29）。`PreviewNavigator.IsPinned`（P / ボタン）。固定中は Explorer の選択変更・Explorer の終了・他アプリへの切替で変わらず/閉じず、フックで Explorer のキー（←/→・PageUp/PageDown・Esc）を奪わない。Space（Explorer）・Esc（Quick View 上）・閉じるボタンで閉じる。解除すると Explorer の現在の選択に追従。固定中の ←/→ はフィルムストリップの前後へ。複数 Pin は未実装（構造は ARCHITECTURE §4.7.8）。E2E `pin` |
 | F03.46 | Quick View window design (light, dark, glass) | In Progress | Phase 2（2026-10-30。ARCHITECTURE §4.7.9）。Windows 標準のタイトルバー（ファイル名）と直下のツールバー（44 DIP）を Mica で 1 つの帯に（タイトルバーの拡張・ボタン色の変更は表示が約 10 ms 遅くなるため不採用、実測）。下部の情報行はツールバー左（ドラッグ元）へ。Mica（Base）はバーとフィルムストリップだけ、画像の舞台は不透明（#1E1E1E/#F3F3F3）。性能段階 Low・ハイコントラストでは単色。色はテーマ辞書（Dark/Light/HighContrast）。F6 でツールへ、Esc で戻る。アイコンを見直し（フィルムストリップ・スポイト・固定・「Mavue で開く」）、その他は「…」メニュー。ウィンドウは固定サイズ（利用者の判断）。ダークで実機確認済み、**ライト・ハイコントラストは未確認** |
@@ -144,8 +144,8 @@
 | F07.01 | JPG → PNG | Planned |  |
 | F07.02 | PNG → JPG | Planned |  |
 | F07.03 | WebP | Planned |  |
-| F07.04 | HEIC → JPG | Planned |  |
-| F07.05 | HEIC → PNG | Planned |  |
+| F07.04 | HEIC → JPG | In Progress | メタデータを除いた書き出し（本体・Quick View）の変換としてのみ（2026-11-02、Quick View 経路は E2E `share-convert` 済み）。メタデータを残す一般の変換は未実装 |
+| F07.05 | HEIC → PNG | In Progress | F07.04 と同じ（メタデータを除いた書き出しの変換としてのみ） |
 | F07.06 | TIFF | Planned |  |
 | F07.07 | BMP | Planned |  |
 | F07.08 | GIF | Planned |  |
@@ -155,7 +155,7 @@
 | F07.12 | JPEG quality | Planned |  |
 | F07.13 | PNG compression | Planned |  |
 | F07.14 | metadata preservation | Planned |  |
-| F07.15 | metadata removal | Planned |  |
+| F07.15 | metadata removal | Implemented | Quick View の共有前チェック（F03.43）と、本体の「メタデータを除いて書き出す…」（§4.7.15、SPEC §8 の共通ルール）。2026-11-02 に本体を Quick View と共通化: 同じ読み取り（PrivacyReview）・同じコピー処理（CleanCopy、変換は Mavue.exe 自身のワーカー）・同じ文言と保存先（コピーを保存＝元の隣／クリップボード）＋保存先を選ぶ・形式・画質。SVG・クラウドだけ・コーデックなしは理由を表示。単体 `CleanCopyRulesTests`、E2E `app-export-clean`・`app-export-convert`・`app-export-unsupported`（2026-11-03 PASS）。「保存先を選ぶ…」（保存ダイアログ）は手動確認待ち |
 | F07.16 | batch conversion where practical | Planned |  |
 
 ## SPEC §8. Metadata
@@ -171,7 +171,7 @@
 | F08.07 | Keywords | In Progress | 表示のみ（情報パネル） |
 | F08.08 | GPS | In Progress | 緯度・経度・高度を情報パネルに表示（地図表示は未実装。外部送信なし） |
 | F08.09 | EXIF | In Progress | 主な EXIF（撮影日時・カメラ・レンズ・露出・絞り・ISO・焦点距離）を表示のみ |
-| F08.10 | EXIF removal | Planned |  |
+| F08.10 | EXIF removal | Implemented | Quick View の共有前チェック（F03.43、再エンコードなし: JPEG/PNG/WebP/GIF、変換: HEIF/AVIF・TIFF/RAW）と本体の書き出し（F07.15、2026-11-02 に Quick View と共通化、2026-11-03 に単体・E2E PASS）。HEIF の EXIF/XMP の読み取りを追加（単体・E2E 済み） |
 | F08.11 | ICC profile metadata handling where practical | Planned | ColorSync/Soft Proof は除外 |
 
 ## SPEC §9. PDF Viewer

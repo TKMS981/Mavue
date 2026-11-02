@@ -549,4 +549,163 @@
   <data name="Settings_Licenses" xml:space="preserve">
     <value>License information</value>
   </data>
+  <data name="MainWindow_ExportClean" xml:space="preserve">
+    <value>Export without metadata…</value>
+  </data>
+  <data name="Export_Title" xml:space="preserve">
+    <value>Export without metadata</value>
+  </data>
+  <data name="Export_Remove" xml:space="preserve">
+    <value>Remove</value>
+  </data>
+  <data name="Export_Always" xml:space="preserve">
+    <value>Always removed: serial numbers and IDs, owner name, software and editing history, descriptions and comments, thumbnails and hidden images, maker notes and other data. Kept: color profile and orientation. The original file is not changed.</value>
+  </data>
+  <data name="Export_Format" xml:space="preserve">
+    <value>File type</value>
+  </data>
+  <data name="Export_FormatOriginal" xml:space="preserve">
+    <value>{0} (as it is, not re-encoded)</value>
+  </data>
+  <data name="Export_FormatJpeg" xml:space="preserve">
+    <value>JPEG (converted)</value>
+  </data>
+  <data name="Export_FormatPng" xml:space="preserve">
+    <value>PNG (converted, lossless)</value>
+  </data>
+  <data name="Export_Quality" xml:space="preserve">
+    <value>JPEG quality</value>
+  </data>
+  <data name="Export_ConvertsNote" xml:space="preserve">
+    <value>The image is converted: orientation applied, colors in sRGB, 8 bits per channel. The values you keep are written to the new file.</value>
+  </data>
+  <data name="Export_Choose" xml:space="preserve">
+    <value>Choose where…</value>
+  </data>
+  <data name="Export_FileName" xml:space="preserve">
+    <value>{0} (no metadata)</value>
+  </data>
+  <data name="Export_Working" xml:space="preserve">
+    <value>Removing metadata…</value>
+  </data>
+  <data name="Export_Converting" xml:space="preserve">
+    <value>Converting and removing metadata…</value>
+  </data>
+  <data name="Export_Done" xml:space="preserve">
+    <value>Exported "{0}" ({1} of metadata removed). The original was not changed.</value>
+  </data>
+  <data name="Export_DoneConverted" xml:space="preserve">
+    <value>Exported "{0}" as a converted copy ({1} of metadata removed). The original was not changed.</value>
+  </data>
+  <data name="Export_NotOriginal" xml:space="preserve">
+    <value>The original file cannot be the destination. Choose another name or folder.</value>
+  </data>
+  <data name="Export_NotVerified" xml:space="preserve">
+    <value>The copy could not be verified, so nothing was saved.</value>
+  </data>
+  <data name="Export_NoCodec" xml:space="preserve">
+    <value>Windows cannot read this image (an extension such as HEIF or Raw Image may be missing).</value>
+  </data>
+  <data name="Export_TooLarge" xml:space="preserve">
+    <value>This image is too large to convert.</value>
+  </data>
+  <data name="Export_Failed" xml:space="preserve">
+    <value>The export failed.</value>
+  </data>
+  <data name="Export_Nothing" xml:space="preserve">
+    <value>No private metadata was found.</value>
+  </data>
+  <data name="Export_Kind_Location" xml:space="preserve">
+    <value>Location</value>
+  </data>
+  <data name="Export_Kind_CaptureTime" xml:space="preserve">
+    <value>Date and time taken</value>
+  </data>
+  <data name="Export_Kind_CameraDetails" xml:space="preserve">
+    <value>Camera and settings</value>
+  </data>
+  <data name="Export_Kind_AuthorCopyright" xml:space="preserve">
+    <value>Author and copyright</value>
+  </data>
+  <data name="Export_Kind_DeviceIdentity" xml:space="preserve">
+    <value>Serial numbers and IDs</value>
+  </data>
+  <data name="Export_Kind_OwnerName" xml:space="preserve">
+    <value>Camera owner's name</value>
+  </data>
+  <data name="Export_Kind_EditingSoftware" xml:space="preserve">
+    <value>Software and editing history</value>
+  </data>
+  <data name="Export_Kind_Descriptions" xml:space="preserve">
+    <value>Titles, descriptions and comments</value>
+  </data>
+  <data name="Export_Kind_EmbeddedImages" xml:space="preserve">
+    <value>Thumbnails and hidden images or data (may show what was cropped)</value>
+  </data>
+  <data name="Export_Kind_MakerNote" xml:space="preserve">
+    <value>Maker notes (manufacturer data)</value>
+  </data>
+  <data name="Export_Kind_OtherData" xml:space="preserve">
+    <value>Other application data</value>
+  </data>
+  <data name="Export_Kind_ColorProfile" xml:space="preserve">
+    <value>Color profile (kept)</value>
+  </data>
+  <data name="Settings_SimilarSensitivity" xml:space="preserve">
+    <value>Quick View: similar images</value>
+  </data>
+  <data name="Settings_SimilarLoose" xml:space="preserve">
+    <value>Loosely similar (64% and more)</value>
+  </data>
+  <data name="Settings_SimilarNormal" xml:space="preserve">
+    <value>Similar (72% and more)</value>
+  </data>
+  <data name="Settings_SimilarStrict" xml:space="preserve">
+    <value>Nearly identical (84% and more)</value>
+  </data>
+  <data name="Settings_SimilarSubfolders" xml:space="preserve">
+    <value>Include subfolders</value>
+  </data>
+  <data name="Settings_SimilarRotations" xml:space="preserve">
+    <value>Also find rotated and mirrored copies</value>
+  </data>
+  <data name="Settings_SimilarClearCache" xml:space="preserve">
+    <value>Delete the search cache ({0})</value>
+  </data>
+  <data name="Settings_SimilarHint" xml:space="preserve">
+    <value>The search runs only when you start it in Quick View. The cache keeps image signatures (not file names) to make repeated searches fast.</value>
+  </data>
+  <data name="Export_SaveNext" xml:space="preserve">
+    <value>Save a copy</value>
+  </data>
+  <data name="Export_SaveNextTip" xml:space="preserve">
+    <value>Saves "… (no metadata)" next to the original</value>
+  </data>
+  <data name="Export_ToClipboard" xml:space="preserve">
+    <value>Copy to clipboard</value>
+  </data>
+  <data name="Export_DoneSaved" xml:space="preserve">
+    <value>Saved "{0}" next to the original ({1} removed).</value>
+  </data>
+  <data name="Export_DoneClipboard" xml:space="preserve">
+    <value>A clean copy of "{0}" is on the clipboard ({1} removed). Paste it where you want to share it.</value>
+  </data>
+  <data name="Export_DoneFallback" xml:space="preserve">
+    <value>This folder cannot be written to, so the clean copy "{0}" was put on the clipboard instead ({1} removed).</value>
+  </data>
+  <data name="Export_NotWritable" xml:space="preserve">
+    <value>This place cannot be written to (read-only or no permission). Choose another place.</value>
+  </data>
+  <data name="Export_ShowInFolder" xml:space="preserve">
+    <value>Show in folder</value>
+  </data>
+  <data name="Export_Svg" xml:space="preserve">
+    <value>SVG drawings are text files and are not handled by this command. Their title, description and author can be removed by editing the file. The original was not changed.</value>
+  </data>
+  <data name="Export_Cloud" xml:space="preserve">
+    <value>This file is only in the cloud and has not been downloaded to this PC. Download it first (for example "Always keep on this device"), then try again.</value>
+  </data>
+  <data name="Export_FirstFrame" xml:space="preserve">
+    <value>An animation keeps only its first frame.</value>
+  </data>
 </root>

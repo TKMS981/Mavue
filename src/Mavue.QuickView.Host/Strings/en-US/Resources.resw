@@ -450,4 +450,280 @@
   <data name="QuickView_Html_NoWebView" xml:space="preserve">
     <value>The WebView2 runtime is not available, so the HTML source is shown.</value>
   </data>
+  <data name="QuickView_Exif" xml:space="preserve">
+    <value>Shooting information (E)</value>
+  </data>
+  <data name="QuickView_ShareCheck" xml:space="preserve">
+    <value>Check before sharing</value>
+  </data>
+  <data name="QuickView_Similar" xml:space="preserve">
+    <value>Find similar images in this folder</value>
+  </data>
+  <data name="QuickView_Exif_NoCamera" xml:space="preserve">
+    <value>No camera information</value>
+  </data>
+  <data name="QuickView_Exif_HasLocation" xml:space="preserve">
+    <value>Location</value>
+  </data>
+  <data name="QuickView_Exif_HasPerson" xml:space="preserve">
+    <value>Names</value>
+  </data>
+  <data name="QuickView_Exif_HasSerial" xml:space="preserve">
+    <value>Serial no.</value>
+  </data>
+  <data name="QuickView_Exif_More" xml:space="preserve">
+    <value>Details</value>
+  </data>
+  <data name="QuickView_Exif_Less" xml:space="preserve">
+    <value>Fewer details</value>
+  </data>
+  <data name="QuickView_Exif_ShareCheck" xml:space="preserve">
+    <value>Check before sharing…</value>
+  </data>
+  <data name="QuickView_Exif_FlashOn" xml:space="preserve">
+    <value>Fired</value>
+  </data>
+  <data name="QuickView_Exif_FlashOff" xml:space="preserve">
+    <value>Did not fire</value>
+  </data>
+  <data name="QuickView_Exif_WbManual" xml:space="preserve">
+    <value>Manual</value>
+  </data>
+  <data name="QuickView_Exif_WbAuto" xml:space="preserve">
+    <value>Auto</value>
+  </data>
+  <data name="QuickView_Exif_None" xml:space="preserve">
+    <value>This image has no shooting information.</value>
+  </data>
+  <data name="QuickView_Exif_Taken" xml:space="preserve">
+    <value>Taken</value>
+  </data>
+  <data name="QuickView_Exif_Camera" xml:space="preserve">
+    <value>Camera</value>
+  </data>
+  <data name="QuickView_Exif_Lens" xml:space="preserve">
+    <value>Lens</value>
+  </data>
+  <data name="QuickView_Exif_Aperture" xml:space="preserve">
+    <value>Aperture</value>
+  </data>
+  <data name="QuickView_Exif_Exposure" xml:space="preserve">
+    <value>Shutter</value>
+  </data>
+  <data name="QuickView_Exif_Iso" xml:space="preserve">
+    <value>ISO</value>
+  </data>
+  <data name="QuickView_Exif_FocalLength" xml:space="preserve">
+    <value>Focal length</value>
+  </data>
+  <data name="QuickView_Exif_Bias" xml:space="preserve">
+    <value>Exposure comp.</value>
+  </data>
+  <data name="QuickView_Exif_Flash" xml:space="preserve">
+    <value>Flash</value>
+  </data>
+  <data name="QuickView_Exif_WhiteBalance" xml:space="preserve">
+    <value>White balance</value>
+  </data>
+  <data name="QuickView_Exif_Pixels" xml:space="preserve">
+    <value>Pixels</value>
+  </data>
+  <data name="QuickView_Exif_Orientation" xml:space="preserve">
+    <value>Orientation</value>
+  </data>
+  <data name="QuickView_Exif_Location" xml:space="preserve">
+    <value>Location</value>
+  </data>
+  <data name="QuickView_Exif_Software" xml:space="preserve">
+    <value>Software</value>
+  </data>
+  <data name="QuickView_Exif_Author" xml:space="preserve">
+    <value>Author</value>
+  </data>
+  <data name="QuickView_Exif_Copyright" xml:space="preserve">
+    <value>Copyright</value>
+  </data>
+  <data name="QuickView_Exif_Description" xml:space="preserve">
+    <value>Description</value>
+  </data>
+  <data name="QuickView_Exif_Serial" xml:space="preserve">
+    <value>Serial no.</value>
+  </data>
+  <data name="QuickView_Exif_Owner" xml:space="preserve">
+    <value>Owner</value>
+  </data>
+  <data name="QuickView_Exif_Blocks" xml:space="preserve">
+    <value>Metadata</value>
+  </data>
+  <data name="QuickView_Share_Title" xml:space="preserve">
+    <value>Check before sharing</value>
+  </data>
+  <data name="QuickView_Share_Nothing" xml:space="preserve">
+    <value>No private metadata was found.</value>
+  </data>
+  <data name="QuickView_Share_Unsupported" xml:space="preserve">
+    <value>Mavue cannot remove metadata from this format yet (JPEG, PNG, WebP and GIF are supported).</value>
+  </data>
+  <data name="QuickView_Share_Remove" xml:space="preserve">
+    <value>Remove from the copy</value>
+  </data>
+  <data name="QuickView_Share_Always" xml:space="preserve">
+    <value>Always removed: serial numbers and IDs, owner name, software and editing history, descriptions and comments, thumbnails and hidden images, maker notes and other data. Kept: color profile and orientation. The original file is not changed.</value>
+  </data>
+  <data name="QuickView_Share_ToClipboard" xml:space="preserve">
+    <value>Copy to clipboard</value>
+  </data>
+  <data name="QuickView_Share_Save" xml:space="preserve">
+    <value>Save a copy</value>
+  </data>
+  <data name="QuickView_Share_Working" xml:space="preserve">
+    <value>Making a clean copy…</value>
+  </data>
+  <data name="QuickView_Share_CopyName" xml:space="preserve">
+    <value>{0} (no metadata)</value>
+  </data>
+  <data name="QuickView_Share_DoneClipboard" xml:space="preserve">
+    <value>A clean copy of "{0}" is on the clipboard ({1} removed). Paste it where you want to share it.</value>
+  </data>
+  <data name="QuickView_Share_DoneSaved" xml:space="preserve">
+    <value>Saved "{0}" next to the original ({1} removed).</value>
+  </data>
+  <data name="QuickView_Share_DoneFallback" xml:space="preserve">
+    <value>This folder cannot be written to, so the clean copy "{0}" was put on the clipboard instead ({1} removed).</value>
+  </data>
+  <data name="QuickView_Share_NotVerified" xml:space="preserve">
+    <value>The copy could not be verified, so it was not created.</value>
+  </data>
+  <data name="QuickView_Share_Failed" xml:space="preserve">
+    <value>The copy could not be made.</value>
+  </data>
+  <data name="QuickView_Share_Kind_Location" xml:space="preserve">
+    <value>Location</value>
+  </data>
+  <data name="QuickView_Share_Kind_CaptureTime" xml:space="preserve">
+    <value>Date and time taken</value>
+  </data>
+  <data name="QuickView_Share_Kind_CameraDetails" xml:space="preserve">
+    <value>Camera and settings</value>
+  </data>
+  <data name="QuickView_Share_Kind_AuthorCopyright" xml:space="preserve">
+    <value>Author and copyright</value>
+  </data>
+  <data name="QuickView_Share_Kind_DeviceIdentity" xml:space="preserve">
+    <value>Serial numbers and IDs</value>
+  </data>
+  <data name="QuickView_Share_Kind_OwnerName" xml:space="preserve">
+    <value>Camera owner's name</value>
+  </data>
+  <data name="QuickView_Share_Kind_EditingSoftware" xml:space="preserve">
+    <value>Software and editing history</value>
+  </data>
+  <data name="QuickView_Share_Kind_Descriptions" xml:space="preserve">
+    <value>Titles, descriptions and comments</value>
+  </data>
+  <data name="QuickView_Share_Kind_EmbeddedImages" xml:space="preserve">
+    <value>Thumbnails and hidden images or data (may show what was cropped)</value>
+  </data>
+  <data name="QuickView_Share_Kind_MakerNote" xml:space="preserve">
+    <value>Maker notes (manufacturer data)</value>
+  </data>
+  <data name="QuickView_Share_Kind_OtherData" xml:space="preserve">
+    <value>Other application data</value>
+  </data>
+  <data name="QuickView_Share_Kind_ColorProfile" xml:space="preserve">
+    <value>Color profile (kept)</value>
+  </data>
+  <data name="QuickView_Similar_Title" xml:space="preserve">
+    <value>Similar images</value>
+  </data>
+  <data name="QuickView_Similar_Subfolders" xml:space="preserve">
+    <value>Include subfolders</value>
+  </data>
+  <data name="QuickView_Similar_Stop" xml:space="preserve">
+    <value>Stop</value>
+  </data>
+  <data name="QuickView_Similar_Close" xml:space="preserve">
+    <value>Close similar images</value>
+  </data>
+  <data name="QuickView_Similar_Listing" xml:space="preserve">
+    <value>Listing files…</value>
+  </data>
+  <data name="QuickView_Similar_Coarse" xml:space="preserve">
+    <value>Comparing {0} of {1} images ({2} candidates)</value>
+  </data>
+  <data name="QuickView_Similar_Fine" xml:space="preserve">
+    <value>Checking {0} of {1} candidates ({2} similar)</value>
+  </data>
+  <data name="QuickView_Similar_Thumbnails" xml:space="preserve">
+    <value>Preparing {0} of {1} results</value>
+  </data>
+  <data name="QuickView_Similar_Done" xml:space="preserve">
+    <value>{0} similar images among {1} ({2} s)</value>
+  </data>
+  <data name="QuickView_Similar_NoneFound" xml:space="preserve">
+    <value>No similar images among {1} ({2} s)</value>
+  </data>
+  <data name="QuickView_Similar_Truncated" xml:space="preserve">
+    <value>Only the first images of this folder were compared.</value>
+  </data>
+  <data name="QuickView_Similar_Cancelled" xml:space="preserve">
+    <value>Stopped.</value>
+  </data>
+  <data name="QuickView_Similar_StartFailed" xml:space="preserve">
+    <value>The search could not be started.</value>
+  </data>
+  <data name="QuickView_Similar_TargetUnreadable" xml:space="preserve">
+    <value>This image cannot be compared.</value>
+  </data>
+  <data name="QuickView_Similar_Failed" xml:space="preserve">
+    <value>The search stopped because of an error.</value>
+  </data>
+  <data name="QuickView_Similar_ResultTip" xml:space="preserve">
+    <value>{0} — {1}% similar, {2} × {3}</value>
+  </data>
+  <data name="QuickView_Share_Converts" xml:space="preserve">
+    <value>This format cannot keep its type without its metadata here: the clean copy is converted (upright, sRGB colors, 8 bits per channel). The original is not changed.</value>
+  </data>
+  <data name="QuickView_Share_Converting" xml:space="preserve">
+    <value>Converting and removing metadata…</value>
+  </data>
+  <data name="QuickView_Share_NoCodec" xml:space="preserve">
+    <value>Windows cannot read this image (an extension such as HEIF or Raw Image may be missing).</value>
+  </data>
+  <data name="QuickView_Share_TooLarge" xml:space="preserve">
+    <value>This image is too large to convert.</value>
+  </data>
+  <data name="QuickView_Similar_Options" xml:space="preserve">
+    <value>Search settings</value>
+  </data>
+  <data name="QuickView_Similar_Loose" xml:space="preserve">
+    <value>Loosely similar (64% and more)</value>
+  </data>
+  <data name="QuickView_Similar_Normal" xml:space="preserve">
+    <value>Similar (72% and more)</value>
+  </data>
+  <data name="QuickView_Similar_Strict" xml:space="preserve">
+    <value>Nearly identical (84% and more)</value>
+  </data>
+  <data name="QuickView_Similar_Rotations" xml:space="preserve">
+    <value>Also find rotated and mirrored copies</value>
+  </data>
+  <data name="QuickView_Similar_ClearCache" xml:space="preserve">
+    <value>Delete the search cache ({0})</value>
+  </data>
+  <data name="QuickView_Similar_CacheCleared" xml:space="preserve">
+    <value>The search cache was deleted ({0}).</value>
+  </data>
+  <data name="QuickView_Similar_CacheBusy" xml:space="preserve">
+    <value>The search cache is in use; try again in a moment.</value>
+  </data>
+  <data name="QuickView_Similar_MatchedRotated" xml:space="preserve">
+    <value>Matches when turned by {0}°</value>
+  </data>
+  <data name="QuickView_Similar_MatchedMirrored" xml:space="preserve">
+    <value>Matches when mirrored and turned by {0}°</value>
+  </data>
+  <data name="QuickView_Share_NotWritable" xml:space="preserve">
+    <value>This place cannot be written to (read-only or no permission).</value>
+  </data>
 </root>

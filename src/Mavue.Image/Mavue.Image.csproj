@@ -9,5 +9,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Mavue.Core\Mavue.Core.csproj" />
+    <ProjectReference Include="..\Mavue.Metadata\Mavue.Metadata.csproj" />
   </ItemGroup>
 </Project>

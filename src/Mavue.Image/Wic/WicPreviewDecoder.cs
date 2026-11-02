@@ -130,9 +130,19 @@ public static class WicPreviewDecoder
     /// <param name="cancellationToken">Checked between pipeline steps.</param>
     /// <returns>The pixels, or null if the image needs color management (caller should use another path).</returns>
     /// <exception cref="ImageTooLargeException">The image exceeds <paramref name="maxSourcePixels"/>.</exception>
-    public static DecodedPixels? DecodeToFit(string path, uint maxWidth, uint maxHeight, long maxSourcePixels = long.MaxValue, CancellationToken cancellationToken = default)
+    public static DecodedPixels? DecodeToFit(string path, uint maxWidth, uint maxHeight, long maxSourcePixels = long.MaxValue, CancellationToken cancellationToken = default) =>
+        DecodeToFit(path, maxWidth, maxHeight, maxSourcePixels, ignoreColorProfile: false, cancellationToken);
+
+    /// <summary>
+    /// Like <see cref="DecodeToFit(string, uint, uint, long, CancellationToken)"/>, but also decodes images with an ICC
+    /// profile, without color management: for analysis (the similar-image search), never for display.
+    /// </summary>
+    public static DecodedPixels? DecodeForAnalysis(string path, uint maxWidth, uint maxHeight, long maxSourcePixels, CancellationToken cancellationToken) =>
+        DecodeToFit(path, maxWidth, maxHeight, maxSourcePixels, ignoreColorProfile: true, cancellationToken);
+
+    private static DecodedPixels? DecodeToFit(string path, uint maxWidth, uint maxHeight, long maxSourcePixels, bool ignoreColorProfile, CancellationToken cancellationToken)
     {
-        using WicPreparedImage? prepared = Prepare(path, maxWidth, maxHeight, maxSourcePixels, cancellationToken);
+        using WicPreparedImage? prepared = Prepare(path, maxWidth, maxHeight, maxSourcePixels, ignoreColorProfile, cancellationToken);
         return prepared is null
             ? null
             : new DecodedPixels(prepared.Width, prepared.Height, prepared.CopyPixels(), prepared.SourceWidth, prepared.SourceHeight, prepared.Orientation);
@@ -144,7 +154,10 @@ public static class WicPreviewDecoder
     /// </summary>
     /// <returns>The prepared pipeline (dispose it), or null if the image needs color management.</returns>
     /// <exception cref="ImageTooLargeException">The image exceeds <paramref name="maxSourcePixels"/>.</exception>
-    public static WicPreparedImage? Prepare(string path, uint maxWidth, uint maxHeight, long maxSourcePixels = long.MaxValue, CancellationToken cancellationToken = default)
+    public static WicPreparedImage? Prepare(string path, uint maxWidth, uint maxHeight, long maxSourcePixels = long.MaxValue, CancellationToken cancellationToken = default) =>
+        Prepare(path, maxWidth, maxHeight, maxSourcePixels, ignoreColorProfile: false, cancellationToken);
+
+    private static WicPreparedImage? Prepare(string path, uint maxWidth, uint maxHeight, long maxSourcePixels, bool ignoreColorProfile, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
         nint factory = 0, decoder = 0, frame = 0, scaler = 0, flipRotator = 0, converter = 0;
@@ -154,7 +167,7 @@ public static class WicPreviewDecoder
             factory = WicNative.CreateFactory();
             WicNative.Check(WicNative.CreateDecoderFromFilename(factory, path, out decoder));
             frame = WicNative.GetFrame(decoder, 0);
-            if (!IsSrgbOrUntagged(factory, frame))
+            if (!ignoreColorProfile && !IsSrgbOrUntagged(factory, frame))
             {
                 return null;
             }
