@@ -57,6 +57,9 @@ internal sealed class QuickViewSettingsStore
 
     public bool SimilarDetectRotations { get; set; } = true;
 
+    /// <summary>How see-through the background is, in percent (0 = opaque; set in Mavue's settings).</summary>
+    public int BackgroundTransparency { get; private set; } = QuickViewSettings.DefaultBackgroundTransparency;
+
     /// <summary>The image scale changed on a reload (decoded previews were made for the other mode's box).</summary>
     public event Action? ScaleModeChanged;
 
@@ -92,12 +95,13 @@ internal sealed class QuickViewSettingsStore
         SimilarSensitivity = settings.SimilarSensitivity;
         SimilarIncludeSubfolders = settings.SimilarIncludeSubfolders;
         SimilarDetectRotations = settings.SimilarDetectRotations;
+        BackgroundTransparency = settings.BackgroundTransparency;
         if (!force && previous != ScaleMode)
         {
             ScaleModeChanged?.Invoke();
         }
 
-        _timeline.Mark(0, "settings-loaded", QuickViewTimeline.Now, new Dictionary<string, object?> { ["imageScale"] = ScaleMode.ToString(), ["pdfLayout"] = PdfLayout.ToString() });
+        _timeline.Mark(0, "settings-loaded", QuickViewTimeline.Now, new Dictionary<string, object?> { ["imageScale"] = ScaleMode.ToString(), ["pdfLayout"] = PdfLayout.ToString(), ["transparency"] = BackgroundTransparency });
     }
 
     /// <summary>Remembers a choice in the settings file (re-read before writing; off the UI thread).</summary>

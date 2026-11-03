@@ -3,6 +3,7 @@ using Mavue.Core.Settings;
 using Mavue.Core.Similarity;
 using Mavue.Core.Viewing;
 using Mavue.Shell;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.Win32;
@@ -54,6 +55,7 @@ internal sealed partial class SettingsPanel : UserControl
             [("Settings_ScaleFit", ImageScaleMode.FitNoUpscale), ("Settings_ScaleActual", ImageScaleMode.ActualSize)],
             quickView.ImageScale,
             scale => _ = SaveQuickViewAsync(scale)));
+        panel.Children.Add(TransparencyChoice(quickView.BackgroundTransparency));
 
         // Quick View's similar-image search: run only when asked; these choose what it lists and clear its cache.
         var similar = new StackPanel { Spacing = 8 };
@@ -166,6 +168,69 @@ internal sealed partial class SettingsPanel : UserControl
     {
         string? version = typeof(SettingsPanel).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
         return version is null ? "?" : version.Split('+')[0];
+    }
+
+    /// <summary>
+    /// Quick View's background transparency: a slider from opaque to lightly see-through, the value in words, and a
+    /// way back to the default. Saved a moment after the slider stops (dragging would otherwise write the file on
+    /// every step); Quick View applies it the next time it opens.
+    /// </summary>
+    private StackPanel TransparencyChoice(int current)
+    {
+        var group = new StackPanel { Spacing = 4 };
+        group.Children.Add(Header("Settings_QuickViewTransparency"));
+        var slider = new Slider
+        {
+            Minimum = 0,
+            Maximum = QuickViewSettings.MaxBackgroundTransparency,
+            StepFrequency = 1,
+            SmallChange = 1,
+            LargeChange = 5,
+            TickFrequency = 5,
+            TickPlacement = Microsoft.UI.Xaml.Controls.Primitives.TickPlacement.Outside,
+            Value = current,
+            MaxWidth = 360,
+            HorizontalAlignment = HorizontalAlignment.Left,
+        };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(slider, MainWindow.Text("Settings_QuickViewTransparency"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetHelpText(slider, MainWindow.Text("Settings_QuickViewTransparencyHint")); // read with the slider
+        var value = new TextBlock { Opacity = 0.75 };
+        var reset = new HyperlinkButton { Content = MainWindow.Text("Settings_TransparencyReset"), Padding = new Thickness(0) };
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 16 };
+        row.Children.Add(value);
+        row.Children.Add(reset);
+
+        DispatcherQueueTimer save = DispatcherQueue.CreateTimer();
+        save.Interval = TimeSpan.FromMilliseconds(300);
+        save.IsRepeating = false;
+        save.Tick += (_, _) =>
+        {
+            int chosen = (int)Math.Round(slider.Value);
+            _ = SaveQuickViewAsync(s => s with { BackgroundTransparency = chosen });
+        };
+
+        void ShowValue()
+        {
+            int percent = (int)Math.Round(slider.Value);
+            value.Text = percent == 0 ? MainWindow.Text("Settings_TransparencyOpaque")
+                : percent == QuickViewSettings.DefaultBackgroundTransparency ? MainWindow.Format("Settings_TransparencyDefault", percent)
+                : MainWindow.Format("Settings_TransparencyValue", percent);
+            reset.IsEnabled = percent != QuickViewSettings.DefaultBackgroundTransparency;
+        }
+
+        slider.ValueChanged += (_, _) =>
+        {
+            ShowValue();
+            save.Stop();
+            save.Start();
+        };
+        reset.Click += (_, _) => slider.Value = QuickViewSettings.DefaultBackgroundTransparency;
+        ShowValue();
+
+        group.Children.Add(slider);
+        group.Children.Add(row);
+        group.Children.Add(new TextBlock { Text = MainWindow.Text("Settings_QuickViewTransparencyHint"), TextWrapping = TextWrapping.Wrap, Opacity = 0.75 });
+        return group;
     }
 
     private static TextBlock Header(string key) => new() { Text = MainWindow.Text(key), Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] };

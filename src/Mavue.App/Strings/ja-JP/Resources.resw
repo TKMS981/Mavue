@@ -708,6 +708,24 @@
   <data name="Export_FirstFrame" xml:space="preserve">
     <value>アニメーションは最初のフレームだけになります。</value>
   </data>
+  <data name="Settings_QuickViewTransparency" xml:space="preserve">
+    <value>Quick View の背景の透明度</value>
+  </data>
+  <data name="Settings_QuickViewTransparencyHint" xml:space="preserve">
+    <value>背景だけが、ぼかした状態でうっすら透けます。画像・PDF のページ・文字の色は変わりません。ハイコントラストのときと、Windows の「透明効果」がオフのときは不透明です。次に Quick View を開いたときから反映されます。</value>
+  </data>
+  <data name="Settings_TransparencyOpaque" xml:space="preserve">
+    <value>0%（不透明）</value>
+  </data>
+  <data name="Settings_TransparencyDefault" xml:space="preserve">
+    <value>{0}%（標準）</value>
+  </data>
+  <data name="Settings_TransparencyValue" xml:space="preserve">
+    <value>{0}%</value>
+  </data>
+  <data name="Settings_TransparencyReset" xml:space="preserve">
+    <value>標準に戻す</value>
+  </data>
   <data name="Export_Level_High" xml:space="preserve">
     <value>要注意: {0}</value>
   </data>

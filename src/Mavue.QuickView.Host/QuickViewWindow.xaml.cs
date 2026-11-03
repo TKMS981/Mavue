@@ -94,7 +94,7 @@ public sealed partial class QuickViewWindow : Window
         // Extending content into it or recoloring its buttons cost ~10 ms on every show (measured 2026-10-30).
         AppWindow.TitleBar.PreferredTheme = TitleBarTheme.UseDefaultAppMode;
 
-        SetBackdrop(true);
+        SetBackdrop(true, Mavue.Core.Settings.QuickViewSettings.DefaultBackgroundTransparency);
         ApplyTheme(IsDarkTheme());
         _uiSettings.ColorValuesChanged += (_, _) => DispatcherQueue.TryEnqueue(() => ApplyTheme(IsDarkTheme()));
         // ColorValuesChanged also reports high contrast turning on or off (AccessibilitySettings.HighContrastChanged
@@ -104,41 +104,78 @@ public sealed partial class QuickViewWindow : Window
 
     private readonly Windows.UI.ViewManagement.UISettings _uiSettings = new();
     private readonly Windows.UI.ViewManagement.AccessibilitySettings _accessibility = new();
-    private bool _backdrop;
+    private QuickViewBackdrop _backdrop;
     private bool _backdropWanted = true;
+    private int _transparency;
+    private Presentation.TintedAcrylicBackdrop? _acrylic;
 
     /// <summary>Height of the top bar in device-independent pixels (fixed, so the image area is known before layout).</summary>
     public const double TopBarHeight = 44;
 
     /// <summary>
-    /// Mica (Base: the least tinted by the wallpaper) behind the chrome — top bar and filmstrip — only; the stage
-    /// behind the image is always opaque. Off (solid chrome) for the Low performance tier and in high contrast;
-    /// Windows itself shows a solid color when transparency effects are off or energy saver is on.
+    /// The window's background (docs/ARCHITECTURE.md §4.7.9). Transparency 0: Mica (Base: the least tinted by the
+    /// wallpaper) behind the chrome — title bar, top bar and filmstrip — and an opaque stage behind the image.
+    /// Transparency above 0: one tinted, frosted acrylic behind the whole window (title bar, chrome and stage), at
+    /// that see-through share. Images, PDF pages, text views and overlays are drawn opaque on top, so their colors
+    /// never change. Solid colors for the Low performance tier (<paramref name="wanted"/> false) and in high contrast.
+    /// Only changes the backdrop when the choice changed (no cost on an ordinary show).
     /// </summary>
-    public void SetBackdrop(bool wanted)
+    public void SetBackdrop(bool wanted, int transparency)
     {
         _backdropWanted = wanted;
-        bool on = wanted && !_accessibility.HighContrast && Microsoft.UI.Composition.SystemBackdrops.MicaController.IsSupported();
-        if (on == _backdrop && (SystemBackdrop is not null) == on)
+        _transparency = Math.Clamp(transparency, 0, Mavue.Core.Settings.QuickViewSettings.MaxBackgroundTransparency);
+        QuickViewBackdrop kind = !wanted || _accessibility.HighContrast ? QuickViewBackdrop.Solid
+            : _transparency > 0 && Presentation.TintedAcrylicBackdrop.IsSupported ? QuickViewBackdrop.Acrylic
+            : Microsoft.UI.Composition.SystemBackdrops.MicaController.IsSupported() ? QuickViewBackdrop.Mica
+            : QuickViewBackdrop.Solid;
+        if (kind == _backdrop && (SystemBackdrop is not null) == (kind != QuickViewBackdrop.Solid))
         {
+            _acrylic?.Update(StageColor(), AcrylicOpacity, IsDark);
             return;
         }
 
-        _backdrop = on;
-        SystemBackdrop = on ? new MicaBackdrop { Kind = Microsoft.UI.Composition.SystemBackdrops.MicaKind.Base } : null;
+        _backdrop = kind;
+        if (kind == QuickViewBackdrop.Acrylic)
+        {
+            _acrylic ??= new Presentation.TintedAcrylicBackdrop(StageColor(), AcrylicOpacity, IsDark);
+            _acrylic.Update(StageColor(), AcrylicOpacity, IsDark);
+        }
+
+        SystemBackdrop = kind switch
+        {
+            QuickViewBackdrop.Mica => new MicaBackdrop { Kind = Microsoft.UI.Composition.SystemBackdrops.MicaKind.Base },
+            QuickViewBackdrop.Acrylic => _acrylic,
+            _ => null,
+        };
         ApplyChromeBackground();
     }
 
-    /// <summary>True while Mica shows behind the chrome.</summary>
-    public bool HasBackdrop => _backdrop;
+    /// <summary>What shows behind the window now (for the timeline).</summary>
+    public QuickViewBackdrop Backdrop => _backdrop;
+
+    /// <summary>The see-through share in use (0 unless <see cref="Backdrop"/> is acrylic).</summary>
+    public int EffectiveTransparency => _backdrop == QuickViewBackdrop.Acrylic ? _transparency : 0;
+
+    private float AcrylicOpacity => 1f - (_transparency / 100f);
+
+    private Windows.UI.Color StageColor() => ((SolidColorBrush)Themed("QvStageBrush")).Color;
 
     private void ApplyChromeBackground()
     {
-        Brush chrome = _backdrop ? new SolidColorBrush(Colors.Transparent) : Themed("QvChromeSolidBrush");
+        var clear = new SolidColorBrush(Colors.Transparent);
+        bool overBackdrop = _backdrop != QuickViewBackdrop.Solid;
+        Brush chrome = overBackdrop ? clear : Themed("QvChromeSolidBrush");
         TopBar.Background = chrome;
         FilmstripHost.Background = chrome;
         SimilarHost.Background = chrome;
-        Root.Background = _backdrop ? new SolidColorBrush(Colors.Transparent) : Themed("QvChromeSolidBrush");
+        Root.Background = chrome;
+
+        // See-through: the stage is the material itself; a hairline under the top bar keeps the bands apart
+        // (with Mica, the tinted bar and the solid stage already read as two bands).
+        bool seeThrough = _backdrop == QuickViewBackdrop.Acrylic;
+        Stage.Background = seeThrough ? clear : Themed("QvStageBrush");
+        SearchHost.Background = seeThrough ? clear : Themed("QvStageBrush");
+        TopBarDivider.Visibility = seeThrough ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>A brush of the window's theme dictionaries for the current theme (for contents that build their own UI).</summary>
@@ -167,7 +204,7 @@ public sealed partial class QuickViewWindow : Window
     {
         IsDark = dark;
         Root.RequestedTheme = dark ? ElementTheme.Dark : ElementTheme.Light;
-        SetBackdrop(_backdropWanted); // off in high contrast, back on afterwards
+        SetBackdrop(_backdropWanted, _transparency); // off in high contrast, back on afterwards; acrylic takes the new stage color
 
         ApplyChromeBackground();
         Surface.SetTextColors(Themed("QvPrimaryTextBrush"), Themed("QvSecondaryTextBrush"));
@@ -1092,4 +1129,17 @@ public enum QuickViewPdfCommand
 
     FocusPageBox,
     SelectAll,
+}
+
+/// <summary>What shows behind Quick View's window.</summary>
+public enum QuickViewBackdrop
+{
+    /// <summary>Solid colors (high contrast, Low performance tier, no backdrop support).</summary>
+    Solid,
+
+    /// <summary>Mica behind the chrome, opaque stage (transparency 0).</summary>
+    Mica,
+
+    /// <summary>Tinted acrylic behind the whole window (transparency above 0).</summary>
+    Acrylic,
 }

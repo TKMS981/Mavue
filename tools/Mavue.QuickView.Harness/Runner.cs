@@ -56,6 +56,12 @@ internal sealed record HarnessOptions
     /// <summary>Extra command-line arguments passed to the host (e.g. "--no-idle-trim").</summary>
     public string HostExtraArgs { get; init; } = string.Empty;
 
+    /// <summary>
+    /// Background transparency written to the host's settings file (default 0: the pixel checks compare against the opaque
+    /// stage color). Set for timing runs only (--transparency 15), to compare Space → preview with the see-through background.
+    /// </summary>
+    public int BackgroundTransparency { get; init; }
+
     /// <summary>Image scale mode written to the host's private settings file: "fit" (default) or "actual".</summary>
     public string ScaleMode { get; init; } = "fit";
 }
@@ -181,6 +187,7 @@ internal sealed partial class Runner(HarnessOptions options, Action<string> log)
                 RunNavigationScenarios(assets);
                 RunTabScenario(assets);
                 RunDisplayScenarios(assets);
+                RunAppearanceScenarios(assets);
                 RunContextMenuScenarios(assets);
                 RunPdfPageScenario(assets);
                 RunQuickViewPdfScenario(assets);
@@ -266,7 +273,7 @@ internal sealed partial class Runner(HarnessOptions options, Action<string> log)
         _log = new TimingLog(logPath);
         // The host gets its own settings file so the user's Quick View preferences are never read or changed.
         string settingsPath = Path.Combine(options.WorkDirectory, "settings-e2e.json");
-        File.WriteAllText(settingsPath, $"{{\"version\": 1, \"imageScale\": \"{(options.ScaleMode == "actual" ? "ActualSize" : "FitNoUpscale")}\"}}");
+        File.WriteAllText(settingsPath, $"{{\"version\": 1, \"imageScale\": \"{(options.ScaleMode == "actual" ? "ActualSize" : "FitNoUpscale")}\"{OpaqueBackground}}}");
         Environment["scaleMode"] = options.ScaleMode;
         string args = $"--activation {options.Activation} --decoder {options.Decoder} --interpolation {options.Interpolation} --timing-log \"{logPath}\" --settings \"{settingsPath}\"" + (options.Prewarm ? string.Empty : " --no-prewarm") + " --trace-shell --no-launch " + options.HostExtraArgs;
         long start = Stopwatch.GetTimestamp();

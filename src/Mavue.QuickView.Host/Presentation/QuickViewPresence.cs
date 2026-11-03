@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Mavue.Core.Viewing;
 using Mavue.QuickView.Diagnostics;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
@@ -75,15 +76,17 @@ internal sealed class QuickViewPresence
         NativeMethods.DwmSetWindowAttribute(_window.Handle, NativeMethods.DWMWA_CLOAK, ref cloak, sizeof(int));
     }
 
-    /// <summary>Centers the window on the owner's monitor (or the primary monitor without an owner).</summary>
+    /// <summary>
+    /// Centers the window on the owner's monitor (or the primary monitor without an owner), at the size
+    /// <see cref="QuickViewWindowSize"/> gives for that monitor's work area and scale.
+    /// </summary>
     public void Place(nint owner, long requestId)
     {
         DisplayArea area = owner != 0
             ? DisplayArea.GetFromWindowId(Win32Interop.GetWindowIdFromWindow(owner), DisplayAreaFallback.Nearest)
             : DisplayArea.Primary;
         RectInt32 work = area.WorkArea;
-        int width = (int)(work.Width * 0.7);
-        int height = (int)(work.Height * 0.75);
+        (int width, int height) = QuickViewWindowSize.For(work.Width, work.Height, MonitorScale(work));
         var target = new RectInt32(work.X + ((work.Width - width) / 2), work.Y + ((work.Height - height) / 2), width, height);
         AppWindow.MoveAndResize(target);
         if (AppWindow.Size.Width != width || AppWindow.Size.Height != height)
@@ -98,7 +101,23 @@ internal sealed class QuickViewPresence
             ["width"] = AppWindow.Size.Width,
             ["height"] = AppWindow.Size.Height,
             ["dpi"] = NativeMethods.GetDpiForWindow(_window.Handle),
+            ["workWidth"] = work.Width,
+            ["workHeight"] = work.Height,
         });
+    }
+
+    /// <summary>DPI / 96 of the monitor that holds <paramref name="work"/> (the window may still be on another monitor).</summary>
+    private double MonitorScale(RectInt32 work)
+    {
+        var center = new NativeMethods.POINT { X = work.X + (work.Width / 2), Y = work.Y + (work.Height / 2) };
+        nint monitor = NativeMethods.MonitorFromPoint(center, NativeMethods.MONITOR_DEFAULTTONEAREST);
+        if (monitor != 0 && NativeMethods.GetDpiForMonitor(monitor, NativeMethods.MDT_EFFECTIVE_DPI, out uint dpi, out _) == 0 && dpi > 0)
+        {
+            return dpi / 96.0;
+        }
+
+        uint windowDpi = NativeMethods.GetDpiForWindow(_window.Handle);
+        return windowDpi > 0 ? windowDpi / 96.0 : 1.0;
     }
 
     /// <summary>Shows the window as the activation mode says (see <see cref="ActivationMode"/>).</summary>

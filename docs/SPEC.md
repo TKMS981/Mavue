@@ -112,6 +112,14 @@ Requirements for all Quick Preview features ("Always Ready, Never Always Working
    Ctrl+wheel zooms around the pointer everywhere it applies.
 7. Dragging out of Quick View copies by default; pinning keeps the current preview from following Explorer's selection.
 
+Quick View window design: the window opens at a moderate size for the monitor it appears on (large enough to see
+the image well, without covering most of the screen), keeping DPI and multi-monitor behavior. Its background can be
+made lightly see-through in settings, from fully opaque to a light, blurred translucency; the default is a light
+translucency chosen so the window looks good without any setting. Transparency applies to the background only: images,
+PDF pages and text keep their own colors and quality, and text, icons and controls stay readable. High contrast,
+Windows' transparency effects being off and low-performance machines show an opaque window. The setting must not slow
+down Space → preview.
+
 ---
 
 # 4. Image Formats

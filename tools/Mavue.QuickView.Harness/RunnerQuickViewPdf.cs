@@ -16,7 +16,7 @@ internal sealed partial class Runner
     /// <summary>The host's settings file for E2E (image scale from the options, optional PDF layout).</summary>
     private void WriteHostSettings(string? pdfLayout = null) => File.WriteAllText(
         HostSettingsPath,
-        $"{{\"version\": 1, \"imageScale\": \"{(options.ScaleMode == "actual" ? "ActualSize" : "FitNoUpscale")}\"{(pdfLayout is null ? string.Empty : $", \"pdfLayout\": \"{pdfLayout}\"")}}}");
+        $"{{\"version\": 1, \"imageScale\": \"{(options.ScaleMode == "actual" ? "ActualSize" : "FitNoUpscale")}\"{(pdfLayout is null ? string.Empty : $", \"pdfLayout\": \"{pdfLayout}\"")}{OpaqueBackground}}}");
 
     private void RunQuickViewPdfScenario(List<TestAsset> assets)
     {

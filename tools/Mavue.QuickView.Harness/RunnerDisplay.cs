@@ -26,8 +26,8 @@ internal sealed partial class Runner
 
     private string SettingsPath => Path.Combine(options.WorkDirectory, "settings-e2e.json");
 
-    private static void WriteScale(string path, string mode) =>
-        File.WriteAllText(path, $"{{\"version\": 1, \"imageScale\": \"{mode}\"}}");
+    private void WriteScale(string path, string mode) =>
+        File.WriteAllText(path, $"{{\"version\": 1, \"imageScale\": \"{mode}\"{OpaqueBackground}}}");
 
     private (bool, string) SettingsReload(List<TestAsset> assets)
     {

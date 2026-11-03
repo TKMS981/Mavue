@@ -708,6 +708,24 @@
   <data name="Export_FirstFrame" xml:space="preserve">
     <value>An animation keeps only its first frame.</value>
   </data>
+  <data name="Settings_QuickViewTransparency" xml:space="preserve">
+    <value>Quick View background transparency</value>
+  </data>
+  <data name="Settings_QuickViewTransparencyHint" xml:space="preserve">
+    <value>Only the background lets the desktop show through, softly blurred. Images, PDF pages and text keep their colors. High contrast and Windows' “Transparency effects” off keep it opaque. Applies the next time Quick View opens.</value>
+  </data>
+  <data name="Settings_TransparencyOpaque" xml:space="preserve">
+    <value>0% (opaque)</value>
+  </data>
+  <data name="Settings_TransparencyDefault" xml:space="preserve">
+    <value>{0}% (default)</value>
+  </data>
+  <data name="Settings_TransparencyValue" xml:space="preserve">
+    <value>{0}%</value>
+  </data>
+  <data name="Settings_TransparencyReset" xml:space="preserve">
+    <value>Reset to default</value>
+  </data>
   <data name="Export_Level_High" xml:space="preserve">
     <value>Sensitive: {0}</value>
   </data>

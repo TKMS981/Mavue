@@ -3,11 +3,13 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-  <!-- Quick Preview window design (docs/ARCHITECTURE.md §4.7.9, Phase 2): one top bar holds the title and the tools
-       (content extends into the title bar; Windows draws the caption buttons over its right end). Mica shows only
-       through the "chrome" (top bar, filmstrip); the "stage" behind the image is an opaque neutral color, so the
-       wallpaper never tints what is around the image. The stage color is also the harness's reference color for
-       "image pixels are on screen" (#1E1E1E in the dark theme). Colors come from the theme dictionaries below. -->
+  <!-- Quick Preview window design (docs/ARCHITECTURE.md §4.7.9): Windows' own title bar, then one top bar with the
+       file's facts and the tools. Background (QuickViewWindow.SetBackdrop): with transparency 0, Mica shows only
+       through the "chrome" (title bar, top bar, filmstrip) and the "stage" behind the image is an opaque neutral
+       color; with transparency above 0 (the default, set in Mavue's settings) one tinted acrylic in the stage color
+       shows behind the whole window. Images, pages and text are always opaque on top. The opaque stage color is the
+       harness's reference color for "image pixels are on screen" (#1E1E1E in the dark theme; the harness uses
+       transparency 0). Colors come from the theme dictionaries below. -->
   <Grid x:Name="Root" Background="Transparent" IsTabStop="True" KeyDown="OnRootKeyDown" RequestedTheme="Dark">
     <Grid.Resources>
       <ResourceDictionary>
@@ -240,11 +242,15 @@
       </StackPanel>
     </Grid>
 
+    <!-- Hairline under the top bar, only over the see-through background (the tool bar and the stage are then one material). -->
+    <Border x:Name="TopBarDivider" Height="1" VerticalAlignment="Bottom" Background="{ThemeResource QvDividerBrush}" Visibility="Collapsed" IsHitTestVisible="False" />
+
     <!-- PDF: find (shared PdfSearchBar) under the top bar, and the sidebar (shared PdfSidebar) on the left, added in code. -->
     <Grid x:Name="SearchHost" Grid.Row="1" Padding="0,4,0,4" Visibility="Collapsed" Background="{ThemeResource QvStageBrush}" />
 
     <!-- The stage: image, video/audio, documents and messages on the viewer surface shared with Mavue.App
-         (Mavue.Viewer.Controls.ViewerSurface), added in code. Opaque, so backdrops never show around the image. -->
+         (Mavue.Viewer.Controls.ViewerSurface), added in code. Opaque over Mica (the wallpaper never tints what is
+         around the image); transparent over the see-through acrylic, which is tinted with this same color. -->
     <Grid x:Name="Stage" Grid.Row="2" Background="{ThemeResource QvStageBrush}">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="Auto" />

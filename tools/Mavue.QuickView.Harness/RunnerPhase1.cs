@@ -86,7 +86,7 @@ internal sealed partial class Runner
 
     private void WritePhase1Settings(bool filmstrip, bool inspector) => File.WriteAllText(
         HostSettingsPath,
-        $"{{\"version\": 1, \"imageScale\": \"{(options.ScaleMode == "actual" ? "ActualSize" : "FitNoUpscale")}\", \"showFilmstrip\": {(filmstrip ? "true" : "false")}, \"showPixelInspector\": {(inspector ? "true" : "false")}}}");
+        $"{{\"version\": 1, \"imageScale\": \"{(options.ScaleMode == "actual" ? "ActualSize" : "FitNoUpscale")}\", \"showFilmstrip\": {(filmstrip ? "true" : "false")}, \"showPixelInspector\": {(inspector ? "true" : "false")}{OpaqueBackground}}}");
 
     // ------------------------------------------------------------------ pixel inspector
 

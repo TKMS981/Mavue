@@ -57,6 +57,19 @@ public sealed record QuickViewSettings
     /// <summary>The similar-image search also finds rotated and mirrored copies (on by default).</summary>
     public bool SimilarDetectRotations { get; set; } = true;
 
+    /// <summary>Most see-through background the setting allows, in percent.</summary>
+    public const int MaxBackgroundTransparency = 30;
+
+    /// <summary>Default background transparency (user request 2026-11-03: beautiful without any setting, images stay clear).</summary>
+    public const int DefaultBackgroundTransparency = 15;
+
+    /// <summary>
+    /// How see-through Quick View's background is, in percent: 0 is opaque (Mica behind the tool bar, a solid stage),
+    /// up to <see cref="MaxBackgroundTransparency"/> a frosted, tinted backdrop. Images, PDF pages and text are always
+    /// drawn opaque on top; high contrast, the Low performance tier and Windows' "Transparency effects" off show it opaque.
+    /// </summary>
+    public int BackgroundTransparency { get; set; } = DefaultBackgroundTransparency;
+
     /// <summary>Default location for the current user.</summary>
     public static string DefaultPath { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Mavue", "QuickView", "settings.json");
@@ -80,6 +93,7 @@ public sealed record QuickViewSettings
             }
 
             loaded = Enum.IsDefined(loaded.SimilarSensitivity) ? loaded : loaded with { SimilarSensitivity = Similarity.SimilarSensitivity.Normal };
+            loaded = loaded with { BackgroundTransparency = Math.Clamp(loaded.BackgroundTransparency, 0, MaxBackgroundTransparency) };
             return Enum.IsDefined(loaded.PdfLayout) ? loaded : loaded with { PdfLayout = PdfLayoutMode.Continuous };
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)

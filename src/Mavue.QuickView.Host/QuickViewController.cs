@@ -94,7 +94,7 @@ internal sealed class QuickViewController : IPreviewHost, IDisposable
         _settings.ReloadIfChanged(force: true);
         _resources = new ResidentResources(timeline, options.IdleTrim);
         _resources.Refresh();
-        _window.SetBackdrop(UseBackdrop(_resources.Policy)); // decided before the first Space (prewarm draws it)
+        ApplyBackdrop(0); // decided before the first Space (prewarm draws it)
         _pdfDocumentView = PdfSession.IsAvailable && options.Decoder == DecoderMode.WinRt;
 
         var services = new PreviewServices(window, timeline, _dispatcher, options, _strings, _shellThread, _settings, _resources, new SurfaceImageView(window, timeline));
@@ -153,7 +153,7 @@ internal sealed class QuickViewController : IPreviewHost, IDisposable
             _settings.TransparencyGridOn = on;
             _settings.Save(s => s with { ShowTransparencyGrid = on });
         };
-        _resources.PolicyChanged += policy => _window.SetBackdrop(UseBackdrop(policy));
+        _resources.PolicyChanged += _ => ApplyBackdrop(_currentRequest);
         _window.FileDragStarting += args => _fileActions.PrepareDrag(args, _currentFacts);
         _window.ImagePointerMoved += pointer =>
         {
@@ -547,8 +547,30 @@ internal sealed class QuickViewController : IPreviewHost, IDisposable
 
     public void StartPrefetch(uint areaWidth, uint areaHeight) => _prefetcher.Start(areaWidth, areaHeight);
 
-    /// <summary>Mica behind the chrome, except on Low-tier machines (and when switched off for measurement).</summary>
+    private (QuickViewBackdrop, int)? _markedBackdrop;
+
+    /// <summary>Mica or the see-through acrylic, except on Low-tier machines (and when switched off for measurement).</summary>
     private bool UseBackdrop(PreviewResourcePolicy policy) => policy.Tier != PerformanceTier.Low && !_options.NoBackdrop;
+
+    /// <summary>
+    /// Applies the backdrop for the machine's tier and the transparency setting; marks it when it differs from the last
+    /// mark (also when a theme or high-contrast change switched it in between).
+    /// </summary>
+    private void ApplyBackdrop(long requestId)
+    {
+        _window.SetBackdrop(UseBackdrop(_resources.Policy), _settings.BackgroundTransparency);
+        (QuickViewBackdrop, int) now = (_window.Backdrop, _window.EffectiveTransparency);
+        if (now != _markedBackdrop)
+        {
+            _markedBackdrop = now;
+            _timeline.Mark(requestId, "backdrop", QuickViewTimeline.Now, new Dictionary<string, object?>
+            {
+                ["kind"] = _window.Backdrop.ToString(),
+                ["transparency"] = _window.EffectiveTransparency,
+                ["setting"] = _settings.BackgroundTransparency,
+            });
+        }
+    }
 
     public Task ShowInfoCardAsync(PreviewItem item, string messageResource, CancellationToken cancellation)
     {
@@ -794,7 +816,7 @@ internal sealed class QuickViewController : IPreviewHost, IDisposable
             _inspector.SetEnabled(_settings.PixelInspectorOn);
             _exif.SetEnabled(_settings.ExifPanelOn);
             _window.SetTransparencyGridOn(_settings.TransparencyGridOn);
-            _window.SetBackdrop(UseBackdrop(_resources.Policy)); // solid chrome on modest machines
+            ApplyBackdrop(requestId); // solid on modest machines; the transparency may have changed in settings
             _window.SetPinned(false);
         }
 

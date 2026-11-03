@@ -44,6 +44,7 @@ var options = new HarnessOptions
     ChildHost = args.Contains("--child-host"),
     HostExtraArgs = Arg("--host-args", ""),
     ScaleMode = Arg("--scale", "fit"),
+    BackgroundTransparency = int.Parse(Arg("--transparency", "0"), CultureInfo.InvariantCulture),
     SettleMilliseconds = int.Parse(Arg("--settle", "500"), CultureInfo.InvariantCulture),
     PauseAfterSampleMilliseconds = int.Parse(Arg("--pause", "0"), CultureInfo.InvariantCulture),
     OnlyScenarios = args.Contains("--only") ? Arg("--only", "").Split(',', StringSplitOptions.RemoveEmptyEntries) : null,
