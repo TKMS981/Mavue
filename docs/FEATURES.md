@@ -155,7 +155,7 @@
 | F07.12 | JPEG quality | Planned |  |
 | F07.13 | PNG compression | Planned |  |
 | F07.14 | metadata preservation | Planned |  |
-| F07.15 | metadata removal | Implemented | Quick View の共有前チェック（F03.43）と、本体の「メタデータを除いて書き出す…」（§4.7.15、SPEC §8 の共通ルール）。2026-11-02 に本体を Quick View と共通化: 同じ読み取り（PrivacyReview）・同じコピー処理（CleanCopy、変換は Mavue.exe 自身のワーカー）・同じ文言と保存先（コピーを保存＝元の隣／クリップボード）＋保存先を選ぶ・形式・画質。SVG・クラウドだけ・コーデックなしは理由を表示。単体 `CleanCopyRulesTests`、E2E `app-export-clean`・`app-export-convert`・`app-export-unsupported`（2026-11-03 PASS）。「保存先を選ぶ…」（保存ダイアログ）は手動確認待ち |
+| F07.15 | metadata removal | Implemented | Quick View の共有前チェック（F03.43）と、本体の「メタデータを除いて書き出す…」（§4.7.15、SPEC §8 の共通ルール）。2026-11-02 に本体を Quick View と共通化: 同じ読み取り（PrivacyReview）・同じコピー処理（CleanCopy、変換は Mavue.exe 自身のワーカー）・同じ文言と保存先（コピーを保存＝元の隣／クリップボード）＋保存先を選ぶ・形式・画質。SVG・クラウドだけ・コーデックなしは理由を表示。単体 `CleanCopyRulesTests`、E2E `app-export-clean`・`app-export-convert`・`app-export-unsupported`（2026-11-03 PASS）。2026-11-03 に残りの確認: 保存ダイアログ（E2E `app-export-picker`・`-convert`）、実機の iPhone HEIC 3 枚、ダーク/ライト/ハイコントラスト、UI Automation とキーボード（重要度を読み上げるよう修正）。実機のカメラ RAW は未確認（ファイルなし） |
 | F07.16 | batch conversion where practical | Planned |  |
 
 ## SPEC §8. Metadata

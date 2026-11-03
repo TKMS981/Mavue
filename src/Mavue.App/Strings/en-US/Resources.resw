@@ -708,4 +708,16 @@
   <data name="Export_FirstFrame" xml:space="preserve">
     <value>An animation keeps only its first frame.</value>
   </data>
+  <data name="Export_Level_High" xml:space="preserve">
+    <value>Sensitive: {0}</value>
+  </data>
+  <data name="Export_Level_Medium" xml:space="preserve">
+    <value>Worth checking: {0}</value>
+  </data>
+  <data name="Export_Level_Low" xml:space="preserve">
+    <value>Technical: {0}</value>
+  </data>
+  <data name="Export_Level_Kept" xml:space="preserve">
+    <value>Kept: {0}</value>
+  </data>
 </root>

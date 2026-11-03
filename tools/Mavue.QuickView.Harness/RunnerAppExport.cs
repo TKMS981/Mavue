@@ -62,6 +62,8 @@ internal sealed partial class Runner
             "The same on a HEIC photo: converted to JPEG by Mavue.exe's export worker (memory-limited job), verified, the original unchanged; no worker process remains");
         Guarded("app-export-unsupported", () => AppExportUnsupported(svg),
             "On an SVG drawing the command explains that the type is not handled (nothing is read or written) and the app keeps working");
+        RunAppExportPickerScenarios(photo, heif is null ? null : heic);
+        RunAppExportRealScenarios();
     }
 
     private (bool, string) AppExportClean(string photo)

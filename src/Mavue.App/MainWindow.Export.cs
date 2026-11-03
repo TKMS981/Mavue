@@ -77,7 +77,7 @@ public sealed partial class MainWindow
             Title = Resources.GetString("Export_Title"),
             Content = new ScrollViewer { Content = panel, MaxHeight = 620 },
             CloseButtonText = Resources.GetString("Dialog_Close"),
-            DefaultButton = ContentDialogButton.Close,
+            DefaultButton = ContentDialogButton.None, // one accent button: "Choose where…" (Esc still closes)
         };
 
         // Closing the dialog cancels whatever is running (reading, converting, writing): nothing half-written remains.
@@ -237,12 +237,14 @@ public sealed partial class MainWindow
             };
             if (target is null)
             {
+                _trace?.Write("export-clean", new Dictionary<string, object?> { ["destination"] = destination.ToString(), ["cancelled"] = true });
                 return; // the save dialog was cancelled
             }
 
             if (CleanCopyRules.IsOriginal(source, target))
             {
                 status.Text = Resources.GetString("Export_NotOriginal");
+                _trace?.Write("export-clean", new Dictionary<string, object?> { ["destination"] = destination.ToString(), ["refused"] = "original" });
                 return;
             }
 
@@ -381,7 +383,10 @@ public sealed partial class MainWindow
 
         row.Children.Add(icon);
         var text = new StackPanel();
-        text.Children.Add(new TextBlock { Text = Resources.GetString("Export_Kind_" + finding.Kind), TextWrapping = TextWrapping.Wrap });
+        var kind = new TextBlock { Text = Resources.GetString("Export_Kind_" + finding.Kind), TextWrapping = TextWrapping.Wrap };
+        // The level is shown by the icon's shape and color only; screen readers hear it with the kind ("Removed: Location").
+        AutomationProperties.SetName(kind, string.Format(CultureInfo.CurrentCulture, Resources.GetString("Export_Level_" + finding.Level), kind.Text));
+        text.Children.Add(kind);
         if (!string.IsNullOrWhiteSpace(finding.Detail))
         {
             text.Children.Add(new TextBlock { Text = finding.Detail, FontSize = 12, Opacity = 0.75, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true });

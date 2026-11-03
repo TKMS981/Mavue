@@ -726,4 +726,16 @@
   <data name="QuickView_Share_NotWritable" xml:space="preserve">
     <value>This place cannot be written to (read-only or no permission).</value>
   </data>
+  <data name="QuickView_Share_Level_High" xml:space="preserve">
+    <value>Sensitive: {0}</value>
+  </data>
+  <data name="QuickView_Share_Level_Medium" xml:space="preserve">
+    <value>Worth checking: {0}</value>
+  </data>
+  <data name="QuickView_Share_Level_Low" xml:space="preserve">
+    <value>Technical: {0}</value>
+  </data>
+  <data name="QuickView_Share_Level_Kept" xml:space="preserve">
+    <value>Kept: {0}</value>
+  </data>
 </root>

@@ -291,7 +291,10 @@ internal sealed class ShareCheck : IDisposable
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         row.Children.Add(new FontIcon { Glyph = PrivacyReview.Glyph(finding.Level), FontSize = 14, Foreground = _window.ThemeBrush(brush), VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 2, 0, 0) });
         var text = new StackPanel();
-        text.Children.Add(new TextBlock { Text = _strings.GetString("QuickView_Share_Kind_" + finding.Kind), TextWrapping = TextWrapping.Wrap });
+        var kind = new TextBlock { Text = _strings.GetString("QuickView_Share_Kind_" + finding.Kind), TextWrapping = TextWrapping.Wrap };
+        // The level is shown by the icon's shape and color only; screen readers hear it with the kind ("Removed: Location").
+        AutomationProperties.SetName(kind, string.Format(System.Globalization.CultureInfo.CurrentCulture, _strings.GetString("QuickView_Share_Level_" + finding.Level), kind.Text));
+        text.Children.Add(kind);
         if (!string.IsNullOrWhiteSpace(finding.Detail))
         {
             text.Children.Add(new TextBlock { Text = finding.Detail, FontSize = 12, Foreground = secondary, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true });

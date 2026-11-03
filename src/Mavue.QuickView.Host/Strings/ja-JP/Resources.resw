@@ -726,4 +726,16 @@
   <data name="QuickView_Share_NotWritable" xml:space="preserve">
     <value>この場所には保存できません（読み取り専用か、アクセス許可がありません）。</value>
   </data>
+  <data name="QuickView_Share_Level_High" xml:space="preserve">
+    <value>要注意: {0}</value>
+  </data>
+  <data name="QuickView_Share_Level_Medium" xml:space="preserve">
+    <value>注意: {0}</value>
+  </data>
+  <data name="QuickView_Share_Level_Low" xml:space="preserve">
+    <value>技術情報: {0}</value>
+  </data>
+  <data name="QuickView_Share_Level_Kept" xml:space="preserve">
+    <value>残します: {0}</value>
+  </data>
 </root>

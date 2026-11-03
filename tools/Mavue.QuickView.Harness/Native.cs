@@ -10,6 +10,11 @@ internal static partial class Native
     public const ushort VK_RIGHT = 0x27;
     public const ushort VK_DOWN = 0x28;
     public const ushort VK_ESCAPE = 0x1B;
+    public const uint GW_OWNER = 4;
+
+    /// <summary>The owner of a top-level window (GW_OWNER), or another relative.</summary>
+    [LibraryImport("user32.dll")]
+    public static partial nint GetWindow(nint hWnd, uint uCmd);
     public const ushort VK_TAB = 0x09;
     public const ushort VK_MENU = 0x12;
     public const uint KEYEVENTF_KEYUP = 0x0002;
@@ -151,6 +156,19 @@ internal static partial class Native
         var gui = new GUITHREADINFO { cbSize = (uint)Marshal.SizeOf<GUITHREADINFO>() };
         return GetGUIThreadInfo(thread, ref gui) ? (gui.hwndFocus, ClassName(gui.hwndFocus)) : (0, string.Empty);
     }
+
+    public const uint WM_SETTEXT = 0x000C;
+    public const uint WM_COMMAND = 0x0111;
+
+    [LibraryImport("user32.dll")]
+    public static partial int GetDlgCtrlID(nint hWnd);
+
+    /// <summary>WM_SETTEXT with a string (Windows copies the text across processes for this message).</summary>
+    [LibraryImport("user32.dll", EntryPoint = "SendMessageW", StringMarshalling = StringMarshalling.Utf16)]
+    public static partial nint SendMessageText(nint hWnd, uint msg, nuint wParam, string text);
+
+    [LibraryImport("user32.dll", EntryPoint = "SendMessageW")]
+    public static partial nint SendMessage(nint hWnd, uint msg, nuint wParam, nint lParam);
 
     private static List<nint>? s_enumResult;
 

@@ -708,4 +708,16 @@
   <data name="Export_FirstFrame" xml:space="preserve">
     <value>アニメーションは最初のフレームだけになります。</value>
   </data>
+  <data name="Export_Level_High" xml:space="preserve">
+    <value>要注意: {0}</value>
+  </data>
+  <data name="Export_Level_Medium" xml:space="preserve">
+    <value>注意: {0}</value>
+  </data>
+  <data name="Export_Level_Low" xml:space="preserve">
+    <value>技術情報: {0}</value>
+  </data>
+  <data name="Export_Level_Kept" xml:space="preserve">
+    <value>残します: {0}</value>
+  </data>
 </root>
