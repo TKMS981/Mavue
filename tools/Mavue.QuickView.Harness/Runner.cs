@@ -118,6 +118,9 @@ internal sealed partial class Runner(HarnessOptions options, Action<string> log)
     private nint _hostWindow;
     private Process? _neutralApp;
     private nint _neutralWindow;
+
+    /// <summary>The neutral window stays where it is (a scenario needs a known window behind Quick View).</summary>
+    private bool _neutralPaused;
     private readonly UserInputMonitor _userInput = new();
 
     /// <summary>True when the current request's window was shown without activation (mode or auto fallback).</summary>
@@ -626,7 +629,7 @@ internal sealed partial class Runner(HarnessOptions options, Action<string> log)
             return false;
         }
 
-        if (options.Cold && _neutralWindow != 0 && Native.IsWindow(_neutralWindow))
+        if (options.Cold && !_neutralPaused && _neutralWindow != 0 && Native.IsWindow(_neutralWindow))
         {
             ForceForeground(_neutralWindow);
             Thread.Sleep(100);

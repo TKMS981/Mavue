@@ -334,6 +334,13 @@ internal sealed partial class Runner
               $w = 120; for ($x = 0; $x -lt $s.Width; $x += $w) { $b = New-Object System.Drawing.SolidBrush ($colors[($x / $w) % 4]); $e.Graphics.FillRectangle($b, $x, 0, $w, $s.Height); $b.Dispose() } })
             [System.Windows.Forms.Application]::Run($f)
             """, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+        // The neutral window (cold runs) would otherwise be raised behind Explorer before every Space and hide the stripes.
+        _neutralPaused = true;
+        if (_neutralWindow != 0 && Native.IsWindow(_neutralWindow))
+        {
+            Native.ShowWindow(_neutralWindow, 6 /* SW_MINIMIZE */);
+        }
+
         Process? process = Process.Start(new ProcessStartInfo("powershell.exe", $"-NoProfile -ExecutionPolicy Bypass -File \"{script}\"") { UseShellExecute = false, CreateNoWindow = true });
         nint window = 0;
         WaitFor(() => process is not null && (window = Native.TopLevelWindows().FirstOrDefault(w => Pid(w) == process.Id && Native.IsWindowVisible(w))) != 0, 10000, null);
@@ -348,8 +355,14 @@ internal sealed partial class Runner
         return process;
     }
 
-    private static void StopStripes(Process? process)
+    private void StopStripes(Process? process)
     {
+        _neutralPaused = false;
+        if (_neutralWindow != 0 && Native.IsWindow(_neutralWindow))
+        {
+            Native.ShowWindow(_neutralWindow, Native.SW_RESTORE);
+        }
+
         try
         {
             if (process is { HasExited: false })
